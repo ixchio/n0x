@@ -10,6 +10,7 @@
 </p>
 
 <p align="center">
+  <a href="https://n0xth.vercel.app"><b>live demo</b></a> ·
   <a href="#quick-start">quick start</a> ·
   <a href="#features">features</a> ·
   <a href="#architecture">architecture</a> ·
