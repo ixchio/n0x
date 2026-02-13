@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useRef, useEffect, useCallback, useState } from "react";
-import { ChevronDown, Loader2, Zap, Brain, Code, Shield, Volume2, VolumeX, Cpu, Menu } from "lucide-react";
+import React, { useRef, useEffect, useCallback, useState, useMemo } from "react";
+import { ChevronDown, Loader2, Zap, Brain, Code, Shield, Volume2, VolumeX, Cpu, Menu, AlertTriangle, Download } from "lucide-react";
 import { Sidebar } from "@/components/sidebar";
 import { MessageBubble } from "@/components/message-bubble";
 import { ChatInput } from "@/components/chat-input";
@@ -34,11 +34,20 @@ function ChatPageInner() {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const userScrolledUpRef = useRef(false);
 
-  // Init
+  const DEFAULT_MODEL = "SmolLM2-360M-Instruct-q4f16_1-MLC";
+
+  // Auto-load smallest model on first visit
   useEffect(() => {
     webllm.init();
     tts.init();
   }, []);
+
+  useEffect(() => {
+    if (webllm.isSupported && webllm.status === "unloaded" && !webllm.loadedModel) {
+      const timer = setTimeout(() => webllm.loadModel(DEFAULT_MODEL), 500);
+      return () => clearTimeout(timer);
+    }
+  }, [webllm.isSupported, webllm.status, webllm.loadedModel]);
 
   // Auto-scroll
   useEffect(() => {
@@ -180,6 +189,7 @@ function ChatPageInner() {
           {webllm.status === "loading" && (
             <div className="ml-auto text-[11px] font-mono text-phosphor-dim flex items-center gap-2">
               <Loader2 className="w-3 h-3 animate-spin" />
+              <Download className="w-3 h-3 opacity-50" />
               {Math.round(webllm.loadProgress * 100)}%
             </div>
           )}
@@ -194,7 +204,67 @@ function ChatPageInner() {
 
         {/* Messages */}
         <div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-6">
-          {chatStore.messages.length === 0 && !deepSearch.isActive && webllm.status !== "loading" ? (
+          {/* WebGPU not supported banner */}
+          {!webllm.isSupported && (
+            <div className="max-w-lg mx-auto mt-12">
+              <div className="bg-red-500/10 border border-red-500/30 rounded p-5 text-center space-y-3">
+                <AlertTriangle className="w-8 h-8 text-red-400 mx-auto" />
+                <h3 className="text-sm font-mono text-red-400 font-bold">WebGPU not available</h3>
+                <p className="text-xs text-txt-secondary font-mono leading-relaxed">
+                  your browser doesn't support WebGPU yet. N0X needs it to run AI models locally.
+                </p>
+                <div className="text-[11px] text-txt-tertiary font-mono space-y-1">
+                  <p>✅ Chrome 113+ or Edge 113+</p>
+                  <p>⚠️ Firefox — enable <code className="text-phosphor-dim">dom.webgpu.enabled</code> in about:config</p>
+                  <p>⚠️ Safari 17+ — macOS Sonoma / iOS 17 only</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Loading screen */}
+          {webllm.isSupported && webllm.status === "loading" && chatStore.messages.length === 0 && (
+            <div className="h-full flex flex-col items-center justify-center">
+              <div className="space-y-6 text-center max-w-sm">
+                <h2 className="font-pixel text-xl text-phosphor text-glow tracking-wider">N0X</h2>
+
+                {/* Progress bar */}
+                <div className="w-64 mx-auto">
+                  <div className="h-1.5 bg-crt-surface rounded-full overflow-hidden border border-crt-border">
+                    <div
+                      className="h-full bg-phosphor rounded-full transition-all duration-300 shadow-glow-sm"
+                      style={{ width: `${Math.round(webllm.loadProgress * 100)}%` }}
+                    />
+                  </div>
+                  <div className="flex justify-between mt-2">
+                    <span className="text-[10px] text-txt-tertiary font-mono">
+                      downloading {WEBLLM_MODELS.find(m => m.id === (webllm.loadedModel || DEFAULT_MODEL))?.label || "model"}
+                    </span>
+                    <span className="text-[10px] text-phosphor-dim font-mono">
+                      {Math.round(webllm.loadProgress * 100)}%
+                    </span>
+                  </div>
+                </div>
+
+                {/* First-time tips */}
+                <div className="space-y-2 pt-2">
+                  <p className="text-[11px] text-txt-secondary font-mono">
+                    first time? this downloads once, then it's instant forever.
+                  </p>
+                  <p className="text-[10px] text-txt-tertiary font-mono">
+                    the model weights are cached in your browser —<br />
+                    no server, no account, everything stays on your machine.
+                  </p>
+                  <p className="text-[10px] text-txt-tertiary font-mono opacity-60">
+                    don't refresh — download will restart
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Welcome screen (model loaded, no messages) */}
+          {webllm.isSupported && chatStore.messages.length === 0 && !deepSearch.isActive && webllm.status !== "loading" ? (
             <div className="h-full flex flex-col items-center justify-center">
               <div className="space-y-6 text-center max-w-sm">
                 <h2 className="font-pixel text-xl text-phosphor text-glow tracking-wider">N0X</h2>
@@ -206,8 +276,9 @@ function ChatPageInner() {
                   <div className="grid grid-cols-3 gap-2 pt-4">
                     <button
                       onClick={() => handleModelChange("SmolLM2-360M-Instruct-q4f16_1-MLC")}
-                      className="p-3 rounded bg-crt-surface border border-crt-border hover:border-phosphor-dim transition-all text-left group"
+                      className="p-3 rounded bg-crt-surface border border-phosphor-dim hover:border-phosphor transition-all text-left group relative"
                     >
+                      <div className="absolute -top-2 right-2 text-[8px] bg-phosphor text-crt-black px-1.5 py-0.5 rounded font-mono font-bold">recommended</div>
                       <div className="flex items-center gap-1.5 mb-1">
                         <Zap className="w-3 h-3 text-neon-amber" />
                         <span className="text-[11px] text-txt-secondary group-hover:text-phosphor">SmolLM2</span>
