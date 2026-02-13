@@ -143,12 +143,32 @@ ${searchCtx}`;
             }
         }
 
-        const sysPrompt = buildPrompt(searchCtx, memCtx, ragCtx);
-        const msgs = [
+        const sysPrompt = buildPrompt("", memCtx, ragCtx);
+        const history = chatStore.messages.map(m => ({ role: m.role, content: m.content }));
+
+        // Build final message list — search context goes right before the last user message
+        // so the LLM can't miss it (small models ignore long system prompts)
+        const msgs: { role: string; content: string }[] = [
             { role: "system", content: sysPrompt },
-            ...chatStore.messages.map(m => ({ role: m.role, content: m.content })),
-            { role: "user", content: message },
         ];
+
+        // Add all messages except the last one (which is the current user message)
+        if (history.length > 1) {
+            msgs.push(...history.slice(0, -1));
+        }
+
+        // Inject search results as a context message right before the user query
+        if (searchCtx.trim()) {
+            msgs.push({
+                role: "system",
+                content: `[Web Search Results for "${message}"]\n${searchCtx.trim()}\n\nUse these search results to answer the user's question. Cite sources if relevant. Do NOT say "based on my training data" — use the search results above.`,
+            });
+        }
+
+        // The current user message (last in chatStore)
+        if (history.length > 0) {
+            msgs.push(history[history.length - 1]);
+        }
 
         try {
             setStreamingContent("");
