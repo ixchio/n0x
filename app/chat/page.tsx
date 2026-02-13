@@ -160,44 +160,48 @@ function ChatPageInner() {
             )}
           </div>
 
-          {/* Persona */}
-          <div className="ml-3">
-            <PersonaSelector compact />
-          </div>
+          {/* Only show these controls when NOT loading */}
+          {webllm.status !== "loading" && (
+            <>
+              {/* Persona */}
+              <div className="ml-3">
+                <PersonaSelector compact />
+              </div>
 
-          {/* TTS */}
-          <button
-            onClick={() => tts.setEnabled(!tts.isEnabled)}
-            className={cn("ml-3 p-1 rounded transition-all", tts.isEnabled ? "text-phosphor" : "text-txt-tertiary hover:text-txt-secondary")}
-          >
-            {tts.isEnabled ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}
-          </button>
+              {/* TTS */}
+              <button
+                onClick={() => tts.setEnabled(!tts.isEnabled)}
+                className={cn("ml-3 p-1 rounded transition-all", tts.isEnabled ? "text-phosphor" : "text-txt-tertiary hover:text-txt-secondary")}
+              >
+                {tts.isEnabled ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}
+              </button>
 
-          {/* TPS */}
-          {webllm.stats.tps > 0 && (
-            <div className={cn(
-              "ml-3 font-mono text-[11px] flex items-center gap-1",
-              webllm.stats.tps > 50 ? "text-phosphor text-glow-sm" :
-                webllm.stats.tps > 20 ? "text-phosphor-dim" : "text-txt-tertiary"
-            )}>
-              <Zap className="w-3 h-3" />
-              {webllm.stats.tps} t/s
-            </div>
+              {/* TPS */}
+              {webllm.stats.tps > 0 && (
+                <div className={cn(
+                  "ml-3 font-mono text-[11px] flex items-center gap-1",
+                  webllm.stats.tps > 50 ? "text-phosphor text-glow-sm" :
+                    webllm.stats.tps > 20 ? "text-phosphor-dim" : "text-txt-tertiary"
+                )}>
+                  <Zap className="w-3 h-3" />
+                  {webllm.stats.tps} t/s
+                </div>
+              )}
+
+              {/* Share */}
+              <div className="ml-3">
+                <ShareMenu messages={chatStore.messages} modelName={WEBLLM_MODELS.find(m => m.id === webllm.loadedModel)?.label} />
+              </div>
+            </>
           )}
 
-          {/* Loading */}
+          {/* Loading — show only spinner + progress */}
           {webllm.status === "loading" && (
             <div className="ml-auto text-[11px] font-mono text-phosphor-dim flex items-center gap-2">
               <Loader2 className="w-3 h-3 animate-spin" />
-              <Download className="w-3 h-3 opacity-50" />
               {Math.round(webllm.loadProgress * 100)}%
             </div>
           )}
-
-          {/* Share */}
-          <div className="ml-3">
-            <ShareMenu messages={chatStore.messages} modelName={WEBLLM_MODELS.find(m => m.id === webllm.loadedModel)?.label} />
-          </div>
 
           <div className="ml-auto text-[10px] text-txt-tertiary font-mono">ctrl+k</div>
         </header>
