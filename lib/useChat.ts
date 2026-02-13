@@ -138,34 +138,37 @@ export function useChat() {
         // then inject ALL context as a single focused system message right before the
         // user query. Small models pay most attention to messages near the end.
 
-        const history = chatStore.messages.map(m => ({ role: m.role, content: m.content }));
+        // ── Build the message list for the LLM ──
+
+        // Get history (excluding the temporary message we just added which serves as optimistic UI)
+        // We use the raw 'message' variable for the final LLM payload to ensure fresh data
+        const history = chatStore.messages
+            .filter(m => m.id !== Date.now().toString())
+            .map(m => ({ role: m.role, content: m.content }));
 
         const msgs: { role: string; content: string }[] = [
             { role: "system", content: persona.systemPrompt },
         ];
 
-        // Conversation history (everything except the last message, which is the current user message)
-        if (history.length > 1) {
-            // Keep only last 10 exchanges to avoid blowing context window on small models
-            const trimmedHistory = history.slice(0, -1).slice(-20);
+        // Conversation history
+        if (history.length > 0) {
+            // Keep only last 10 exchanges
+            const trimmedHistory = history.slice(-20);
             msgs.push(...trimmedHistory);
         }
 
-        // ── Inject all context as ONE combined message right before the user query ──
-        // This is the key fix: small models (SmolLM2, Phi-3, Qwen) pay attention to
-        // recent messages, not the system prompt. By putting RAG + search + memory
-        // context here, the model CAN'T ignore it.
+        // ── Inject all context ──
         const contextParts: string[] = [];
 
         if (ragCtx) {
             contextParts.push(
-                `## Your Documents (uploaded by the user)\nThe user has uploaded documents. Here is the relevant content:\n\n${ragCtx}\n\nYou MUST use this document content to answer. Do NOT say "I don't have access to documents." The content is right above.`
+                `## Your Documents (uploaded by the user)\nThe user has uploaded documents. Here is the relevant content:\n\n${ragCtx}\n\nYou MUST use this document content to answer. The content is right above.`
             );
         }
 
         if (searchCtx.trim()) {
             contextParts.push(
-                `## Web Search Results\n${searchCtx.trim()}\n\nUse these search results to answer. Do NOT fall back to training data when search results are available.`
+                `## Web Search Results\n${searchCtx.trim()}\n\nUse these search results to answer.`
             );
         }
 
@@ -173,17 +176,18 @@ export function useChat() {
             contextParts.push(`## Conversation Memory\n${memCtx}`);
         }
 
+        // Combined context message
+        // We use 'system' role but injected right before the final user message
         if (contextParts.length > 0) {
             msgs.push({
                 role: "system",
-                content: `[CONTEXT FOR ANSWERING]\n\n${contextParts.join("\n\n---\n\n")}\n\n[END CONTEXT]\n\nAnswer the user's next message using the context above. Be specific and reference the actual content provided.`,
+                content: `[CONTEXT FOR ANSWERING]\n\n${contextParts.join("\n\n---\n\n")}\n\n[END CONTEXT]\n\nAnswer the user's next message using the context above.`,
             });
         }
 
-        // The current user message (last in chatStore)
-        if (history.length > 0) {
-            msgs.push(history[history.length - 1]);
-        }
+        // ALWAYS append the current user message explicitly
+        // This fixes the 'MessageOrderError' because the last message is GUARANTEED to be 'user'
+        msgs.push({ role: "user", content: message });
 
         // ── Generate ──
         try {
