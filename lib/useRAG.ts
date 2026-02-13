@@ -151,6 +151,7 @@ export const useRAG = create<RAGState>((set, get) => ({
             set(state => ({
                 documents: [...state.documents, newDoc],
                 isIndexing: false,
+                ragEnabled: true,
                 status: "ready"
             }));
 

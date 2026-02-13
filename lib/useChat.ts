@@ -74,24 +74,6 @@ export function useChat() {
         }
     }, [chatStore]);
 
-    const buildPrompt = useCallback((searchCtx: string, memCtx: string, ragCtx: string) => {
-        let base = persona.systemPrompt;
-
-        if (searchCtx) {
-            base += `\n\nYou have web search results. Use them to answer. Rules:
-1. Answer directly first, no "based on results" filler
-2. Use search data if relevant, otherwise say what you know
-3. Cite sources at the end if relevant
-
-Search results:
-${searchCtx}`;
-        }
-
-        if (memCtx) base += `\n\n${memCtx}`;
-        if (ragCtx) base += `\n\n${ragCtx}`;
-        return base;
-    }, [persona.systemPrompt]);
-
     const handleSend = useCallback(async () => {
         if (!input.trim() || isStreaming) return;
         const message = input.trim();
@@ -107,25 +89,33 @@ ${searchCtx}`;
 
         chatStore.addMessage({ id: Date.now().toString(), role: "user", content: message });
 
-        // gather context from enabled features
-        const memCtx = memoryEnabled ? memory.getContext(message) : "";
+        // ── Gather context from all enabled features (parallel where possible) ──
 
+        // 1. RAG — auto-enabled when documents exist, no toggle needed
         let ragCtx = "";
-        if (rag.ragEnabled && rag.documents.length > 0) {
-            setStreamingContent("searching docs...");
+        const hasDocuments = rag.documents.length > 0;
+        if (hasDocuments) {
+            setStreamingContent("⟳ searching your documents...");
             try {
-                const chunks = await rag.search(message, 3);
+                const chunks = await rag.search(message, 4);
                 if (chunks.length > 0) {
-                    ragCtx = `\n\nRelevant Context from User Documents:\n${chunks.join("\n\n")}`;
+                    ragCtx = chunks
+                        .filter(c => c && c.trim().length > 20)
+                        .map((c, i) => `[Doc ${i + 1}] ${c.trim()}`)
+                        .join("\n\n");
                 }
             } catch (e) {
-                console.error("rag search failed:", e);
+                console.error("RAG search failed:", e);
             }
-            setStreamingContent("");
         }
 
+        // 2. Memory — retrieve relevant context
+        const memCtx = memoryEnabled ? memory.getContext(message) : "";
+
+        // 3. Deep Search — web search
         let searchCtx = "";
         if (deepSearchEnabled) {
+            setStreamingContent("⟳ searching the web...");
             const result = await deepSearch.search(message);
             if (result) {
                 if (result.summary) searchCtx += result.summary + "\n\n";
@@ -143,25 +133,50 @@ ${searchCtx}`;
             }
         }
 
-        const sysPrompt = buildPrompt("", memCtx, ragCtx);
+        // ── Build the message list for the LLM ──
+        // Strategy: system prompt first, then conversation history (minus last message),
+        // then inject ALL context as a single focused system message right before the
+        // user query. Small models pay most attention to messages near the end.
+
         const history = chatStore.messages.map(m => ({ role: m.role, content: m.content }));
 
-        // Build final message list — search context goes right before the last user message
-        // so the LLM can't miss it (small models ignore long system prompts)
         const msgs: { role: string; content: string }[] = [
-            { role: "system", content: sysPrompt },
+            { role: "system", content: persona.systemPrompt },
         ];
 
-        // Add all messages except the last one (which is the current user message)
+        // Conversation history (everything except the last message, which is the current user message)
         if (history.length > 1) {
-            msgs.push(...history.slice(0, -1));
+            // Keep only last 10 exchanges to avoid blowing context window on small models
+            const trimmedHistory = history.slice(0, -1).slice(-20);
+            msgs.push(...trimmedHistory);
         }
 
-        // Inject search results as a context message right before the user query
+        // ── Inject all context as ONE combined message right before the user query ──
+        // This is the key fix: small models (SmolLM2, Phi-3, Qwen) pay attention to
+        // recent messages, not the system prompt. By putting RAG + search + memory
+        // context here, the model CAN'T ignore it.
+        const contextParts: string[] = [];
+
+        if (ragCtx) {
+            contextParts.push(
+                `## Your Documents (uploaded by the user)\nThe user has uploaded documents. Here is the relevant content:\n\n${ragCtx}\n\nYou MUST use this document content to answer. Do NOT say "I don't have access to documents." The content is right above.`
+            );
+        }
+
         if (searchCtx.trim()) {
+            contextParts.push(
+                `## Web Search Results\n${searchCtx.trim()}\n\nUse these search results to answer. Do NOT fall back to training data when search results are available.`
+            );
+        }
+
+        if (memCtx) {
+            contextParts.push(`## Conversation Memory\n${memCtx}`);
+        }
+
+        if (contextParts.length > 0) {
             msgs.push({
                 role: "system",
-                content: `[Web Search Results for "${message}"]\n${searchCtx.trim()}\n\nUse these search results to answer the user's question. Cite sources if relevant. Do NOT say "based on my training data" — use the search results above.`,
+                content: `[CONTEXT FOR ANSWERING]\n\n${contextParts.join("\n\n---\n\n")}\n\n[END CONTEXT]\n\nAnswer the user's next message using the context above. Be specific and reference the actual content provided.`,
             });
         }
 
@@ -170,6 +185,7 @@ ${searchCtx}`;
             msgs.push(history[history.length - 1]);
         }
 
+        // ── Generate ──
         try {
             setStreamingContent("");
             let full = "";
@@ -181,6 +197,12 @@ ${searchCtx}`;
             chatStore.addMessage({ id: (Date.now() + 1).toString(), role: "assistant", content: full });
             setStreamingContent("");
             deepSearch.reset();
+
+            // Auto-save to memory if enabled
+            if (memoryEnabled && full.length > 20) {
+                memory.saveMemory(`Q: ${message}\nA: ${full.slice(0, 300)}`, ["chat"]);
+            }
+
             if (tts.isEnabled) tts.speak(full);
         } catch (err) {
             console.error("gen error:", err);
@@ -191,7 +213,7 @@ ${searchCtx}`;
             });
             deepSearch.reset();
         }
-    }, [input, isStreaming, webllm, chatStore, deepSearchEnabled, deepSearch, memory, memoryEnabled, handleImageGen, rag, tts, buildPrompt]);
+    }, [input, isStreaming, webllm, chatStore, deepSearchEnabled, deepSearch, memory, memoryEnabled, handleImageGen, rag, tts, persona]);
 
     const handleNewChat = useCallback(() => {
         chatStore.newConversation();
