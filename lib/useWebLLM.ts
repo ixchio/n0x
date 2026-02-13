@@ -154,6 +154,7 @@ interface WebLLMState {
     status: WebLLMStatus;
     loadProgress: number;
     loadedModel: string | null;
+    loadingModel: string | null;
     error: string | null;
     isSupported: boolean;
     stats: WebLLMStats;
@@ -175,6 +176,7 @@ export const useWebLLM = create<WebLLMState>((set, get) => ({
     status: "unloaded",
     loadProgress: 0,
     loadedModel: null,
+    loadingModel: null,
     error: null,
     isSupported: true,
     stats: { tps: 0, totalTokens: 0, lastTokenTime: 0 },
@@ -205,7 +207,7 @@ export const useWebLLM = create<WebLLMState>((set, get) => ({
 
         isLoadingModel = true;
         try {
-            set({ status: "loading", loadProgress: 0, error: null });
+            set({ status: "loading", loadProgress: 0, loadingModel: modelId, error: null });
 
             // Cleanup previous engine (resilient to failures)
             if (engine) {
@@ -220,11 +222,11 @@ export const useWebLLM = create<WebLLMState>((set, get) => ({
                 },
             });
 
-            set({ loadedModel: modelId, status: "ready" });
+            set({ loadedModel: modelId, loadingModel: null, status: "ready" });
         } catch (e: any) {
             console.error("Model load error:", e);
             engine = null;
-            set({ error: e.message || "Failed to load model", status: "error" });
+            set({ error: e.message || "Failed to load model", loadingModel: null, status: "error" });
         } finally {
             isLoadingModel = false;
         }

@@ -21,6 +21,7 @@ interface Conversation {
 const DB_NAME = "n0x_chat";
 const DB_VER = 1;
 const STORE = "conversations";
+const ACTIVE_KEY = "n0x_activeConv";
 
 function openDB(): Promise<IDBDatabase> {
     return new Promise((resolve, reject) => {
@@ -53,6 +54,11 @@ export function useChatStore() {
     const setActiveId = useCallback((id: string | null) => {
         activeRef.current = id;
         _setActiveId(id);
+        // persist which conversation is active (including null = "new session")
+        try {
+            if (id) localStorage.setItem(ACTIVE_KEY, id);
+            else localStorage.setItem(ACTIVE_KEY, "__new__");
+        } catch { }
     }, []);
 
     useEffect(() => {
@@ -65,7 +71,22 @@ export function useChatStore() {
                 req.onsuccess = () => {
                     const all = (req.result || []).sort((a: Conversation, b: Conversation) => b.updatedAt - a.updatedAt);
                     setConversations(all);
-                    if (all.length > 0) setActiveId(all[0].id);
+
+                    // restore persisted active conversation
+                    let stored: string | null = null;
+                    try { stored = localStorage.getItem(ACTIVE_KEY); } catch { }
+
+                    if (stored === "__new__") {
+                        // user explicitly clicked "new session" — stay on blank
+                        setActiveId(null);
+                    } else if (stored && all.some(c => c.id === stored)) {
+                        // restore the exact conversation they were on
+                        setActiveId(stored);
+                    } else if (all.length > 0) {
+                        // fallback: most recent
+                        setActiveId(all[0].id);
+                    }
+
                     setIsLoaded(true);
                     db?.close();
                 };

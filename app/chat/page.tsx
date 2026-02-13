@@ -238,7 +238,7 @@ function ChatPageInner() {
                   </div>
                   <div className="flex justify-between mt-2">
                     <span className="text-[10px] text-txt-tertiary font-mono">
-                      downloading {WEBLLM_MODELS.find(m => m.id === (webllm.loadedModel || DEFAULT_MODEL))?.label || "model"}
+                      downloading {WEBLLM_MODELS.find(m => m.id === (webllm.loadingModel || webllm.loadedModel || DEFAULT_MODEL))?.label || "model"}
                     </span>
                     <span className="text-[10px] text-phosphor-dim font-mono">
                       {Math.round(webllm.loadProgress * 100)}%
