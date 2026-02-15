@@ -15,6 +15,7 @@ import { ErrorBoundary } from "@/components/error-boundary";
 import { PersonaSelector } from "@/components/persona-selector";
 import { ShareMenu } from "@/components/share-menu";
 import { useChat } from "@/lib/useChat";
+import { useSTT } from "@/lib/useSTT";
 
 function ChatPageInner() {
   const chat = useChat();
@@ -22,8 +23,16 @@ function ChatPageInner() {
     input, setInput, streamingContent, isStreaming, generatingImage, imageProgress,
     deepSearchEnabled, setDeepSearchEnabled, memoryEnabled, setMemoryEnabled,
     webllm, deepSearch, memory, pyodide, tts, rag, chatStore, persona,
-    handleSend, handleNewChat, handlePythonRun,
+    handleSend, handleNewChat, handleStop, handlePythonRun,
   } = chat;
+  const stt = useSTT();
+
+  // Detect STT support on client side (after hydration)
+  useEffect(() => {
+    if (typeof window !== "undefined" && ("SpeechRecognition" in window || "webkitSpeechRecognition" in window)) {
+      useSTT.setState({ isSupported: true });
+    }
+  }, []);
 
   const [headerModelOpen, setHeaderModelOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -94,7 +103,15 @@ function ChatPageInner() {
         onToggleRAG={rag.toggle}
       />
       <RAGPanel />
-      <Sidebar isOpen={sidebarOpen} currentModel={webllm.loadedModel} onNewChat={onNewChat} />
+      <Sidebar
+        isOpen={sidebarOpen}
+        currentModel={webllm.loadedModel}
+        onNewChat={onNewChat}
+        conversations={chatStore.conversations}
+        activeId={chatStore.activeId}
+        onSwitch={chatStore.switchConversation}
+        onDelete={chatStore.deleteConversation}
+      />
 
       <main className="flex-1 flex flex-col min-w-0">
         {/* Header */}
@@ -362,7 +379,8 @@ function ChatPageInner() {
           <ChatInput
             input={input}
             setInput={setInput}
-            onSend={handleSend}
+            onSend={() => { if (stt.isListening) stt.stop(); handleSend(); }}
+            onStop={handleStop}
             isStreaming={isStreaming}
             deepSearchEnabled={deepSearchEnabled}
             toggleDeepSearch={() => setDeepSearchEnabled(!deepSearchEnabled)}
@@ -381,8 +399,22 @@ function ChatPageInner() {
             onFileDrop={rag.addFile}
             attachedFiles={rag.documents.map(d => ({ id: d.id, name: d.name, size: d.size, type: d.type }))}
             onRemoveFile={(id) => {
-              // For now just clear all — in future could remove individual
               rag.clear();
+            }}
+            sttSupported={stt.isSupported}
+            sttListening={stt.isListening}
+            onSttToggle={() => {
+              if (stt.isListening) {
+                stt.stop();
+                // Append final transcript to input
+                if (stt.transcript) {
+                  setInput((input ? input + " " : "") + stt.transcript);
+                  stt.clear();
+                }
+              } else {
+                stt.clear();
+                stt.start();
+              }
             }}
           />
         </div>

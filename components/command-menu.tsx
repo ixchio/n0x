@@ -2,8 +2,9 @@
 
 import React, { useEffect, useState, useRef } from "react";
 import { Command } from "cmdk";
-import { Terminal, Volume2, VolumeX, Database, Cpu, Search, X } from "lucide-react";
+import { Terminal, Volume2, VolumeX, Database, Cpu, Search, X, Keyboard } from "lucide-react";
 import { WEBLLM_MODELS } from "@/lib/useWebLLM";
+import { getKeySoundEnabled, setKeySoundEnabled } from "@/lib/useKeySound";
 
 interface CommandMenuProps {
     onLoadModel: (modelId: string) => void;
@@ -16,6 +17,11 @@ interface CommandMenuProps {
 
 export function CommandMenu({ onLoadModel, onNewChat, ttsEnabled, onToggleTTS, ragEnabled, onToggleRAG }: CommandMenuProps) {
     const [open, setOpen] = useState(false);
+    const [keySounds, setKeySounds] = useState(false);
+
+    useEffect(() => {
+        setKeySounds(getKeySoundEnabled());
+    }, []);
 
     useEffect(() => {
         const handler = (e: KeyboardEvent) => {
@@ -73,6 +79,13 @@ export function CommandMenu({ onLoadModel, onNewChat, ttsEnabled, onToggleTTS, r
                         >
                             <Database className="w-3 h-3" />
                             {ragEnabled ? "close knowledge base" : "open knowledge base"}
+                        </Command.Item>
+                        <Command.Item
+                            onSelect={() => { const next = !keySounds; setKeySoundEnabled(next); setKeySounds(next); setOpen(false); }}
+                            className="flex items-center gap-2 px-2 py-1.5 text-xs text-txt-secondary rounded cursor-pointer hover:bg-crt-hover hover:text-phosphor data-[selected=true]:bg-crt-hover data-[selected=true]:text-phosphor"
+                        >
+                            <Keyboard className="w-3 h-3" />
+                            {keySounds ? "disable key sounds" : "enable key sounds"}
                         </Command.Item>
                     </Command.Group>
 

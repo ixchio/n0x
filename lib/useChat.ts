@@ -9,6 +9,7 @@ import { useTTS } from "@/lib/useTTS";
 import { useRAG } from "@/lib/useRAG";
 import { useChatStore } from "@/lib/useChatStore";
 import { useSystemPrompt } from "@/lib/useSystemPrompt";
+import { tick as keySoundTick } from "@/lib/useKeySound";
 
 interface ImageGenProgress {
     active: boolean;
@@ -40,6 +41,7 @@ export function useChat() {
     const persona = useSystemPrompt();
 
     const isStreaming = webllm.status === "generating" || deepSearch.isActive || generatingImage;
+    let tokenCounter = 0;
 
     const handleImageGen = useCallback(async (prompt: string) => {
         setGeneratingImage(true);
@@ -195,9 +197,13 @@ export function useChat() {
         try {
             setStreamingContent("");
             let full = "";
+            tokenCounter = 0;
             await webllm.generate(msgs, (tok) => {
                 full += tok;
                 setStreamingContent(full);
+                // Play key click every ~3 tokens
+                tokenCounter++;
+                if (tokenCounter % 3 === 0) keySoundTick();
             });
 
             chatStore.addMessage({ id: (Date.now() + 1).toString(), role: "assistant", content: full });
@@ -228,6 +234,23 @@ export function useChat() {
         }
     }, [input, isStreaming, webllm, chatStore, deepSearchEnabled, deepSearch, memory, memoryEnabled, handleImageGen, rag, tts, persona]);
 
+    const handleStop = useCallback(() => {
+        webllm.stop();
+        deepSearch.stop();
+        // Save whatever was streamed so far
+        setStreamingContent(prev => {
+            if (prev && prev.trim()) {
+                chatStore.addMessage({
+                    id: (Date.now() + 1).toString(),
+                    role: "assistant",
+                    content: prev + "\n\n*[generation stopped]*",
+                });
+            }
+            return "";
+        });
+        setGeneratingImage(false);
+    }, [webllm, deepSearch, chatStore]);
+
     const handleNewChat = useCallback(() => {
         chatStore.newConversation();
         setStreamingContent("");
@@ -247,7 +270,7 @@ export function useChat() {
 
         webllm, deepSearch, memory, pyodide, tts, rag, chatStore, persona,
 
-        handleSend, handleNewChat,
+        handleSend, handleNewChat, handleStop,
         handlePythonRun: runPython,
     };
 }

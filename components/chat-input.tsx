@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useRef, useEffect, useState, useCallback } from "react";
-import { Send, Globe, Brain, Code, Paperclip, Upload, X, FileText, File as FileIcon } from "lucide-react";
+import { Send, Square, Globe, Brain, Code, Paperclip, Upload, X, FileText, Mic, MicOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface AttachedFile {
@@ -15,6 +15,7 @@ interface ChatInputProps {
     input: string;
     setInput: (val: string) => void;
     onSend: () => void;
+    onStop?: () => void;
     isStreaming: boolean;
     deepSearchEnabled: boolean;
     toggleDeepSearch: () => void;
@@ -30,6 +31,10 @@ interface ChatInputProps {
     onFileDrop?: (file: File) => void;
     attachedFiles?: AttachedFile[];
     onRemoveFile?: (id: string) => void;
+    // Speech-to-text
+    sttSupported?: boolean;
+    sttListening?: boolean;
+    onSttToggle?: () => void;
 }
 
 // File type badge color
@@ -58,6 +63,7 @@ export function ChatInput({
     input,
     setInput,
     onSend,
+    onStop,
     isStreaming,
     deepSearchEnabled,
     toggleDeepSearch,
@@ -73,6 +79,9 @@ export function ChatInput({
     onFileDrop,
     attachedFiles = [],
     onRemoveFile,
+    sttSupported,
+    sttListening,
+    onSttToggle,
 }: ChatInputProps) {
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -259,25 +268,55 @@ export function ChatInput({
                         value={input}
                         onChange={(e) => setInput(e.target.value)}
                         onKeyDown={handleKeyDown}
-                        placeholder={attachedFiles.length > 0 ? "ask about your files..." : "type something..."}
+                        placeholder={sttListening ? "listening..." : attachedFiles.length > 0 ? "ask about your files..." : "type something..."}
                         disabled={isStreaming}
                         rows={1}
-                        className="w-full bg-transparent text-txt-primary text-sm resize-none outline-none placeholder:text-txt-tertiary disabled:opacity-40 font-mono leading-relaxed"
+                        className={cn(
+                            "w-full bg-transparent text-txt-primary text-sm resize-none outline-none placeholder:text-txt-tertiary disabled:opacity-40 font-mono leading-relaxed",
+                            sttListening && "placeholder:text-red-400 placeholder:animate-pulse"
+                        )}
                     />
                 </div>
 
-                <button
-                    onClick={onSend}
-                    disabled={isStreaming || (!input.trim() && attachedFiles.length === 0)}
-                    className={cn(
-                        "p-2 rounded border transition-all mb-0.5",
-                        (input.trim() || attachedFiles.length > 0) && !isStreaming
-                            ? "border-phosphor-dim text-phosphor hover:bg-phosphor-faint hover:shadow-glow-sm"
-                            : "border-crt-border text-txt-tertiary"
-                    )}
-                >
-                    <Send className="w-4 h-4" />
-                </button>
+                {/* Mic button */}
+                {sttSupported && onSttToggle && (
+                    <button
+                        onClick={onSttToggle}
+                        className={cn(
+                            "p-2 rounded border transition-all mb-0.5",
+                            sttListening
+                                ? "border-red-500/50 text-red-400 bg-red-500/10 animate-pulse"
+                                : "border-crt-border text-txt-tertiary hover:text-txt-secondary hover:border-txt-tertiary"
+                        )}
+                        title={sttListening ? "Stop listening" : "Voice input"}
+                    >
+                        {sttListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+                    </button>
+                )}
+
+                {/* Send / Stop button */}
+                {isStreaming && onStop ? (
+                    <button
+                        onClick={onStop}
+                        className="p-2 rounded border border-red-500/40 text-red-400 hover:bg-red-500/10 transition-all mb-0.5"
+                        title="Stop generation"
+                    >
+                        <Square className="w-4 h-4" />
+                    </button>
+                ) : (
+                    <button
+                        onClick={onSend}
+                        disabled={isStreaming || (!input.trim() && attachedFiles.length === 0)}
+                        className={cn(
+                            "p-2 rounded border transition-all mb-0.5",
+                            (input.trim() || attachedFiles.length > 0) && !isStreaming
+                                ? "border-phosphor-dim text-phosphor hover:bg-phosphor-faint hover:shadow-glow-sm"
+                                : "border-crt-border text-txt-tertiary"
+                        )}
+                    >
+                        <Send className="w-4 h-4" />
+                    </button>
+                )}
             </div>
 
             {/* Hidden file input */}
