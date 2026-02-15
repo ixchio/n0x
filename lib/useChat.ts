@@ -146,51 +146,49 @@ export function useChat() {
         }
 
         // ── Build the message list for the LLM ──
+        // IMPORTANT: WebLLM only allows ONE system message and it MUST be first.
+        // All context (RAG, search, memory) gets merged into the system prompt.
 
-        const history = chatStore.messages
-            .filter(m => m.id !== Date.now().toString())
-            .map(m => ({ role: m.role, content: m.content }));
-
-        const msgs: { role: string; content: string }[] = [
-            { role: "system", content: persona.systemPrompt },
-        ];
-
-        // Conversation history (last 20 messages)
-        if (history.length > 0) {
-            const trimmedHistory = history.slice(-20);
-            msgs.push(...trimmedHistory);
-        }
-
-        // ── Inject all context ──
+        // Build context parts
         const contextParts: string[] = [];
 
         if (ragCtx) {
-            // Build a clear file attachment header (like Claude)
             const fileNames = rag.documents.map(d => d.name).join(", ");
             contextParts.push(
-                `## Attached Files: ${fileNames}\n\nThe user has attached the following documents. Here is the content:\n\n${ragCtx}\n\nIMPORTANT: You MUST use this document content to answer the user's question. Reference the file names when quoting from them.`
+                `## Attached Files: ${fileNames}\nThe user has uploaded documents. Here is the content:\n${ragCtx}\nYou MUST use this document content to answer. Reference the file names when quoting.`
             );
         }
 
         if (searchCtx.trim()) {
             contextParts.push(
-                `## Web Search Results\n${searchCtx.trim()}\n\nUse these search results to provide an accurate, up-to-date answer. Cite sources when possible.`
+                `## Web Search Results\n${searchCtx.trim()}\nUse these results for an accurate, up-to-date answer. Cite sources.`
             );
         }
 
         if (memCtx) {
-            contextParts.push(`## Conversation Memory\n${memCtx}`);
+            contextParts.push(`## Memory\n${memCtx}`);
         }
 
-        // Combined context message injected right before the user query
+        // Build the single system prompt (persona + all context merged)
+        let systemContent = persona.systemPrompt;
         if (contextParts.length > 0) {
-            msgs.push({
-                role: "system",
-                content: `[CONTEXT FOR ANSWERING]\n\n${contextParts.join("\n\n---\n\n")}\n\n[END CONTEXT]\n\nAnswer the user's next message using the context above. If document content is provided, base your answer on it.`,
-            });
+            systemContent += `\n\n---\n\n[CONTEXT]\n${contextParts.join("\n\n")}\n[END CONTEXT]\n\nUse the context above to answer the user's question.`;
         }
 
-        // ALWAYS append the current user message
+        const msgs: { role: string; content: string }[] = [
+            { role: "system", content: systemContent },
+        ];
+
+        // Conversation history (only user/assistant — exclude the message we just added)
+        const history = chatStore.messages
+            .map(m => ({ role: m.role, content: m.content }));
+
+        if (history.length > 0) {
+            const trimmedHistory = history.slice(-20);
+            msgs.push(...trimmedHistory);
+        }
+
+        // ALWAYS append the current user message as final message
         msgs.push({ role: "user", content: message });
 
         // ── Generate ──
