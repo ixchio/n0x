@@ -379,6 +379,11 @@ function ChatPageInner() {
             onPyodideLoad={pyodide.load}
             onPyodideToggle={setPyEnabled}
             onFileDrop={rag.addFile}
+            attachedFiles={rag.documents.map(d => ({ id: d.id, name: d.name, size: d.size, type: d.type }))}
+            onRemoveFile={(id) => {
+              // For now just clear all — in future could remove individual
+              rag.clear();
+            }}
           />
         </div>
       </main>

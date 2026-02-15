@@ -79,7 +79,7 @@ export function useChat() {
         const message = input.trim();
         setInput("");
 
-        // check if they want an image
+        // Check if they want an image
         if (IMG_PATTERNS.some(p => p.test(message))) {
             await handleImageGen(message);
             return;
@@ -91,57 +91,62 @@ export function useChat() {
 
         // ── Gather context from all enabled features (parallel where possible) ──
 
-        // 1. RAG — auto-enabled when documents exist, no toggle needed
+        // 1. RAG — Get file context (direct text for small files, vector search for large)
         let ragCtx = "";
         const hasDocuments = rag.documents.length > 0;
         if (hasDocuments) {
-            setStreamingContent("⟳ searching your documents...");
+            setStreamingContent("⟳ reading your documents...");
             try {
-                const chunks = await rag.search(message, 4);
-                if (chunks.length > 0) {
-                    ragCtx = chunks
-                        .filter(c => c && c.trim().length > 20)
-                        .map((c, i) => `[Doc ${i + 1}] ${c.trim()}`)
-                        .join("\n\n");
-                }
+                ragCtx = await rag.getFileContext(message);
             } catch (e) {
-                console.error("RAG search failed:", e);
+                console.error("RAG context failed:", e);
+                // Fallback: try basic search
+                try {
+                    const chunks = await rag.search(message, 4);
+                    if (chunks.length > 0) {
+                        ragCtx = chunks
+                            .filter(c => c && c.trim().length > 20)
+                            .map((c, i) => `[Doc ${i + 1}] ${c.trim()}`)
+                            .join("\n\n");
+                    }
+                } catch {
+                    // silently continue without RAG
+                }
             }
         }
 
         // 2. Memory — retrieve relevant context
         const memCtx = memoryEnabled ? memory.getContext(message) : "";
 
-        // 3. Deep Search — web search
+        // 3. Deep Search — web search (with error resilience!)
         let searchCtx = "";
         if (deepSearchEnabled) {
             setStreamingContent("⟳ searching the web...");
-            const result = await deepSearch.search(message);
-            if (result) {
-                if (result.summary) searchCtx += result.summary + "\n\n";
-                if (result.content.length > 0) {
-                    const cleaned = result.content
-                        .map((c: string) => c.replace(/^\[Source:[^\]]+\]\n?/gm, "").replace(/^\[Instant Answer\]\n?/gm, "").trim())
-                        .filter((c: string) => c.length > 40)
-                        .slice(0, 2);
-                    const trimmed = cleaned.map((c: string) => c.length > 1200 ? c.slice(0, 1200) + "..." : c);
-                    if (trimmed.length > 0) searchCtx += trimmed.join("\n\n");
+            try {
+                const result = await deepSearch.search(message);
+                if (result) {
+                    if (result.summary) searchCtx += result.summary + "\n\n";
+                    if (result.content && result.content.length > 0) {
+                        const cleaned = result.content
+                            .map((c: string) => c.replace(/^\[Source:[^\]]+\]\n?/gm, "").replace(/^\[Instant Answer\]\n?/gm, "").trim())
+                            .filter((c: string) => c.length > 40)
+                            .slice(0, 3);
+                        const trimmed = cleaned.map((c: string) => c.length > 1200 ? c.slice(0, 1200) + "..." : c);
+                        if (trimmed.length > 0) searchCtx += trimmed.join("\n\n");
+                    }
+                    if (result.sources && result.sources.length > 0) {
+                        searchCtx += "\n\nSources: " + result.sources.slice(0, 4).join(", ");
+                    }
                 }
-                if (result.sources.length > 0) {
-                    searchCtx += "\n\nSources: " + result.sources.slice(0, 3).join(", ");
-                }
+            } catch (e) {
+                // Search failed — continue without search context, don't crash
+                console.error("Deep search error (non-fatal):", e);
+                searchCtx = "";
             }
         }
 
         // ── Build the message list for the LLM ──
-        // Strategy: system prompt first, then conversation history (minus last message),
-        // then inject ALL context as a single focused system message right before the
-        // user query. Small models pay most attention to messages near the end.
 
-        // ── Build the message list for the LLM ──
-
-        // Get history (excluding the temporary message we just added which serves as optimistic UI)
-        // We use the raw 'message' variable for the final LLM payload to ensure fresh data
         const history = chatStore.messages
             .filter(m => m.id !== Date.now().toString())
             .map(m => ({ role: m.role, content: m.content }));
@@ -150,9 +155,8 @@ export function useChat() {
             { role: "system", content: persona.systemPrompt },
         ];
 
-        // Conversation history
+        // Conversation history (last 20 messages)
         if (history.length > 0) {
-            // Keep only last 10 exchanges
             const trimmedHistory = history.slice(-20);
             msgs.push(...trimmedHistory);
         }
@@ -161,14 +165,16 @@ export function useChat() {
         const contextParts: string[] = [];
 
         if (ragCtx) {
+            // Build a clear file attachment header (like Claude)
+            const fileNames = rag.documents.map(d => d.name).join(", ");
             contextParts.push(
-                `## Your Documents (uploaded by the user)\nThe user has uploaded documents. Here is the relevant content:\n\n${ragCtx}\n\nYou MUST use this document content to answer. The content is right above.`
+                `## Attached Files: ${fileNames}\n\nThe user has attached the following documents. Here is the content:\n\n${ragCtx}\n\nIMPORTANT: You MUST use this document content to answer the user's question. Reference the file names when quoting from them.`
             );
         }
 
         if (searchCtx.trim()) {
             contextParts.push(
-                `## Web Search Results\n${searchCtx.trim()}\n\nUse these search results to answer.`
+                `## Web Search Results\n${searchCtx.trim()}\n\nUse these search results to provide an accurate, up-to-date answer. Cite sources when possible.`
             );
         }
 
@@ -176,17 +182,15 @@ export function useChat() {
             contextParts.push(`## Conversation Memory\n${memCtx}`);
         }
 
-        // Combined context message
-        // We use 'system' role but injected right before the final user message
+        // Combined context message injected right before the user query
         if (contextParts.length > 0) {
             msgs.push({
                 role: "system",
-                content: `[CONTEXT FOR ANSWERING]\n\n${contextParts.join("\n\n---\n\n")}\n\n[END CONTEXT]\n\nAnswer the user's next message using the context above.`,
+                content: `[CONTEXT FOR ANSWERING]\n\n${contextParts.join("\n\n---\n\n")}\n\n[END CONTEXT]\n\nAnswer the user's next message using the context above. If document content is provided, base your answer on it.`,
             });
         }
 
-        // ALWAYS append the current user message explicitly
-        // This fixes the 'MessageOrderError' because the last message is GUARANTEED to be 'user'
+        // ALWAYS append the current user message
         msgs.push({ role: "user", content: message });
 
         // ── Generate ──
@@ -202,9 +206,16 @@ export function useChat() {
             setStreamingContent("");
             deepSearch.reset();
 
-            // Auto-save to memory if enabled
-            if (memoryEnabled && full.length > 20) {
-                memory.saveMemory(`Q: ${message}\nA: ${full.slice(0, 300)}`, ["chat"]);
+            // Clear pending files after response (they've been used)
+            if (hasDocuments) {
+                rag.clearPending();
+            }
+
+            // Auto-save to memory if enabled (only for meaningful responses)
+            if (memoryEnabled && full.length > 50 && !full.startsWith("failed")) {
+                // Better memory format: structured with topic extraction
+                const memContent = `Topic: ${message.slice(0, 80)}\nQ: ${message}\nA: ${full.slice(0, 400)}`;
+                memory.saveMemory(memContent, ["chat", "auto"]);
             }
 
             if (tts.isEnabled) tts.speak(full);
