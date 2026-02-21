@@ -27,9 +27,8 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <body className="bg-crt-black text-txt-primary font-mono antialiased">
-        {/* CRT scanline overlay */}
-        <div className="crt-overlay" />
-        <div className="crt-vignette" />
+        {/* Background layer */}
+        <div className="fixed inset-0 z-[-1] bg-[#0a0a0a]" />
         {children}
         <PWARegister />
       </body>

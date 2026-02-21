@@ -9,73 +9,92 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        // N0X Retro CRT palette
+        background: "#0a0a0a",
+        foreground: "#ededed",
+        card: {
+          DEFAULT: "#141414",
+          foreground: "#ededed",
+        },
+        popover: {
+          DEFAULT: "#141414",
+          foreground: "#ededed",
+        },
+        primary: {
+          DEFAULT: "#ededed",
+          foreground: "#0a0a0a",
+        },
+        secondary: {
+          DEFAULT: "#27272a",
+          foreground: "#ededed",
+        },
+        muted: {
+          DEFAULT: "#27272a",
+          foreground: "#a1a1aa",
+        },
+        accent: {
+          DEFAULT: "#27272a",
+          foreground: "#ededed",
+        },
+        border: "#222222",
+        input: "#27272a",
+        ring: "#d4d4d8",
+
+        // Legacy colors mapped to modern minimalist palette to prevent immediate breakage
         crt: {
           black: "#000000",
-          bg: "#030303",
-          surface: "#0a0a0a",
-          border: "#1a1a1a",
-          hover: "#111111",
-          panel: "#060606",
+          bg: "#0a0a0a",
+          surface: "#141414",
+          border: "#222222",
+          hover: "#1f1f1f",
+          panel: "#141414",
         },
         phosphor: {
-          DEFAULT: "#33ff33",    // Classic CRT green
-          dim: "#1a8a1a",       // Muted green
-          bright: "#66ff66",    // Highlight green
-          glow: "#00ff00",      // Pure glow
-          text: "#22cc22",      // Readable green
-          faint: "#0d4d0d",     // Very subtle green
+          DEFAULT: "#ededed",    // White text instead of green
+          dim: "#a1a1aa",       // Muted gray
+          bright: "#ffffff",    // Pure white
+          glow: "#ffffff",      // Pure white
+          text: "#ededed",
+          faint: "#27272a",
         },
         neon: {
-          cyan: "#00ffff",
-          magenta: "#ff00ff",
-          pink: "#ff3399",
-          amber: "#ffaa00",
+          cyan: "#60a5fa",    // subtle blue
+          magenta: "#c084fc", // subtle purple
+          pink: "#f472b6",    // subtle pink
+          amber: "#fbbf24",   // subtle amber
         },
         txt: {
-          primary: "#cccccc",
-          secondary: "#666666",
-          tertiary: "#333333",
+          primary: "#ededed",
+          secondary: "#a1a1aa",
+          tertiary: "#52525b",
         },
       },
       fontFamily: {
-        mono: ["'IBM Plex Mono'", "'JetBrains Mono'", "'Fira Code'", "Consolas", "monospace"],
-        pixel: ["'Press Start 2P'", "monospace"],
+        sans: ["Inter", "system-ui", "sans-serif"],
+        mono: ["'JetBrains Mono'", "'Fira Code'", "Consolas", "monospace"],
       },
       boxShadow: {
-        "glow-green": "0 0 10px rgba(51, 255, 51, 0.3), 0 0 20px rgba(51, 255, 51, 0.1)",
-        "glow-cyan": "0 0 10px rgba(0, 255, 255, 0.3)",
-        "glow-sm": "0 0 5px rgba(51, 255, 51, 0.2)",
+        "glow-white": "0 0 10px rgba(255, 255, 255, 0.1), 0 0 20px rgba(255, 255, 255, 0.05)",
+        "glass": "inset 0 1px 0 0 rgba(255, 255, 255, 0.05)",
       },
       animation: {
-        "blink": "blink 1s step-end infinite",
-        "scanline": "scanline 8s linear infinite",
         "fade-in": "fadeIn 0.3s ease-out",
-        "slide-up": "slideUp 0.2s ease-out",
-        "flicker": "flicker 0.15s infinite",
+        "slide-up": "slideUp 0.3s ease-out",
+        "pulse-slow": "pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite",
+        "in": "in 0.2s ease-out",
       },
       keyframes: {
-        blink: {
-          "0%, 100%": { opacity: "1" },
-          "50%": { opacity: "0" },
-        },
-        scanline: {
-          "0%": { transform: "translateY(-100%)" },
-          "100%": { transform: "translateY(100vh)" },
-        },
         fadeIn: {
           "0%": { opacity: "0" },
           "100%": { opacity: "1" },
         },
         slideUp: {
-          "0%": { opacity: "0", transform: "translateY(8px)" },
+          "0%": { opacity: "0", transform: "translateY(10px)" },
           "100%": { opacity: "1", transform: "translateY(0)" },
         },
-        flicker: {
-          "0%": { opacity: "0.97" },
-          "50%": { opacity: "1" },
-          "100%": { opacity: "0.98" },
-        },
+        in: {
+          "0%": { opacity: "0", transform: "translateY(4px) scale(0.98)" },
+          "100%": { opacity: "1", transform: "translateY(0) scale(1)" },
+        }
       },
     },
   },

@@ -2,6 +2,7 @@
 
 import React, { useRef, useEffect, useCallback, useState, useMemo } from "react";
 import { ChevronDown, Loader2, Zap, Brain, Code, Shield, Volume2, VolumeX, Cpu, Menu, AlertTriangle, Download } from "lucide-react";
+import { MetricsOverlay } from "@/components/metrics-overlay";
 import { Sidebar } from "@/components/sidebar";
 import { MessageBubble } from "@/components/message-bubble";
 import { ChatInput } from "@/components/chat-input";
@@ -37,6 +38,7 @@ function ChatPageInner() {
   const [headerModelOpen, setHeaderModelOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [showMemoryPanel, setShowMemoryPanel] = useState(false);
+  const [showMetrics, setShowMetrics] = useState(false);
   const [isExploding, setIsExploding] = useState(false);
   const [pyEnabled, setPyEnabled] = useState(false);
 
@@ -93,7 +95,7 @@ function ChatPageInner() {
   }, [handleNewChat]);
 
   return (
-    <div className="h-screen flex bg-crt-black font-mono overflow-hidden text-txt-primary">
+    <div className="h-screen flex bg-background font-sans overflow-hidden text-foreground selection:bg-white/20">
       <CommandMenu
         onLoadModel={handleModelChange}
         onNewChat={onNewChat}
@@ -113,9 +115,18 @@ function ChatPageInner() {
         onDelete={chatStore.deleteConversation}
       />
 
-      <main className="flex-1 flex flex-col min-w-0">
+      <main className="flex-1 flex flex-col min-w-0 relative">
+        <MetricsOverlay
+          tps={webllm.stats?.tps || 0}
+          modelName={WEBLLM_MODELS.find(m => m.id === webllm.loadedModel)?.label || webllm.loadedModel || ""}
+          isLoaded={webllm.status === "ready"}
+          isLoading={webllm.status === "loading"}
+          progress={webllm.loadProgress}
+          isOpen={showMetrics}
+          onToggle={() => setShowMetrics(!showMetrics)}
+        />
         {/* Header */}
-        <header className="h-11 border-b border-crt-border flex items-center px-4 shrink-0 bg-crt-bg">
+        <header className="h-14 border-b border-border flex items-center px-4 shrink-0 bg-background/50 backdrop-blur-md sticky top-0 z-40">
           <button onClick={() => setSidebarOpen(!sidebarOpen)} className="mr-3 text-txt-tertiary hover:text-phosphor transition-colors">
             <Menu className="w-4 h-4" />
           </button>
@@ -134,7 +145,7 @@ function ChatPageInner() {
             {headerModelOpen && (
               <>
                 <div className="fixed inset-0 z-40" onClick={() => setHeaderModelOpen(false)} />
-                <div className="absolute top-full left-0 mt-2 w-72 max-h-[70vh] overflow-y-auto bg-crt-surface border border-crt-border rounded z-50 no-scrollbar">
+                <div className="absolute top-full left-0 mt-2 w-72 max-h-[70vh] overflow-y-auto bg-card border border-border shadow-xl rounded-xl z-50 no-scrollbar p-1">
                   {Object.entries(MODEL_CATEGORIES).map(([key, cat]) => {
                     const models = WEBLLM_MODELS.filter(m => m.category === key);
                     if (models.length === 0) return null;
@@ -158,8 +169,8 @@ function ChatPageInner() {
                             className={cn(
                               "w-full flex items-center justify-between px-2 py-1.5 rounded text-xs text-left transition-all font-mono",
                               webllm.loadedModel === m.id
-                                ? "bg-phosphor-faint text-phosphor border border-phosphor-dim"
-                                : "text-txt-secondary hover:bg-crt-hover hover:text-phosphor"
+                                ? "bg-zinc-800 text-white border border-zinc-700 font-semibold"
+                                : "text-zinc-400 hover:bg-zinc-900 hover:text-white"
                             )}
                           >
                             <div>
@@ -247,7 +258,7 @@ function ChatPageInner() {
           {webllm.isSupported && webllm.status === "loading" && chatStore.messages.length === 0 && (
             <div className="h-full flex flex-col items-center justify-center">
               <div className="space-y-6 text-center max-w-sm">
-                <h2 className="font-pixel text-xl text-phosphor text-glow tracking-wider">N0X</h2>
+                <h2 className="text-xl text-white font-bold tracking-tight">N0X Engine</h2>
 
                 {/* Progress bar */}
                 <div className="w-64 mx-auto">
@@ -287,8 +298,8 @@ function ChatPageInner() {
           {/* Welcome screen (model loaded, no messages) */}
           {webllm.isSupported && chatStore.messages.length === 0 && !deepSearch.isActive && webllm.status !== "loading" ? (
             <div className="h-full flex flex-col items-center justify-center">
-              <div className="space-y-6 text-center max-w-sm">
-                <h2 className="font-pixel text-xl text-phosphor text-glow tracking-wider">N0X</h2>
+              <div className="space-y-6 text-center max-w-md w-full">
+                <h2 className="text-3xl text-white font-bold tracking-tight">N0X</h2>
                 <p className="text-xs text-txt-tertiary font-mono">
                   {webllm.status === "unloaded" ? "select a model to start · ctrl+k for commands" : "ready. type something."}
                 </p>

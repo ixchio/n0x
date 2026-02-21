@@ -2,93 +2,166 @@
 
 import React from "react";
 import Link from "next/link";
-import { Terminal, Shield, Cpu, Zap, Brain, Globe, Code, FileText, Image, Mic } from "lucide-react";
+import { motion } from "framer-motion";
+import { Terminal, Shield, Cpu, Zap, Brain, Globe, Code, FileText, ImageIcon, Mic, ArrowRight, Lock, Database } from "lucide-react";
+
+const fadeIn = {
+  hidden: { opacity: 0, y: 20 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.5, ease: "easeOut" } }
+};
+
+const stagger = {
+  hidden: { opacity: 0 },
+  visible: { opacity: 1, transition: { staggerChildren: 0.1 } }
+};
 
 export default function HomePage() {
   return (
-    <div className="min-h-screen bg-crt-black flex flex-col items-center justify-center p-6 relative overflow-hidden">
-      {/* Background grid */}
-      <div className="absolute inset-0 opacity-[0.03]"
+    <div className="min-h-screen bg-background text-foreground flex flex-col items-center selection:bg-white/20 relative overflow-hidden font-sans">
+
+      {/* Subtle Background Glows */}
+      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-zinc-800/20 blur-[120px] rounded-full point-events-none" />
+      <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-zinc-800/20 blur-[120px] rounded-full point-events-none" />
+
+      {/* Grid Pattern Pattern */}
+      <div
+        className="absolute inset-0 opacity-[0.015] pointer-events-none"
         style={{
-          backgroundImage: "linear-gradient(#33ff33 1px, transparent 1px), linear-gradient(90deg, #33ff33 1px, transparent 1px)",
-          backgroundSize: "40px 40px"
+          backgroundImage: "linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px)",
+          backgroundSize: "64px 64px"
         }}
       />
 
-      <div className="relative z-10 max-w-xl w-full space-y-8 text-center">
-        {/* Logo */}
-        <div className="space-y-4">
-          <div className="inline-block">
-            <h1 className="font-pixel text-3xl sm:text-4xl text-phosphor text-glow tracking-widest">
-              N0X
-            </h1>
-          </div>
-          <p className="text-txt-secondary text-sm font-mono">
-            the full AI stack, in one browser tab
-          </p>
+      {/* Nav/Header */}
+      <header className="w-full max-w-6xl mx-auto px-6 py-6 flex items-center justify-between relative z-10">
+        <div className="font-mono text-xl font-bold tracking-tighter flex items-center gap-2">
+          <div className="w-4 h-4 bg-white rounded-[2px]" />
+          n0x
         </div>
-
-        {/* Feature grid */}
-        <div className="bg-crt-surface border border-crt-border rounded p-5 text-left text-sm space-y-3">
-          <div className="text-phosphor-dim text-xs">
-            <span className="text-phosphor">$</span> n0x --features
-          </div>
-          <div className="grid grid-cols-2 gap-2.5 text-xs font-mono">
-            <div className="flex items-center gap-2.5 text-txt-primary">
-              <Cpu className="w-3.5 h-3.5 text-phosphor shrink-0" />
-              <span>LLM inference (WebGPU)</span>
-            </div>
-            <div className="flex items-center gap-2.5 text-txt-primary">
-              <Globe className="w-3.5 h-3.5 text-neon-cyan shrink-0" />
-              <span>deep web search</span>
-            </div>
-            <div className="flex items-center gap-2.5 text-txt-primary">
-              <FileText className="w-3.5 h-3.5 text-neon-amber shrink-0" />
-              <span>RAG / doc search</span>
-            </div>
-            <div className="flex items-center gap-2.5 text-txt-primary">
-              <Code className="w-3.5 h-3.5 text-phosphor shrink-0" />
-              <span>python execution</span>
-            </div>
-            <div className="flex items-center gap-2.5 text-txt-primary">
-              <Image className="w-3.5 h-3.5 text-neon-magenta shrink-0" />
-              <span>image generation</span>
-            </div>
-            <div className="flex items-center gap-2.5 text-txt-primary">
-              <Brain className="w-3.5 h-3.5 text-neon-cyan shrink-0" />
-              <span>persistent memory</span>
-            </div>
-            <div className="flex items-center gap-2.5 text-txt-primary">
-              <Mic className="w-3.5 h-3.5 text-phosphor shrink-0" />
-              <span>text-to-speech</span>
-            </div>
-            <div className="flex items-center gap-2.5 text-txt-primary">
-              <Shield className="w-3.5 h-3.5 text-phosphor shrink-0" />
-              <span>private by default</span>
-            </div>
-          </div>
-
-          <div className="pt-2 border-t border-crt-border text-[10px] text-txt-tertiary space-y-1">
-            <p>core AI runs locally in your browser — no server, no account, no data leaves your machine.</p>
-            <p>optional features (search, image gen) reach out when you flip the switch.</p>
-          </div>
+        <div className="flex items-center gap-6 text-sm text-zinc-400 font-medium">
+          <Link href="https://github.com/ixchio/n0x" className="hover:text-white transition-colors">GitHub</Link>
+          <Link href="/chat" className="text-white hover:text-zinc-300 transition-colors flex items-center gap-1">
+            Launch App <ArrowRight className="w-3 h-3" />
+          </Link>
         </div>
+      </header>
 
-        {/* Enter */}
-        <Link
-          href="/chat"
-          className="inline-flex items-center gap-2 px-6 py-3 bg-crt-surface border border-phosphor-dim text-phosphor font-mono text-sm hover:bg-phosphor-faint hover:border-phosphor hover:shadow-glow-green transition-all duration-200 rounded"
+      <main className="flex-1 w-full max-w-6xl mx-auto px-6 py-20 lg:py-32 flex flex-col items-center relative z-10">
+
+        {/* Hero Section */}
+        <motion.div
+          initial="hidden"
+          animate="visible"
+          variants={stagger}
+          className="text-center max-w-3xl space-y-8"
         >
-          <Terminal className="w-4 h-4" />
-          <span>enter n0x</span>
-        </Link>
+          <motion.div variants={fadeIn} className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-zinc-900 border border-zinc-800 text-xs font-medium text-zinc-300 mb-4 shadow-glass">
+            <span className="flex h-2 w-2 rounded-full bg-green-500 animate-pulse" />
+            Zero Backend Architecture
+          </motion.div>
 
-        {/* Footer */}
-        <div className="text-txt-tertiary text-[10px] font-mono space-y-1 pt-2">
-          <p>no install · no api keys to start · works offline after first visit</p>
-          <p>requires chrome 113+ with webgpu</p>
-        </div>
-      </div>
+          <motion.h1 variants={fadeIn} className="text-5xl sm:text-7xl font-bold tracking-tight text-white leading-[1.1]">
+            The Full AI Stack. <br className="hidden sm:block" />
+            <span className="text-zinc-500">One Browser Tab.</span>
+          </motion.h1>
+
+          <motion.p variants={fadeIn} className="text-lg sm:text-xl text-zinc-400 leading-relaxed max-w-2xl mx-auto font-medium">
+            Local LLM inference via WebGPU. RAG, code execution, image generation, and memory. 100% private. No installation or API keys required.
+          </motion.p>
+
+          <motion.div variants={fadeIn} className="flex items-center justify-center gap-4 pt-4">
+            <Link href="/chat" className="h-12 px-8 inline-flex items-center justify-center rounded-md bg-white text-black font-semibold hover:bg-zinc-200 transition-colors gap-2 text-sm shadow-[0_0_20px_rgba(255,255,255,0.1)]">
+              Enter n0x
+            </Link>
+            <Link href="https://github.com/ixchio/n0x" className="h-12 px-8 inline-flex items-center justify-center rounded-md bg-zinc-900 border border-zinc-800 text-white font-medium hover:bg-zinc-800 transition-colors text-sm shadow-glass">
+              View Architecture
+            </Link>
+          </motion.div>
+        </motion.div>
+
+        {/* Bento Box Features */}
+        <motion.div
+          initial="hidden"
+          whileInView="visible"
+          viewport={{ once: true, margin: "-100px" }}
+          variants={stagger}
+          className="w-full mt-32 grid grid-cols-1 md:grid-cols-3 gap-4"
+        >
+          {/* Card 1 */}
+          <motion.div variants={fadeIn} className="md:col-span-2 bg-zinc-900/50 border border-zinc-800/50 rounded-2xl p-8 hover:bg-zinc-900/80 transition-colors flex flex-col justify-between group overflow-hidden relative shadow-glass">
+            <div className="absolute top-0 right-0 p-8 opacity-10 group-hover:opacity-20 transition-opacity">
+              <Cpu className="w-48 h-48" />
+            </div>
+            <div className="relative z-10 space-y-4">
+              <div className="w-12 h-12 bg-zinc-800 rounded-xl flex items-center justify-center text-white border border-zinc-700">
+                <Cpu className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-white tracking-tight">WebGPU Inference</h3>
+                <p className="text-zinc-400 mt-2 font-medium">Models run directly in your browser. Blistering fast token generation via MLC WebLLM. Downloaded once, cached forever.</p>
+              </div>
+            </div>
+          </motion.div>
+
+          {/* Card 2 */}
+          <motion.div variants={fadeIn} className="md:col-span-1 bg-zinc-900/50 border border-zinc-800/50 rounded-2xl p-8 hover:bg-zinc-900/80 transition-colors flex flex-col justify-between shadow-glass">
+            <div className="space-y-4">
+              <div className="w-12 h-12 bg-zinc-800 rounded-xl flex items-center justify-center text-white border border-zinc-700">
+                <Lock className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-white tracking-tight">Zero Tracking</h3>
+                <p className="text-zinc-400 mt-2 text-sm font-medium">No server processing your private data. Everything lives in IndexedDB on your device.</p>
+              </div>
+            </div>
+          </motion.div>
+
+          {/* Card 3 */}
+          <motion.div variants={fadeIn} className="md:col-span-1 bg-zinc-900/50 border border-zinc-800/50 rounded-2xl p-8 hover:bg-zinc-900/80 transition-colors shadow-glass">
+            <div className="space-y-4">
+              <div className="w-12 h-12 bg-zinc-800 rounded-xl flex items-center justify-center text-white border border-zinc-700">
+                <Database className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-white tracking-tight">Local RAG</h3>
+                <p className="text-zinc-400 mt-2 text-sm font-medium">Drag-and-drop PDFs. Chunked, embedded, and queried entirely via WASM.</p>
+              </div>
+            </div>
+          </motion.div>
+
+          {/* Card 4 */}
+          <motion.div variants={fadeIn} className="md:col-span-2 bg-zinc-900/50 border border-zinc-800/50 rounded-2xl p-8 hover:bg-zinc-900/80 transition-colors flex items-center shadow-glass">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-6 w-full text-zinc-400">
+              <div className="flex flex-col gap-2">
+                <Code className="w-5 h-5 text-white" />
+                <span className="font-semibold text-white">Pyodide Sandbox</span>
+                <span className="text-xs">Run Python snippets</span>
+              </div>
+              <div className="flex flex-col gap-2">
+                <Globe className="w-5 h-5 text-white" />
+                <span className="font-semibold text-white">Deep Search</span>
+                <span className="text-xs">Tavily/DDG synthesis</span>
+              </div>
+              <div className="flex flex-col gap-2">
+                <ImageIcon className="w-5 h-5 text-white" />
+                <span className="font-semibold text-white">Image Gen</span>
+                <span className="text-xs">Stable Horde fallback</span>
+              </div>
+              <div className="flex flex-col gap-2">
+                <Mic className="w-5 h-5 text-white" />
+                <span className="font-semibold text-white">Native TTS</span>
+                <span className="text-xs">Web Speech API</span>
+              </div>
+            </div>
+          </motion.div>
+
+        </motion.div>
+      </main>
+
+      {/* Footer */}
+      <footer className="w-full border-t border-zinc-800/50 py-8 text-center text-xs text-zinc-500 font-mono relative z-10">
+        <p>Engineered for full local execution. Requires Chromium 113+ for WebGPU.</p>
+      </footer>
     </div>
   );
 }

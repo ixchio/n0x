@@ -4,7 +4,7 @@ import React, { useState, useRef } from "react";
 import ReactMarkdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
-import { Copy, Check, Play, Loader2, Eye, EyeOff, ZoomIn, Download } from "lucide-react";
+import { Copy, Check, Play, Loader2, Eye, EyeOff, ZoomIn, Download, Bot, Terminal } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface MessageBubbleProps {
@@ -14,7 +14,6 @@ interface MessageBubbleProps {
     onRunCode?: (code: string) => Promise<{ output: string; error: string | null; duration: number }>;
 }
 
-// packages that won't work in pyodide — native deps, GUI, networking servers
 const PY_BLOCKLIST = [
     "pygame", "tkinter", "PyQt5", "PyQt6", "PySide2", "PySide6",
     "cv2", "opencv", "tensorflow", "torch", "torchvision", "torchaudio",
@@ -28,7 +27,6 @@ const PY_BLOCKLIST = [
     "docker", "kubernetes", "boto3", "paramiko",
 ];
 
-// pull imports from python code, return true if all are pyodide-safe
 function canRunPython(code: string): boolean {
     const importRe = /(?:^|\n)\s*(?:import|from)\s+([\w.]+)/g;
     let m;
@@ -36,19 +34,17 @@ function canRunPython(code: string): boolean {
     while ((m = importRe.exec(code)) !== null) {
         modules.push(m[1].split(".")[0]);
     }
-    // no imports = pure python, always runnable
     if (modules.length === 0) return true;
     return !modules.some(mod => PY_BLOCKLIST.includes(mod));
 }
 
-// Build HTML for sandboxed iframe execution
 function buildSandboxHtml(code: string, lang: string): string {
     const l = lang.toLowerCase();
 
     if (l === "javascript" || l === "js") {
         return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
-body { background:#0a0a0a; color:#39ff14; font-family:'IBM Plex Mono',monospace; padding:12px; margin:0; font-size:13px; }
-pre { white-space:pre-wrap; word-break:break-word; margin:0; }
+body { background:#0a0a0a; color:#f3f4f6; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; padding:12px; margin:0; font-size:13px; }
+pre { white-space:pre-wrap; word-break:break-word; margin:0; font-family:"JetBrains Mono",monospace; }
 .err { color:#ef4444; }
 </style></head><body><pre id="out"></pre><script>
 const _log=console.log, _err=console.error, out=document.getElementById('out');
@@ -71,7 +67,6 @@ ${code}
     if (l === "html" || l === "htm") {
         const hasDoctype = code.toLowerCase().includes("<!doctype") || code.toLowerCase().includes("<html");
         if (hasDoctype) return code;
-
         return `<!DOCTYPE html><html><head><meta charset="utf-8">
 <style>body{background:#0a0a0a;color:#e0e0e0;font-family:sans-serif;margin:0;padding:16px}</style>
 <script>window.onerror=function(m){document.body.innerHTML='<pre style="color:#ef4444;padding:20px">'+m+'</pre>';}</script>
@@ -81,7 +76,6 @@ ${code}
     return "";
 }
 
-// Code block component
 const CodeBlock = ({ children, className, onRunCode, codeResults, runningCode, handleRunCode, ...props }: any) => {
     const match = /language-(\w+)/.exec(className || "");
     const code = String(children).replace(/\n$/, "");
@@ -94,10 +88,9 @@ const CodeBlock = ({ children, className, onRunCode, codeResults, runningCode, h
     const isWeb = ["html", "htm", "javascript", "js", "css"].includes(lang);
     const pyRunnable = isPython && canRunPython(code);
 
-    // Inline code
     if (!match) {
         return (
-            <code className="bg-phosphor-faint text-phosphor px-1.5 py-0.5 text-[0.85em] font-mono border border-crt-border" {...props}>
+            <code className="bg-zinc-800 text-zinc-200 px-1.5 py-0.5 rounded-md text-[0.85em] font-mono border border-zinc-700" {...props}>
                 {children}
             </code>
         );
@@ -113,7 +106,7 @@ const CodeBlock = ({ children, className, onRunCode, codeResults, runningCode, h
         const next = !showPreview;
         setShowPreview(next);
 
-        if (next && isWeb && iframeRef.current) {
+        if (next && isWeb) {
             setTimeout(() => {
                 if (iframeRef.current) {
                     const doc = iframeRef.current.contentDocument;
@@ -132,77 +125,70 @@ const CodeBlock = ({ children, className, onRunCode, codeResults, runningCode, h
     const isRunning = runningCode === codeId;
 
     return (
-        <div className="my-3 border border-crt-border rounded overflow-hidden">
+        <div className="my-4 border border-zinc-800 rounded-xl overflow-hidden shadow-sm bg-[#0a0a0a]">
             {/* Header */}
-            <div className="flex items-center justify-between px-3 py-1.5 bg-crt-surface border-b border-crt-border">
-                <span className="text-[10px] text-phosphor-dim font-mono">{lang}</span>
-                <div className="flex items-center gap-1">
-                    {/* Preview toggle (web languages) */}
+            <div className="flex items-center justify-between px-4 py-2 bg-zinc-900/50 border-b border-zinc-800">
+                <span className="text-[11px] text-zinc-400 font-mono font-medium">{lang}</span>
+                <div className="flex items-center gap-1.5">
                     {isWeb && (
                         <button
                             onClick={handlePreview}
-                            className={cn("p-1 transition-colors", showPreview ? "text-neon-cyan" : "text-txt-tertiary hover:text-neon-cyan")}
-                            title={showPreview ? "Show code" : "Preview"}
+                            className={cn("p-1.5 rounded-md transition-colors flex items-center gap-1.5 text-xs font-mono font-medium", showPreview ? "bg-white text-black" : "text-zinc-400 hover:text-white hover:bg-zinc-800")}
                         >
-                            {showPreview ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                            {showPreview ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                            {showPreview ? "Code" : "Preview"}
                         </button>
                     )}
 
-                    {/* Run python — only if imports are sandbox-safe */}
                     {pyRunnable && onRunCode && (
                         <button
                             onClick={() => handleRunCode(code)}
                             disabled={isRunning}
-                            className="p-1 text-txt-tertiary hover:text-phosphor transition-colors"
-                            title="Run Python"
+                            className="p-1.5 rounded-md text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors flex items-center gap-1.5 text-xs font-mono font-medium"
                         >
-                            {isRunning ? <Loader2 className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3" />}
+                            {isRunning ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
+                            Run
                         </button>
                     )}
 
-                    {/* Run web (when no onRunCode needed) */}
                     {isWeb && !showPreview && (
                         <button
                             onClick={handlePreview}
-                            className="p-1 text-txt-tertiary hover:text-phosphor transition-colors"
-                            title={`Run ${lang}`}
+                            className="p-1.5 rounded-md text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors flex items-center gap-1.5 text-xs font-mono font-medium"
                         >
-                            <Play className="w-3 h-3" />
+                            <Play className="w-3.5 h-3.5" /> Play
                         </button>
                     )}
 
-                    <button onClick={handleCopy} className="p-1 text-txt-tertiary hover:text-phosphor transition-colors">
-                        {copied ? <Check className="w-3 h-3 text-phosphor" /> : <Copy className="w-3 h-3" />}
+                    <div className="w-px h-4 bg-zinc-800 mx-1" />
+
+                    <button onClick={handleCopy} className="p-1.5 rounded-md text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors">
+                        {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
                     </button>
                 </div>
             </div>
 
             {/* Code view */}
             {!showPreview && (
-                <SyntaxHighlighter
-                    language={lang}
-                    style={vscDarkPlus}
-                    customStyle={{
-                        margin: 0,
-                        padding: "0.75rem 1rem",
-                        background: "#030303",
-                        fontSize: "0.8rem",
-                        fontFamily: "'IBM Plex Mono', monospace",
-                        borderRadius: 0,
-                    }}
-                    codeTagProps={{ style: { fontFamily: "'IBM Plex Mono', monospace" } }}
-                >
-                    {code}
-                </SyntaxHighlighter>
+                <div className="p-4 bg-[#0a0a0a] overflow-x-auto text-[13px] leading-relaxed no-scrollbar">
+                    <SyntaxHighlighter
+                        language={lang}
+                        style={vscDarkPlus}
+                        customStyle={{ margin: 0, padding: 0, background: "transparent" }}
+                        codeTagProps={{ style: { fontFamily: "'JetBrains Mono', monospace" } }}
+                    >
+                        {code}
+                    </SyntaxHighlighter>
+                </div>
             )}
 
             {/* Web preview iframe */}
             {showPreview && isWeb && (
-                <div className="relative">
+                <div className="relative bg-white w-full h-[400px]">
                     <iframe
                         ref={iframeRef}
-                        sandbox="allow-scripts"
-                        className="w-full h-72 border-0 bg-[#0a0a0a]"
+                        sandbox="allow-scripts allow-popups allow-forms"
+                        className="w-full h-full border-0 absolute inset-0"
                         title={`${lang} preview`}
                     />
                 </div>
@@ -210,23 +196,18 @@ const CodeBlock = ({ children, className, onRunCode, codeResults, runningCode, h
 
             {/* Python output */}
             {result && (
-                <div className="border-t border-crt-border p-3 bg-crt-black">
-                    <div className="text-[10px] text-txt-tertiary mb-1 font-mono">
-                        output · {result.duration}ms
+                <div className="border-t border-zinc-800 p-3 bg-zinc-950">
+                    <div className="text-[10px] text-zinc-500 mb-1.5 font-mono flex items-center gap-2">
+                        <Terminal className="w-3 h-3" /> Execution output · {result.duration}ms
                     </div>
-                    {result.output && (
-                        <pre className="text-xs text-phosphor font-mono whitespace-pre-wrap">{result.output}</pre>
-                    )}
-                    {result.error && (
-                        <pre className="text-xs text-red-400 font-mono whitespace-pre-wrap">{result.error}</pre>
-                    )}
+                    {result.output && <pre className="text-[13px] text-zinc-300 font-mono whitespace-pre-wrap leading-relaxed">{result.output}</pre>}
+                    {result.error && <pre className="text-[13px] text-red-400 font-mono whitespace-pre-wrap leading-relaxed">{result.error}</pre>}
                 </div>
             )}
         </div>
     );
 };
 
-// Main component
 export const MessageBubble = React.memo(function MessageBubble({ role, content, image, onRunCode }: MessageBubbleProps) {
     const [runningCode, setRunningCode] = useState<string | null>(null);
     const [codeResults, setCodeResults] = useState<Record<string, { output: string; error: string | null; duration: number }>>({});
@@ -246,61 +227,59 @@ export const MessageBubble = React.memo(function MessageBubble({ role, content, 
         }
     };
 
-    // USER
     if (role === "user") {
         return (
-            <div className="flex justify-end animate-fade-in">
-                <div className="max-w-[80%] bg-crt-surface border border-crt-border text-txt-primary px-4 py-2.5 rounded text-sm">
-                    <div className="whitespace-pre-wrap font-mono">{content}</div>
+            <div className="flex justify-end animate-in fade-in slide-in-from-bottom-2 duration-300">
+                <div className="max-w-[75%] bg-zinc-800 text-white px-5 py-3.5 rounded-2xl rounded-tr-sm text-[15px] shadow-sm leading-relaxed">
+                    <div className="whitespace-pre-wrap">{content}</div>
                 </div>
             </div>
         );
     }
 
-    // ASSISTANT
     return (
-        <div className="flex gap-3 animate-fade-in">
-            <div className="shrink-0 w-2 h-2 rounded-full bg-phosphor mt-2 shadow-glow-sm" />
+        <div className="flex gap-4 animate-in fade-in slide-in-from-bottom-2 duration-300 group">
+            <div className="shrink-0 w-8 h-8 rounded-full bg-white text-black flex items-center justify-center mt-1 shadow-sm">
+                <Bot className="w-5 h-5" />
+            </div>
 
-            <div className="flex-1 min-w-0 space-y-3">
-                {/* Image */}
+            <div className="flex-1 min-w-0 max-w-4xl space-y-4 pt-1.5">
                 {image && (
-                    <div className="relative group">
+                    <div className="relative inline-block">
                         <div
                             className={cn(
-                                "rounded overflow-hidden border border-crt-border cursor-pointer transition-all",
-                                imageZoomed ? "fixed inset-4 z-50 flex items-center justify-center bg-black/95" : "max-w-md"
+                                "rounded-xl overflow-hidden border border-zinc-800 cursor-pointer transition-all shadow-sm",
+                                imageZoomed ? "fixed inset-4 z-50 flex items-center justify-center bg-black/95 border-none" : "max-w-md bg-zinc-900"
                             )}
                             onClick={() => setImageZoomed(!imageZoomed)}
                         >
                             <img
                                 src={image}
                                 alt="Generated"
-                                className={cn("w-full h-auto", imageZoomed && "max-w-full max-h-full object-contain")}
+                                className={cn("w-full h-auto", imageZoomed && "max-w-full max-h-full object-contain rounded-xl")}
                                 onError={(e) => {
                                     const target = e.target as HTMLImageElement;
                                     target.style.display = "none";
-                                    target.parentElement!.innerHTML = '<div class="p-6 text-center text-txt-tertiary text-xs">image failed to load</div>';
+                                    target.parentElement!.innerHTML = '<div class="p-8 text-center text-zinc-500 text-sm">Image failed to generate or load.</div>';
                                 }}
                             />
                         </div>
                         {!imageZoomed && (
-                            <div className="absolute bottom-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <button onClick={(e) => { e.stopPropagation(); setImageZoomed(true); }} className="p-1.5 bg-black/80 text-phosphor rounded">
-                                    <ZoomIn className="w-3 h-3" />
+                            <div className="absolute bottom-3 right-3 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button onClick={(e) => { e.stopPropagation(); setImageZoomed(true); }} className="p-2 bg-black/60 hover:bg-black/80 backdrop-blur text-white rounded-lg transition-colors">
+                                    <ZoomIn className="w-4 h-4" />
                                 </button>
-                                <a href={image} download={`n0x-${Date.now()}.webp`} onClick={(e) => e.stopPropagation()} className="p-1.5 bg-black/80 text-phosphor rounded">
-                                    <Download className="w-3 h-3" />
+                                <a href={image} download={`n0x-${Date.now()}.webp`} onClick={(e) => e.stopPropagation()} className="p-2 bg-black/60 hover:bg-black/80 backdrop-blur text-white rounded-lg transition-colors">
+                                    <Download className="w-4 h-4" />
                                 </a>
                             </div>
                         )}
                     </div>
                 )}
 
-                {imageZoomed && <div className="fixed inset-0 z-40 bg-black/90" onClick={() => setImageZoomed(false)} />}
+                {imageZoomed && <div className="fixed inset-0 z-40 bg-black/90 backdrop-blur-sm" onClick={() => setImageZoomed(false)} />}
 
-                {/* Markdown content */}
-                <div className="prose-crt select-text">
+                <div className="prose-crt select-text w-full max-w-none">
                     <ReactMarkdown
                         components={{
                             code: (props) => (

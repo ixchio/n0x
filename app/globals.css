@@ -1,35 +1,49 @@
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=Press+Start+2P&display=swap');
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* ═══════════════════════════════════════════
-   N0X — CRT TERMINAL AESTHETIC
-   ═══════════════════════════════════════════ */
-
-* {
-  box-sizing: border-box;
+@layer base {
+  :root {
+    --background: 0 0% 4%;
+    --foreground: 0 0% 93%;
+    --card: 0 0% 8%;
+    --card-foreground: 0 0% 93%;
+    --popover: 0 0% 8%;
+    --popover-foreground: 0 0% 93%;
+    --primary: 0 0% 93%;
+    --primary-foreground: 0 0% 4%;
+    --secondary: 0 0% 15%;
+    --secondary-foreground: 0 0% 93%;
+    --muted: 0 0% 15%;
+    --muted-foreground: 0 0% 63%;
+    --accent: 0 0% 15%;
+    --accent-foreground: 0 0% 93%;
+    --border: 0 0% 13%;
+    --input: 0 0% 15%;
+    --ring: 0 0% 83%;
+  }
 }
 
-html,
-body {
-  background: #000000;
-  color: #cccccc;
-  font-family: 'IBM Plex Mono', monospace;
-  -webkit-font-smoothing: none;
-  -moz-osx-font-smoothing: auto;
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-[#0a0a0a] text-[#ededed] font-sans antialiased;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
 }
 
 ::selection {
-  background: #33ff33;
-  color: #000000;
+  background: rgba(255, 255, 255, 0.2);
+  color: #ffffff;
 }
 
 /* ── Scrollbar ── */
 ::-webkit-scrollbar {
-  width: 4px;
-  height: 4px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
@@ -37,216 +51,138 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #1a8a1a;
-  border-radius: 0;
+  background: #333333;
+  border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #33ff33;
+  background: #555555;
 }
 
-/* ── CRT Scanline Overlay ── */
-.crt-overlay {
-  pointer-events: none;
-  position: fixed;
-  inset: 0;
-  z-index: 9999;
-  background: repeating-linear-gradient(0deg,
-      transparent,
-      transparent 2px,
-      rgba(0, 0, 0, 0.08) 2px,
-      rgba(0, 0, 0, 0.08) 4px);
+/* ── Smooth focus states ── */
+*:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.8);
+  outline-offset: 2px;
 }
 
-/* ── CRT Vignette ── */
-.crt-vignette {
-  pointer-events: none;
-  position: fixed;
-  inset: 0;
-  z-index: 9998;
-  background: radial-gradient(ellipse at center,
-      transparent 60%,
-      rgba(0, 0, 0, 0.4) 100%);
-}
-
-/* ── Flicker effect on the whole page ── */
-.crt-flicker {
-  animation: flicker 0.15s infinite;
-}
-
-@keyframes flicker {
-  0% {
-    opacity: 0.97;
-  }
-
-  50% {
-    opacity: 1;
-  }
-
-  100% {
-    opacity: 0.98;
-  }
-}
-
-/* ── Green glow on text ── */
-.text-glow {
-  text-shadow: 0 0 6px rgba(51, 255, 51, 0.5), 0 0 12px rgba(51, 255, 51, 0.2);
-}
-
-.text-glow-sm {
-  text-shadow: 0 0 4px rgba(51, 255, 51, 0.3);
-}
-
-.text-glow-cyan {
-  text-shadow: 0 0 6px rgba(0, 255, 255, 0.5), 0 0 12px rgba(0, 255, 255, 0.2);
-}
-
-/* ── Border glow ── */
-.border-glow {
-  box-shadow: 0 0 6px rgba(51, 255, 51, 0.15), inset 0 0 6px rgba(51, 255, 51, 0.05);
-}
-
-/* ── Terminal cursor ── */
-.cursor-blink::after {
-  content: "█";
-  color: #33ff33;
-  animation: blink 1s step-end infinite;
-}
-
-@keyframes blink {
-
-  0%,
-  100% {
-    opacity: 1;
-  }
-
-  50% {
-    opacity: 0;
-  }
-}
-
-/* ── Markdown / prose styling ── */
+/* ── Markdown / prose styling (Modern minimalist) ── */
 .prose-crt {
-  color: #cccccc;
-  line-height: 1.65;
-  font-size: 0.875rem;
-  font-family: 'IBM Plex Mono', monospace;
+  color: #d1d5db; /* gray-300 */
+  line-height: 1.6;
+  font-size: 0.9375rem;
 }
 
 .prose-crt p {
-  margin-bottom: 0.75rem;
+  margin-bottom: 1rem;
 }
 
 .prose-crt strong {
-  color: #33ff33;
+  color: #f3f4f6;
   font-weight: 600;
 }
 
 .prose-crt em {
-  color: #00ffff;
   font-style: italic;
 }
 
 .prose-crt a {
-  color: #00ffff;
+  color: #f3f4f6;
   text-decoration: underline;
-  text-decoration-color: rgba(0, 255, 255, 0.3);
+  text-decoration-color: rgba(255, 255, 255, 0.3);
+  text-underline-offset: 2px;
+  transition: all 0.2s;
 }
 
 .prose-crt a:hover {
-  color: #33ff33;
+  color: #ffffff;
+  text-decoration-color: rgba(255, 255, 255, 0.8);
 }
 
 .prose-crt code {
-  background: #0d1a0d;
-  color: #33ff33;
-  padding: 0.15rem 0.4rem;
-  border-radius: 2px;
+  background: #1f2937; /* gray-800 */
+  color: #f3f4f6;
+  padding: 0.15rem 0.3rem;
+  border-radius: 4px;
   font-size: 0.85em;
-  border: 1px solid #1a3a1a;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  border: 1px solid #374151; /* gray-700 */
 }
 
 .prose-crt pre {
-  background: #030303 !important;
-  border: 1px solid #1a3a1a;
-  border-radius: 4px;
+  background: #000000 !important;
+  border: 1px solid #222222;
+  border-radius: 8px;
   padding: 1rem;
   overflow-x: auto;
-  margin: 0.75rem 0;
+  margin: 1rem 0;
 }
 
 .prose-crt pre code {
   background: transparent;
   border: none;
   padding: 0;
-  font-size: 0.8rem;
-  color: #cccccc;
+  font-size: 0.85rem;
+  color: #e5e7eb;
 }
 
 .prose-crt h1,
 .prose-crt h2,
 .prose-crt h3,
 .prose-crt h4 {
-  color: #33ff33;
-  margin: 1rem 0 0.5rem;
+  color: #f9fafb;
+  margin: 1.5rem 0 0.75rem;
   font-weight: 600;
+  letter-spacing: -0.025em;
 }
 
-.prose-crt h1 {
-  font-size: 1.25rem;
-}
-
-.prose-crt h2 {
-  font-size: 1.1rem;
-}
-
-.prose-crt h3 {
-  font-size: 1rem;
-}
+.prose-crt h1 { font-size: 1.5rem; }
+.prose-crt h2 { font-size: 1.25rem; }
+.prose-crt h3 { font-size: 1.125rem; }
 
 .prose-crt ul,
 .prose-crt ol {
   padding-left: 1.25rem;
-  margin-bottom: 0.75rem;
+  margin-bottom: 1rem;
 }
 
 .prose-crt li {
-  margin-bottom: 0.25rem;
+  margin-bottom: 0.5rem;
 }
 
 .prose-crt li::marker {
-  color: #1a8a1a;
+  color: #6b7280; /* gray-500 */
 }
 
 .prose-crt blockquote {
-  border-left: 2px solid #1a8a1a;
+  border-left: 2px solid #374151;
   padding-left: 1rem;
-  color: #666666;
-  margin: 0.75rem 0;
+  color: #9ca3af;
+  margin: 1rem 0;
+  font-style: italic;
 }
 
 .prose-crt hr {
-  border-color: #1a1a1a;
-  margin: 1rem 0;
+  border-color: #222222;
+  margin: 1.5rem 0;
 }
 
 .prose-crt table {
   border-collapse: collapse;
   width: 100%;
-  margin: 0.75rem 0;
+  margin: 1rem 0;
 }
 
 .prose-crt th,
 .prose-crt td {
-  border: 1px solid #1a3a1a;
-  padding: 0.4rem 0.6rem;
+  border: 1px solid #222222;
+  padding: 0.5rem 0.75rem;
   text-align: left;
-  font-size: 0.8rem;
+  font-size: 0.875rem;
 }
 
 .prose-crt th {
-  background: #0d1a0d;
-  color: #33ff33;
+  background: #111111;
+  color: #f9fafb;
   font-weight: 600;
 }
 
@@ -258,10 +194,4 @@ body {
 .no-scrollbar {
   -ms-overflow-style: none;
   scrollbar-width: none;
-}
-
-/* ── Focus states ── */
-*:focus-visible {
-  outline: 1px solid #33ff33;
-  outline-offset: 1px;
 }
