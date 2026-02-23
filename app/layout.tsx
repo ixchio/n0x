@@ -11,6 +11,9 @@ export const metadata: Metadata = {
     statusBarStyle: "black-translucent",
     title: "N0X",
   },
+  other: {
+    "mobile-web-app-capable": "yes"
+  }
 };
 
 export const viewport: Viewport = {

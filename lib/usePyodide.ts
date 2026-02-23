@@ -27,6 +27,7 @@ export function usePyodide() {
     const [loadProgress, setLoadProgress] = useState(0);
     const pyRef = useRef<any>(null);
     const loadingRef = useRef(false);
+    const [loadError, setLoadError] = useState<string | null>(null);
 
     const load = useCallback(async () => {
         if (pyRef.current || loadingRef.current) return;
@@ -34,6 +35,13 @@ export function usePyodide() {
 
         setStatus("loading");
         setLoadProgress(0.1);
+        setLoadError(null);
+
+        // Memory Guard
+        const deviceMemory = (navigator as any).deviceMemory;
+        if (deviceMemory && deviceMemory <= 4) {
+            console.warn(`[Hardware Warning] Device reports ${deviceMemory}GB RAM. Loading Pyodide may push this tab over its memory limit and crash.`);
+        }
 
         try {
             // Load script
@@ -79,9 +87,10 @@ sys.stderr = _out
             pyRef.current = py;
             setLoadProgress(1);
             setStatus("ready");
-        } catch (e) {
+        } catch (e: any) {
             console.error("Pyodide error:", e);
             setStatus("error");
+            setLoadError(e.message || "Failed to load Pyodide");
             loadingRef.current = false;
         }
     }, []);
@@ -130,6 +139,7 @@ sys.stderr = _out
 
     return {
         status,
+        loadError,
         loadProgress,
         load,
         run,

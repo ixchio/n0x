@@ -205,6 +205,24 @@ export const useWebLLM = create<WebLLMState>((set, get) => ({
         const { isSupported } = get();
         if (!isSupported || isLoadingModel) return;
 
+        // OOM Protection: Check navigator.deviceMemory and block heavy models on constrained devices
+        const deviceMemory = (navigator as any).deviceMemory;
+        if (deviceMemory) {
+            const model = WEBLLM_MODELS.find(m => m.id === modelId);
+            if (model) {
+                // If device has 4GB or less, block anything larger than 'fast' (which are > 1GB)
+                if (deviceMemory <= 4 && model.category !== "fast") {
+                    set({ error: `Hardware Restricted: Device reports ${deviceMemory}GB RAM. Loading this model will likely crash your browser. Please select a 'Fast' model.`, status: "error" });
+                    return;
+                }
+                // If device has 8GB or less, warn/block massive models
+                if (deviceMemory <= 8 && (model.category === "uncensored" || model.category === "powerful")) {
+                    set({ error: `Hardware Restricted: Device reports ${deviceMemory}GB RAM. Loading a heavy model requires 16GB+ and may cause an Out-Of-Memory crash.`, status: "error" });
+                    return;
+                }
+            }
+        }
+
         isLoadingModel = true;
         try {
             set({ status: "loading", loadProgress: 0, loadingModel: modelId, error: null });

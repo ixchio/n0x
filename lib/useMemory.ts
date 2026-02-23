@@ -2,9 +2,6 @@
 
 import { useState, useCallback, useEffect } from "react";
 
-// N0X Memory System — Improved TF-IDF + Keyword Fallback
-// Uses bigram/trigram hashing with IDF weighting for much better retrieval
-
 interface Memory {
     id: string;
     content: string;
@@ -17,7 +14,6 @@ interface Memory {
 const DB_NAME = "voidchat_memory";
 const STORE_NAME = "memories";
 
-// ── Stop words to filter out ──
 const STOP_WORDS = new Set([
     "the", "is", "at", "which", "on", "a", "an", "and", "or", "but",
     "in", "with", "to", "for", "of", "not", "no", "can", "had", "has",
@@ -45,7 +41,6 @@ function extractKeywords(text: string): string[] {
     for (const word of words) {
         freq[word] = (freq[word] || 0) + 1;
     }
-    // Return top keywords by frequency
     return Object.entries(freq)
         .sort((a, b) => b[1] - a[1])
         .slice(0, 15)

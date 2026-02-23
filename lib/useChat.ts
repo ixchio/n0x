@@ -11,6 +11,12 @@ import { useChatStore } from "@/lib/useChatStore";
 import { useSystemPrompt } from "@/lib/useSystemPrompt";
 import { tick as keySoundTick } from "@/lib/useKeySound";
 
+// Very simple heuristic to estimate LLM tokens (1 token ≈ 4 characters)
+function estimateTokens(text: string): number {
+    if (!text) return 0;
+    return Math.ceil(text.length / 4);
+}
+
 interface ImageGenProgress {
     active: boolean;
     provider?: string;
@@ -177,16 +183,39 @@ export function useChat() {
             systemContent += `\n\n---\n\n[CONTEXT]\n${contextParts.join("\n\n")}\n[END CONTEXT]\n\nUse the context above to answer the user's question.`;
         }
 
-        const msgs: { role: string; content: string }[] = [
-            { role: "system", content: systemContent },
-        ];
-
         // Conversation history (only user/assistant — exclude the message we just added)
         const history = chatStore.messages
             .map(m => ({ role: m.role, content: m.content }));
 
-        if (history.length > 0) {
-            const trimmedHistory = history.slice(-20);
+        const MAX_CONTEXT_TOKENS = 3500; // Leave ~500 for generation in a 4k window
+        const newMessageTokens = estimateTokens(message);
+
+        // If the system prompt + context is ALREADY too large, truncate it.
+        // This prevents the search/rag from blowing up the entire prompt.
+        if (estimateTokens(systemContent) > MAX_CONTEXT_TOKENS - newMessageTokens) {
+            const safeCharLimit = (MAX_CONTEXT_TOKENS - newMessageTokens) * 4;
+            systemContent = systemContent.slice(0, safeCharLimit) + "\n\n...[Context truncated to fit memory window]";
+        }
+
+        const msgs: { role: string; content: string }[] = [
+            { role: "system", content: systemContent },
+        ];
+
+        let currentTokens = estimateTokens(systemContent) + newMessageTokens;
+
+        // Traverse history starting from the newest to keep chronological context
+        // and stop when we hit the memory limit.
+        const trimmedHistory: { role: string; content: string }[] = [];
+        for (let i = history.length - 1; i >= 0; i--) {
+            const msgTokens = estimateTokens(history[i].content);
+            if (currentTokens + msgTokens > MAX_CONTEXT_TOKENS) {
+                break; // Window is full, skip older messages
+            }
+            trimmedHistory.unshift(history[i]);
+            currentTokens += msgTokens;
+        }
+
+        if (trimmedHistory.length > 0) {
             msgs.push(...trimmedHistory);
         }
 
