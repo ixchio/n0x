@@ -24,10 +24,11 @@ n0x is a demonstration of pushing edge compute to its absolute limits. Utilizing
 
 ## Technical Capabilities
 
-* **WebGPU Inference Engine**: Direct-to-metal LLM execution via `MLC/WebLLM`. Hits 40+ tokens/sec on standard consumer hardware. Models (Llama 3, Qwen 2.5, Phi 3.5) are downloaded once and aggressively cached.
-* **WASM Vector Search (RAG)**: Drag-and-drop document processing. Chunking, `all-MiniLM-L6-v2` embedding generation via `transformers.js`, and cosine similarity search via `voy-search` — all running locally in WebAssembly.
+* **WebGPU Inference Engine**: Direct-to-metal LLM execution via `MLC/WebLLM`. Hits 40+ tokens/sec on standard consumer hardware. Models (Llama 3, Qwen 2.5, Phi 3.5) are downloaded once and aggressively cached. Features generation interruption and a collapsible reasoning process for transparent inference.
+* **WASM Vector Search (RAG)**: Drag-and-drop document processing (PDF, TXT, MD, JSON). Chunking, `all-MiniLM-L6-v2` embedding generation via `transformers.js`, and cosine similarity search via `voy-search` — fully isolated in Web Workers to prevent UI blocking, with IndexedDB caching for instant vector retrieval across sessions.
 * **Sandboxed Python Runtime**: Client-side execution of Python data analysis and scripting via `Pyodide`. Code output flows directly back into the LLM context.
 * **Persistent Telemetry & Memory**: Long-term conversational memory and engine orchestration state persisted securely via IndexedDB.
+* **Voice & Modern UI**: Fully local speech-to-text input, real-time performance metrics overlay, and a premium dark theme tailored for deep work.
 
 ## Architecture & DAG Execution
 
