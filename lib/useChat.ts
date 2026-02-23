@@ -180,14 +180,16 @@ export function useChat() {
             contextParts.push(`## Memory\n${memCtx}`);
         }
 
-        // Build the single system prompt (persona + all context merged)
+        // Build the single system prompt
         let systemContent = persona.systemPrompt;
         if (reasoningEnabled) {
             systemContent += "\n\nCRITICAL INSTRUCTION: You must think step-by-step before answering. Enclose your internal reasoning process entirely within <think> and </think> tags. Do not output anything before the <think> tag. After the </think> closing tag, provide your final response to the user.";
         }
 
+        // Build the context block for the user message
+        let userContextBlock = "";
         if (contextParts.length > 0) {
-            systemContent += `\n\n---\n\n[CONTEXT]\n${contextParts.join("\n\n")}\n[END CONTEXT]\n\nUse the context above to answer the user's question.`;
+            userContextBlock = `[CONTEXT]\n${contextParts.join("\n\n")}\n[END CONTEXT]\n\nBased on the context above, answer the following:\n`;
         }
 
         // Conversation history (only user/assistant — exclude the message we just added)
@@ -197,18 +199,24 @@ export function useChat() {
         const MAX_CONTEXT_TOKENS = 3500; // Leave ~500 for generation in a 4k window
         const newMessageTokens = estimateTokens(message);
 
-        // If the system prompt + context is ALREADY too large, truncate it.
+        // If the context block is ALREADY too large, truncate it.
         // This prevents the search/rag from blowing up the entire prompt.
-        if (estimateTokens(systemContent) > MAX_CONTEXT_TOKENS - newMessageTokens) {
-            const safeCharLimit = (MAX_CONTEXT_TOKENS - newMessageTokens) * 4;
-            systemContent = systemContent.slice(0, safeCharLimit) + "\n\n...[Context truncated to fit memory window]";
+        let baseTokens = estimateTokens(systemContent) + newMessageTokens;
+
+        if (userContextBlock.length > 0) {
+            const contextTokensEstimate = estimateTokens(userContextBlock);
+            if (baseTokens + contextTokensEstimate > MAX_CONTEXT_TOKENS) {
+                const safeCharLimit = (MAX_CONTEXT_TOKENS - baseTokens) * 4;
+                userContextBlock = userContextBlock.slice(0, safeCharLimit) + "\n\n...[Context truncated to fit memory window]\n\nBased on the context above, answer the following:\n";
+            }
+            baseTokens += estimateTokens(userContextBlock);
         }
 
         const msgs: { role: string; content: string }[] = [
             { role: "system", content: systemContent },
         ];
 
-        let currentTokens = estimateTokens(systemContent) + newMessageTokens;
+        let currentTokens = baseTokens;
 
         // Traverse history starting from the newest to keep chronological context
         // and stop when we hit the memory limit.
@@ -226,8 +234,9 @@ export function useChat() {
             msgs.push(...trimmedHistory);
         }
 
-        // ALWAYS append the current user message as final message
-        msgs.push({ role: "user", content: message });
+        // ALWAYS append the current user message as final message (with context if applicable)
+        const finalUserContent = userContextBlock ? userContextBlock + message : message;
+        msgs.push({ role: "user", content: finalUserContent });
 
         // ── Generate ──
         try {

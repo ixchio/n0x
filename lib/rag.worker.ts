@@ -291,9 +291,12 @@ self.addEventListener("message", async (e: MessageEvent) => {
             const output = await embedder(query, { pooling: "mean", normalize: true });
             const queryEmbedding = Array.from(output.data);
             const results: any = voy.search(queryEmbedding as any, limit);
-            const hits = results.hits || results;
+            const hits = results.hits || results.neighbors || results || [];
 
-            const chunks = hits.map((hit: any) => chunkStore.get(hit.id) || "");
+            // Ensure hits is an array before mapping
+            const cleanHits = Array.isArray(hits) ? hits : [];
+
+            const chunks = cleanHits.map((hit: any) => chunkStore.get(hit.id) || "");
             self.postMessage({ id, result: chunks, done: true });
         }
         else if (action === "CLEAR") {
