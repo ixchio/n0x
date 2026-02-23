@@ -24,9 +24,14 @@ export function RAGPanel() {
                     <Database className="w-3.5 h-3.5 text-neon-cyan" />
                     <span className="text-neon-cyan">knowledge base</span>
                 </div>
-                <button onClick={rag.toggle} className="text-txt-tertiary hover:text-txt-primary">
-                    <X className="w-3.5 h-3.5" />
-                </button>
+                <div className="flex items-center gap-2">
+                    <button onClick={async () => { await rag.clearCache(); rag.clear(); }} className="text-txt-tertiary hover:text-red-400 transition-colors" title="Clear Vector Cache">
+                        <Database className="w-3.5 h-3.5" />
+                    </button>
+                    <button onClick={rag.toggle} className="text-txt-tertiary hover:text-txt-primary">
+                        <X className="w-3.5 h-3.5" />
+                    </button>
+                </div>
             </div>
 
             {/* Documents */}

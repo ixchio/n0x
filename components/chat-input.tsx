@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useRef, useEffect, useState, useCallback } from "react";
-import { Send, Square, Globe, Brain, Code, Paperclip, Upload, X, FileText, Mic, MicOff } from "lucide-react";
+import { Send, Square, Globe, Brain, Code, Paperclip, Upload, X, FileText, Mic, MicOff, Lightbulb } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface AttachedFile { id: string; name: string; size: number; type: string; }
@@ -11,6 +11,7 @@ interface ChatInputProps {
     onSend: () => void; onStop?: () => void; isStreaming: boolean;
     deepSearchEnabled: boolean; toggleDeepSearch: () => void;
     memoryEnabled: boolean; toggleMemory: () => void;
+    reasoningEnabled?: boolean; toggleReasoning?: () => void;
     ragEnabled?: boolean; toggleRag?: () => void;
     pyodideReady?: boolean; pyodideLoading?: boolean; pyodideEnabled?: boolean;
     onPyodideLoad?: () => void; onPyodideToggle?: (on: boolean) => void;
@@ -26,7 +27,7 @@ function formatSize(bytes: number): string {
 
 export function ChatInput({
     input, setInput, onSend, onStop, isStreaming, deepSearchEnabled, toggleDeepSearch,
-    memoryEnabled, toggleMemory, ragEnabled, toggleRag, pyodideReady, pyodideLoading, pyodideEnabled,
+    memoryEnabled, toggleMemory, reasoningEnabled, toggleReasoning, ragEnabled, toggleRag, pyodideReady, pyodideLoading, pyodideEnabled,
     onPyodideLoad, onPyodideToggle, onFileDrop, attachedFiles = [], onRemoveFile,
     sttSupported, sttListening, onSttToggle,
 }: ChatInputProps) {
@@ -65,6 +66,7 @@ export function ChatInput({
     const features = [
         { key: "search", icon: Globe, label: "Search", active: deepSearchEnabled, action: toggleDeepSearch },
         { key: "memory", icon: Brain, label: "Memory", active: memoryEnabled, action: toggleMemory },
+        ...(toggleReasoning ? [{ key: "think", icon: Lightbulb, label: "Think", active: !!reasoningEnabled, action: toggleReasoning }] : []),
         ...(toggleRag ? [{ key: "rag", icon: Paperclip, label: "Docs", active: !!ragEnabled, action: toggleRag }] : []),
         ...(onPyodideLoad ? [{
             key: "python", icon: Code, label: pyodideLoading ? "Loading..." : (pyodideReady && pyodideEnabled) ? "Py ✓" : "Py", active: !!(pyodideReady && pyodideEnabled),
@@ -99,21 +101,24 @@ export function ChatInput({
                     </div>
                 )}
 
-                <textarea
-                    ref={textareaRef} value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={handleKeyDown}
-                    placeholder={sttListening ? "Listening..." : "Message n0x..."} disabled={isStreaming} rows={1}
-                    className="w-full bg-transparent text-sm resize-none outline-none text-zinc-200 placeholder:text-zinc-500 leading-relaxed max-h-[160px] min-h-[40px] no-scrollbar"
-                />
+                <div className="max-h-60 overflow-y-auto custom-scrollbar no-scrollbar pr-2 mb-2">
+                    <textarea
+                        ref={textareaRef} value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={handleKeyDown}
+                        placeholder={sttListening ? "Listening..." : "Message n0x..."} disabled={isStreaming} rows={1}
+                        className="w-full bg-transparent text-sm resize-none outline-none text-zinc-200 placeholder:text-zinc-500 leading-relaxed min-h-[40px] overflow-hidden"
+                        style={{ height: 'auto' }}
+                    />
+                </div>
 
-                <div className="flex items-center justify-between mt-2 pt-2 border-t border-zinc-800/50">
-                    <div className="flex gap-1.5 overflow-x-auto no-scrollbar pb-1">
+                <div className="flex bg-transparent items-center justify-between border-t border-zinc-800/50 pt-2 pb-1">
+                    <div className="flex flex-wrap gap-1.5 overflow-x-auto no-scrollbar py-1">
                         {onFileDrop && (
                             <button onClick={() => fileInputRef.current?.click()} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[11px] font-medium transition-colors text-zinc-400 hover:text-white hover:bg-zinc-800">
                                 <Upload className="w-3.5 h-3.5" /> Attach
                             </button>
                         )}
                         {features.map((f) => (
-                            <button key={f.key} onClick={f.action} className={cn("flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[11px] font-medium transition-colors", f.active ? "bg-white text-black" : "text-zinc-400 hover:text-white hover:bg-zinc-800")}>
+                            <button key={f.key} onClick={f.action} className={cn("flex shrink-0 items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[11px] font-medium transition-colors", f.active ? "bg-white text-black" : "text-zinc-400 hover:text-white hover:bg-zinc-800")}>
                                 <f.icon className="w-3.5 h-3.5" /> {f.label}
                             </button>
                         ))}

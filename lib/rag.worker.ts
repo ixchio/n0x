@@ -9,9 +9,56 @@ let VoyClass: any = null;
 let pipelineFn: any = null;
 let pdfjsLib: any = null;
 const RESOURCE_NAME = "Xenova/all-MiniLM-L6-v2";
-const chunkStore = new Map<string, string>();
+let chunkStore = new Map<string, string>();
 
 const MAX_DIRECT_INJECT_SIZE = 8000; // ~8KB = inject full text directly
+
+// --- IndexedDB Caching ---
+const DB_NAME = "n0x_rag_cache";
+const STORE_NAME = "vectors";
+
+function openDB(): Promise<IDBDatabase> {
+    return new Promise((resolve, reject) => {
+        const req = indexedDB.open(DB_NAME, 1);
+        req.onerror = () => reject(req.error);
+        req.onsuccess = () => resolve(req.result);
+        req.onupgradeneeded = (e) => {
+            const db = (e.target as IDBOpenDBRequest).result;
+            if (!db.objectStoreNames.contains(STORE_NAME)) {
+                db.createObjectStore(STORE_NAME, { keyPath: "id" });
+            }
+        };
+    });
+}
+
+async function getCachedVectors(fileId: string): Promise<{ serializedVoy: string, chunks: [string, string][] } | null> {
+    try {
+        const db = await openDB();
+        return new Promise((resolve) => {
+            const tx = db.transaction(STORE_NAME, "readonly");
+            const store = tx.objectStore(STORE_NAME);
+            const req = store.get(fileId);
+            req.onsuccess = () => resolve(req.result ? req.result.data : null);
+            req.onerror = () => resolve(null);
+        });
+    } catch { return null; }
+}
+
+async function saveVectorsToCache(fileId: string, serializedVoy: string, chunks: [string, string][]) {
+    try {
+        const db = await openDB();
+        const tx = db.transaction(STORE_NAME, "readwrite");
+        tx.objectStore(STORE_NAME).put({ id: fileId, data: { serializedVoy, chunks } });
+    } catch (e) { console.warn("Caching failed", e); }
+}
+
+async function clearVectorsCache() {
+    try {
+        const db = await openDB();
+        const tx = db.transaction(STORE_NAME, "readwrite");
+        tx.objectStore(STORE_NAME).clear();
+    } catch { }
+}
 
 async function loadDeps() {
     if (!pdfjsLib) {
@@ -175,7 +222,24 @@ self.addEventListener("message", async (e: MessageEvent) => {
                 return;
             }
 
-            // Large file: Chunk & Embed
+            const fileHash = `${file.name}_${file.size}_${file.lastModified}`;
+
+            // Check Cache First
+            const cached = await getCachedVectors(fileHash);
+            if (cached) {
+                self.postMessage({ id, status: `Loading cached vectors for ${file.name}...` });
+
+                if (!voy) voy = VoyClass.deserialize(cached.serializedVoy);
+                chunkStore = new Map(cached.chunks);
+
+                docMetadata.chunks = cached.chunks.length;
+                docMetadata.rawText = ""; // memory optimization
+
+                self.postMessage({ id, result: docMetadata, done: true });
+                return;
+            }
+
+            // Not in cache -> Large file: Chunk & Embed
             self.postMessage({ id, status: `Chunking ${file.name}...` });
             const chunks = chunkText(text);
 
@@ -196,18 +260,27 @@ self.addEventListener("message", async (e: MessageEvent) => {
 
                 voy.add({
                     embeddings: [{
-                        id: `${file.name}-${i}`,
+                        id: `${fileHash}-${i}`,
                         title: file.name,
                         url: "",
                         embeddings: embedding as any
                     }]
                 });
 
-                chunkStore.set(`${file.name}-${i}`, chunks[i]);
+                chunkStore.set(`${fileHash}-${i}`, chunks[i]);
 
                 if (i % 5 === 4) {
                     self.postMessage({ id, status: `Embedding chunk ${i + 1}/${chunks.length}...` });
                 }
+            }
+
+            // Save to Cache
+            try {
+                self.postMessage({ id, status: `Caching vectors...` });
+                const serialized = voy.serialize();
+                await saveVectorsToCache(fileHash, serialized, Array.from(chunkStore.entries()));
+            } catch (e) {
+                console.warn("Failed to serialize voy index", e);
             }
 
             docMetadata.chunks = chunks.length;
@@ -235,6 +308,10 @@ self.addEventListener("message", async (e: MessageEvent) => {
         else if (action === "CLEAR") {
             voy = null;
             chunkStore.clear();
+            self.postMessage({ id, result: true, done: true });
+        }
+        else if (action === "CLEAR_CACHE") {
+            await clearVectorsCache();
             self.postMessage({ id, result: true, done: true });
         }
     } catch (err: any) {

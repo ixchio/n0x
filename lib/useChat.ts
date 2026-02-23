@@ -34,6 +34,7 @@ export function useChat() {
     const [streamingContent, setStreamingContent] = useState("");
     const [deepSearchEnabled, setDeepSearchEnabled] = useState(false);
     const [memoryEnabled, setMemoryEnabled] = useState(false);
+    const [reasoningEnabled, setReasoningEnabled] = useState(false);
     const [generatingImage, setGeneratingImage] = useState(false);
     const [imageProgress, setImageProgress] = useState<ImageGenProgress>({ active: false });
 
@@ -82,10 +83,12 @@ export function useChat() {
         }
     }, [chatStore]);
 
-    const handleSend = useCallback(async () => {
-        if (!input.trim() || isStreaming) return;
-        const message = input.trim();
-        setInput("");
+    const handleSend = useCallback(async (autoMessage?: string) => {
+        if (isStreaming) return;
+        const message = typeof autoMessage === "string" ? autoMessage : input.trim();
+        if (!message) return;
+
+        if (typeof autoMessage !== "string") setInput("");
 
         // Check if they want an image
         if (IMG_PATTERNS.some(p => p.test(message))) {
@@ -179,6 +182,10 @@ export function useChat() {
 
         // Build the single system prompt (persona + all context merged)
         let systemContent = persona.systemPrompt;
+        if (reasoningEnabled) {
+            systemContent += "\n\nCRITICAL INSTRUCTION: You must think step-by-step before answering. Enclose your internal reasoning process entirely within <think> and </think> tags. Do not output anything before the <think> tag. After the </think> closing tag, provide your final response to the user.";
+        }
+
         if (contextParts.length > 0) {
             systemContent += `\n\n---\n\n[CONTEXT]\n${contextParts.join("\n\n")}\n[END CONTEXT]\n\nUse the context above to answer the user's question.`;
         }
@@ -261,7 +268,7 @@ export function useChat() {
             });
             deepSearch.reset();
         }
-    }, [input, isStreaming, webllm, chatStore, deepSearchEnabled, deepSearch, memory, memoryEnabled, handleImageGen, rag, tts, persona]);
+    }, [input, isStreaming, webllm, chatStore, deepSearchEnabled, deepSearch, memory, memoryEnabled, handleImageGen, rag, tts, persona, reasoningEnabled]);
 
     const handleStop = useCallback(() => {
         webllm.stop();
@@ -288,14 +295,24 @@ export function useChat() {
 
     const runPython = useCallback(async (code: string) => {
         if (!pyodide.isReady) await pyodide.load();
-        return pyodide.run(code);
-    }, [pyodide]);
+        const res = await pyodide.run(code);
+
+        // Self-Healing
+        if (res.error) {
+            const errorMsg = `Code Execution Failed:\n\`\`\`text\n${res.error}\n\`\`\`\nPlease fix the code and try again.`;
+            // Trigger automatic retry using the error message
+            handleSend(errorMsg);
+        }
+
+        return res;
+    }, [pyodide, handleSend]);
 
     return {
         input, setInput, streamingContent, isStreaming,
         generatingImage, imageProgress,
         deepSearchEnabled, setDeepSearchEnabled,
         memoryEnabled, setMemoryEnabled,
+        reasoningEnabled, setReasoningEnabled,
 
         webllm, deepSearch, memory, pyodide, tts, rag, chatStore, persona,
 

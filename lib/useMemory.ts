@@ -137,7 +137,6 @@ export function useMemory() {
                 const store = tx.objectStore(STORE_NAME);
                 const req = store.getAll();
                 req.onsuccess = () => {
-                    // Migrate old memories that don't have keywords
                     const mems = (req.result || []).map((m: any) => ({
                         ...m,
                         keywords: m.keywords || extractKeywords(m.content),
@@ -199,19 +198,28 @@ export function useMemory() {
         const queryEmb = embed(query);
         const queryKeywords = extractKeywords(query);
 
+        // Precompute threshold to avoid creating thousands of objects if unneeded
         // Score using BOTH vector similarity AND keyword matching
-        const scored = memories.map(m => {
+        const scored: { m: Memory, score: number }[] = [];
+
+        for (let i = 0; i < memories.length; i++) {
+            const m = memories[i];
             const vecScore = similarity(queryEmb, m.embedding);
+
+            // Fast exit: if vector is terrible, skip keyword calc
+            if (vecScore < 0.01) continue;
+
             const kwScore = keywordSimilarity(queryKeywords, m.keywords || []);
-            // Combined score: weighted sum (keywords are very reliable for exact matches)
             const combined = vecScore * 0.6 + kwScore * 0.4;
-            return { m, score: combined, vecScore, kwScore };
-        });
+
+            if (combined > 0.03) {
+                scored.push({ m, score: combined });
+            }
+        }
 
         return scored
             .sort((a, b) => b.score - a.score)
             .slice(0, limit)
-            .filter(x => x.score > 0.03) // Much lower threshold
             .map(x => x.m);
     }, [memories]);
 

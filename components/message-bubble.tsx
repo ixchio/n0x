@@ -4,7 +4,7 @@ import React, { useState, useRef } from "react";
 import ReactMarkdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
-import { Copy, Check, Play, Loader2, Eye, EyeOff, ZoomIn, Download, Bot, Terminal } from "lucide-react";
+import { Copy, Check, Play, Loader2, Eye, EyeOff, ZoomIn, Download, Bot, Terminal, Brain, ChevronDown, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface MessageBubbleProps {
@@ -160,9 +160,7 @@ const CodeBlock = ({ children, className, onRunCode, codeResults, runningCode, h
                         </button>
                     )}
 
-                    <div className="w-px h-4 bg-zinc-800 mx-1" />
-
-                    <button onClick={handleCopy} className="p-1.5 rounded-md text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors">
+                    <button onClick={handleCopy} className={cn("p-1.5 rounded-md transition-colors", copied ? "bg-[#1f1f1f] text-phosphor" : "text-zinc-400 hover:text-white hover:bg-zinc-800")}>
                         {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
                     </button>
                 </div>
@@ -200,8 +198,10 @@ const CodeBlock = ({ children, className, onRunCode, codeResults, runningCode, h
                     <div className="text-[10px] text-zinc-500 mb-1.5 font-mono flex items-center gap-2">
                         <Terminal className="w-3 h-3" /> Execution output · {result.duration}ms
                     </div>
-                    {result.output && <pre className="text-[13px] text-zinc-300 font-mono whitespace-pre-wrap leading-relaxed">{result.output}</pre>}
-                    {result.error && <pre className="text-[13px] text-red-400 font-mono whitespace-pre-wrap leading-relaxed">{result.error}</pre>}
+                    <div className="max-h-96 overflow-y-auto custom-scrollbar">
+                         {result.output && <pre className="text-[13px] text-zinc-300 font-mono whitespace-pre-wrap leading-relaxed pb-2">{result.output}</pre>}
+                         {result.error && <pre className="text-[13px] text-red-400 font-mono whitespace-pre-wrap leading-relaxed pb-2">{result.error}</pre>}
+                    </div>
                 </div>
             )}
         </div>
@@ -212,6 +212,18 @@ export const MessageBubble = React.memo(function MessageBubble({ role, content, 
     const [runningCode, setRunningCode] = useState<string | null>(null);
     const [codeResults, setCodeResults] = useState<Record<string, { output: string; error: string | null; duration: number }>>({});
     const [imageZoomed, setImageZoomed] = useState(false);
+    const [showThinking, setShowThinking] = useState(false);
+
+    let thinking = "";
+    let finalContent = content;
+
+    if (role === "assistant") {
+        const thinkMatch = content.match(/<think>([\s\S]*?)(?:<\/think>|$)/);
+        if (thinkMatch) {
+            thinking = thinkMatch[1].trim();
+            finalContent = content.replace(/<think>[\s\S]*?(?:<\/think>|$)/, "").trim();
+        }
+    }
 
     const handleRunCode = async (code: string) => {
         if (!onRunCode || runningCode) return;
@@ -279,23 +291,45 @@ export const MessageBubble = React.memo(function MessageBubble({ role, content, 
 
                 {imageZoomed && <div className="fixed inset-0 z-40 bg-black/90 backdrop-blur-sm" onClick={() => setImageZoomed(false)} />}
 
-                <div className="prose-crt select-text w-full max-w-none">
-                    <ReactMarkdown
-                        components={{
-                            code: (props) => (
-                                <CodeBlock
-                                    {...props}
-                                    onRunCode={onRunCode}
-                                    codeResults={codeResults}
-                                    runningCode={runningCode}
-                                    handleRunCode={handleRunCode}
-                                />
-                            )
-                        }}
-                    >
-                        {content}
-                    </ReactMarkdown>
-                </div>
+                {thinking && (
+                    <div className="mb-2 text-sm border border-zinc-800 rounded-xl overflow-hidden bg-zinc-900/40">
+                        <button
+                            onClick={() => setShowThinking(!showThinking)}
+                            className="flex items-center gap-2 w-full px-4 py-2.5 hover:bg-zinc-800/50 transition-colors"
+                        >
+                            <Brain className="w-3.5 h-3.5 text-phosphor-dim" />
+                            <span className="font-mono text-[11px] font-medium tracking-wider uppercase text-zinc-400 group-hover:text-zinc-200">Reasoning Process</span>
+                            {showThinking ? <ChevronDown className="w-3.5 h-3.5 ml-auto text-zinc-500" /> : <ChevronRight className="w-3.5 h-3.5 ml-auto text-zinc-500" />}
+                        </button>
+                        {showThinking && (
+                            <div className="px-4 pb-4 pt-2 border-t border-zinc-800/80 bg-[#0a0a0a]/50">
+                                <div className="text-[13px] border-l-2 border-zinc-800 pl-4 py-1 my-2 text-zinc-500 font-serif italic max-w-none leading-relaxed whitespace-pre-wrap">
+                                    <ReactMarkdown>{thinking}</ReactMarkdown>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {finalContent && (
+                    <div className="prose-crt select-text w-full max-w-none">
+                        <ReactMarkdown
+                            components={{
+                                code: (props) => (
+                                    <CodeBlock
+                                        {...props}
+                                        onRunCode={onRunCode}
+                                        codeResults={codeResults}
+                                        runningCode={runningCode}
+                                        handleRunCode={handleRunCode}
+                                    />
+                                )
+                            }}
+                        >
+                            {finalContent}
+                        </ReactMarkdown>
+                    </div>
+                )}
             </div>
         </div>
     );

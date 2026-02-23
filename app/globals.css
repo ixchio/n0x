@@ -28,6 +28,7 @@
   * {
     @apply border-border;
   }
+
   body {
     @apply bg-[#0a0a0a] text-[#ededed] font-sans antialiased;
     -webkit-font-smoothing: antialiased;
@@ -67,7 +68,8 @@
 
 /* ── Markdown / prose styling (Modern minimalist) ── */
 .prose-crt {
-  color: #d1d5db; /* gray-300 */
+  color: #d1d5db;
+  /* gray-300 */
   line-height: 1.6;
   font-size: 0.9375rem;
 }
@@ -99,13 +101,15 @@
 }
 
 .prose-crt code {
-  background: #1f2937; /* gray-800 */
+  background: #1f2937;
+  /* gray-800 */
   color: #f3f4f6;
   padding: 0.15rem 0.3rem;
   border-radius: 4px;
   font-size: 0.85em;
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
-  border: 1px solid #374151; /* gray-700 */
+  border: 1px solid #374151;
+  /* gray-700 */
 }
 
 .prose-crt pre {
@@ -135,9 +139,17 @@
   letter-spacing: -0.025em;
 }
 
-.prose-crt h1 { font-size: 1.5rem; }
-.prose-crt h2 { font-size: 1.25rem; }
-.prose-crt h3 { font-size: 1.125rem; }
+.prose-crt h1 {
+  font-size: 1.5rem;
+}
+
+.prose-crt h2 {
+  font-size: 1.25rem;
+}
+
+.prose-crt h3 {
+  font-size: 1.125rem;
+}
 
 .prose-crt ul,
 .prose-crt ol {
@@ -150,7 +162,8 @@
 }
 
 .prose-crt li::marker {
-  color: #6b7280; /* gray-500 */
+  color: #6b7280;
+  /* gray-500 */
 }
 
 .prose-crt blockquote {
@@ -194,4 +207,29 @@
 .no-scrollbar {
   -ms-overflow-style: none;
   scrollbar-width: none;
+}
+
+/* ── Custom Scrollbar for overflowing syntax code blocks ── */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #27272a;
+  /* zinc-800 */
+  border-radius: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #3f3f46;
+  /* zinc-700 */
+}
+
+.custom-scrollbar::-webkit-scrollbar-corner {
+  background: transparent;
 }

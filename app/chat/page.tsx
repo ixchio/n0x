@@ -23,6 +23,7 @@ function ChatPageInner() {
   const {
     input, setInput, streamingContent, isStreaming, generatingImage, imageProgress,
     deepSearchEnabled, setDeepSearchEnabled, memoryEnabled, setMemoryEnabled,
+    reasoningEnabled, setReasoningEnabled,
     webllm, deepSearch, memory, pyodide, tts, rag, chatStore, persona,
     handleSend, handleNewChat, handleStop, handlePythonRun,
   } = chat;
@@ -400,6 +401,8 @@ function ChatPageInner() {
               setMemoryEnabled(!memoryEnabled);
               if (!memoryEnabled) setShowMemoryPanel(true);
             }}
+            reasoningEnabled={reasoningEnabled}
+            toggleReasoning={() => setReasoningEnabled(!reasoningEnabled)}
             ragEnabled={rag.ragEnabled}
             toggleRag={rag.toggle}
             pyodideReady={pyodide.isReady}

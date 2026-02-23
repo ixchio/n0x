@@ -24,6 +24,7 @@ interface RAGState {
     getFileContext: (query: string) => Promise<string>;
     clear: () => void;
     clearPending: () => void;
+    clearCache: () => Promise<void>;
     toggle: () => void;
 }
 
@@ -63,7 +64,6 @@ function getWorker(onStatus?: (status: string) => void): Worker {
     }
 
     if (onStatus) {
-        // Use a global window variable to allow dynamic status updates without rebinding events
         (window as any).__ON_RAG_STATUS = onStatus;
     }
     return ragWorker;
@@ -93,7 +93,6 @@ export const useRAG = create<RAGState>((set, get) => ({
         try {
             set({ isIndexing: true, status: `Initializing Worker for ${file.name}...` });
 
-            // Delegate all loading, extraction, chunking, and embedding to worker
             const newDoc = await postToWorker("ADD_FILE", { file }, (status) => {
                 set({ status });
             });
@@ -109,9 +108,6 @@ export const useRAG = create<RAGState>((set, get) => ({
         } catch (e: any) {
             console.error("RAG Worker Error:", e);
             set({ status: `Error: ${e.message}`, isIndexing: false });
-
-            // Fallback for massive failures: add the file manually by pulling 50k chars of text directly.
-            // (A robust system might do this natively if WASM blocks)
             try {
                 const fallbackText = (await file.text()).slice(0, 50000);
                 const fallbackDoc: RAGDocument = {
@@ -130,7 +126,7 @@ export const useRAG = create<RAGState>((set, get) => ({
                     status: "ready",
                 }));
             } catch (err) {
-                // complete failure
+
             }
         }
     },
@@ -145,7 +141,6 @@ export const useRAG = create<RAGState>((set, get) => ({
         }
     },
 
-    // Smart context builder: raw text for small files, vector search for large
     getFileContext: async (query: string) => {
         const { documents } = get();
         if (documents.length === 0) return "";
@@ -154,12 +149,10 @@ export const useRAG = create<RAGState>((set, get) => ({
 
         for (const doc of documents) {
             if (doc.rawText && doc.rawText.length > 0) {
-                // Small file (or fallback file): inject full text
                 parts.push(`📎 File: "${doc.name}" (${doc.type})\n---\n${doc.rawText}\n---`);
             }
         }
 
-        // For large files (where chunks > 0 but rawText is cleared to save memory), do vector search
         const hasLargeFiles = documents.some(d => !d.rawText && d.chunks > 0);
         if (hasLargeFiles) {
             try {
@@ -187,10 +180,17 @@ export const useRAG = create<RAGState>((set, get) => ({
         set({ pendingFiles: [] });
     },
 
+    clearCache: async () => {
+        try {
+            await postToWorker("CLEAR_CACHE", {});
+        } catch (e) {
+            console.error(e);
+        }
+    },
+
     toggle: () => set(state => ({ ragEnabled: !state.ragEnabled }))
 }));
 
-// Extend window object explicitly
 declare global {
     interface Window {
         __ON_RAG_STATUS: (status: string) => void;
