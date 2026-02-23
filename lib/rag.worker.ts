@@ -98,16 +98,7 @@ async function extractText(file: File): Promise<string> {
 
     // DOCX (ZIP XML extraction)
     if (name.endsWith(".docx")) {
-        try {
-            const text = await file.text();
-            const matches = text.match(/<w:t[^>]*>([^<]+)<\/w:t>/g);
-            if (matches) {
-                return matches.map(m => m.replace(/<[^>]+>/g, "")).join(" ").replace(/\s+/g, " ");
-            }
-            return text.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-        } catch {
-            return await file.text();
-        }
+        throw new Error("DOCX parsing without JSZip is not natively supported. Please convert to PDF or TXT.");
     }
 
     // CSV

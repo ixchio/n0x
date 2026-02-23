@@ -109,12 +109,21 @@ export const useRAG = create<RAGState>((set, get) => ({
             console.error("RAG Worker Error:", e);
             set({ status: `Error: ${e.message}`, isIndexing: false });
             try {
-                const fallbackText = (await file.text()).slice(0, 50000);
+                let fallbackText = "";
+                const ext = file.name.split('.').pop()?.toLowerCase();
+                const isBinary = ["pdf", "docx", "xlsx", "pptx", "png", "jpg", "jpeg", "gif", "webp", "zip", "tar", "gz"].includes(ext || "");
+
+                if (isBinary) {
+                    fallbackText = `[Error extracting text from ${file.name}. Binary parsing failed or is unsupported.]`;
+                } else {
+                    fallbackText = ((await file.text()) || "").slice(0, 50000);
+                }
+
                 const fallbackDoc: RAGDocument = {
                     id: Date.now().toString(),
                     name: file.name,
                     size: file.size,
-                    type: file.type || file.name.split(".").pop() || "unknown",
+                    type: file.type || ext || "unknown",
                     chunks: 1,
                     rawText: fallbackText,
                 };
@@ -125,8 +134,8 @@ export const useRAG = create<RAGState>((set, get) => ({
                     ragEnabled: true,
                     status: "ready",
                 }));
-            } catch (err) {
-
+            } catch (fallbackError) {
+                console.error("Fallback extraction failed:", fallbackError);
             }
         }
     },
