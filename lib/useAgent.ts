@@ -72,27 +72,36 @@ function buildAgentPrompt(base: string, availableTools: string[]): string {
 
     return `${base}
 
-You are an autonomous AI agent with access to tools. Solve problems step-by-step.
+You are an autonomous AI agent. You MUST solve problems step-by-step by using tools.
 
 AVAILABLE TOOLS: ${toolList}
 
-TO USE A TOOL, output this exact JSON on its own line:
+TO USE A TOOL, you must output EXACTLY this JSON format on its own line:
 {"tool": "TOOL_NAME", "args": {"key": "value"}}
 
 Tool reference:
-• webSearch — search the live web. Args: {"query": "..."}
-• ragSearch — search user's uploaded documents. Args: {"query": "..."}
-• python — execute Python code. Args: {"code": "..."}
-• memorySave — persist information. Args: {"content": "..."}
-• memoryRecall — recall saved info. Args: {"query": "..."}
+• webSearch — search the live web. Args: {"query": "search terms"}
+• ragSearch — search user's uploaded documents. Args: {"query": "search terms"}
+• python — execute Python code. Args: {"code": "python code here"}
+• memorySave — persist information. Args: {"content": "text to save"}
+• memoryRecall — recall saved info. Args: {"query": "search terms"}
 
-RULES:
-1. Think FIRST, then call ONE tool per turn
-2. After reading a tool result, either call another tool or give your FINAL answer
-3. Final answers must contain NO tool call JSON
-4. If a tool errors, try a different approach — do NOT retry the same call
-5. Be efficient — use the minimum number of tool calls needed
-6. For math/calculations, prefer the python tool over guessing`;
+EXAMPLE 1 — User asks "what is the population of France?"
+I need to search for the current population of France.
+{"tool": "webSearch", "args": {"query": "population of France 2025"}}
+
+EXAMPLE 2 — User asks "calculate 17 * 23 + 5"
+Let me use Python to compute this accurately.
+{"tool": "python", "args": {"code": "result = 17 * 23 + 5\\nprint(result)"}}
+
+CRITICAL RULES:
+1. You MUST think first, then call exactly ONE tool per turn
+2. After receiving a tool result, either call another tool OR give your FINAL answer
+3. Your FINAL answer must contain NO JSON tool calls — just plain text
+4. Do NOT skip tools — if a tool is available and relevant, USE IT
+5. If a tool errors, try a different approach — do NOT retry the same call
+6. For math or calculations, ALWAYS use the python tool
+7. NEVER give a final answer on your first turn if tools are available — use at least one tool first`;
 }
 
 // ─── JSON Parser (multi-strategy) ───────────────────────────────────

@@ -17,18 +17,16 @@ async function tryPollinations(prompt: string, model: string = "flux"): Promise<
         const apiKey = process.env.POLLINATIONS_API_KEY;
         const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=768&height=768&model=${model}&seed=${seed}&nologo=true&enhance=true`;
 
-        const headers: Record<string, string> = {};
-        if (apiKey) {
-            headers["Authorization"] = `Bearer ${apiKey}`;
-        }
-
+        // Pollinations returns the image directly on GET — verify with a quick fetch
+        // that follows redirects (the API sometimes 302s before serving the image)
         const res = await fetch(url, {
-            method: "HEAD",
-            headers,
-            signal: AbortSignal.timeout(20000),
+            method: "GET",
+            headers: apiKey ? { "Authorization": `Bearer ${apiKey}` } : {},
+            signal: AbortSignal.timeout(30000),
         });
 
         if (res.ok && res.headers.get("content-type")?.includes("image")) {
+            // Return the stable URL — the image is generated and cached server-side
             return apiKey ? `${url}&token=${apiKey}` : url;
         }
         return null;
@@ -38,7 +36,8 @@ async function tryPollinations(prompt: string, model: string = "flux"): Promise<
 }
 
 async function tryPollinationsWithRetry(prompt: string): Promise<GenResult | null> {
-    const models = ["flux", "flux-realism", "turbo"];
+    // Try models in order of quality
+    const models = ["flux", "turbo"];
     for (const model of models) {
         const url = await tryPollinations(prompt, model);
         if (url) return { image: url, provider: `pollinations-${model}` };

@@ -68,7 +68,6 @@ export function ChatInput({
     const features = [
         { key: "search", icon: Globe, label: "Search", active: deepSearchEnabled, action: toggleDeepSearch },
         { key: "memory", icon: Brain, label: "Memory", active: memoryEnabled, action: toggleMemory },
-        ...(toggleReasoning ? [{ key: "think", icon: Lightbulb, label: "Think", active: !!reasoningEnabled, action: toggleReasoning }] : []),
         ...(toggleRag ? [{ key: "rag", icon: Paperclip, label: "Docs", active: !!ragEnabled, action: toggleRag }] : []),
         ...(onPyodideLoad ? [{
             key: "python", icon: Code, label: pyodideLoading ? "Loading..." : (pyodideReady && pyodideEnabled) ? "Py ✓" : "Py", active: !!(pyodideReady && pyodideEnabled),

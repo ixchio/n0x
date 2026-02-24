@@ -11,7 +11,6 @@ import { MemoryPanel } from "@/components/memory-panel";
 import { WEBLLM_MODELS, MODEL_CATEGORIES } from "@/lib/useWebLLM";
 import { cn } from "@/lib/utils";
 import { CommandMenu } from "@/components/command-menu";
-import { RAGPanel } from "@/components/rag-panel";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { PersonaSelector } from "@/components/persona-selector";
 import { ShareMenu } from "@/components/share-menu";
@@ -24,7 +23,6 @@ function ChatPageInner() {
   const {
     input, setInput, streamingContent, isStreaming, generatingImage, imageProgress,
     deepSearchEnabled, setDeepSearchEnabled, memoryEnabled, setMemoryEnabled,
-    reasoningEnabled, setReasoningEnabled,
     webllm, deepSearch, memory, pyodide, tts, rag, chatStore, persona, agent,
     handleSend, handleNewChat, handleStop, handlePythonRun,
   } = chat;
@@ -40,14 +38,14 @@ function ChatPageInner() {
   const [headerModelOpen, setHeaderModelOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [showMemoryPanel, setShowMemoryPanel] = useState(false);
-  const [showMetrics, setShowMetrics] = useState(false);
+  const [showMetrics, setShowMetrics] = useState(true);
   const [isExploding, setIsExploding] = useState(false);
   const [pyEnabled, setPyEnabled] = useState(false);
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const userScrolledUpRef = useRef(false);
 
-  const DEFAULT_MODEL = "SmolLM2-360M-Instruct-q4f16_1-MLC";
+  const DEFAULT_MODEL = "Qwen2.5-1.5B-Instruct-q4f16_1-MLC";
 
   // Auto-load smallest model on first visit
   useEffect(() => {
@@ -106,7 +104,6 @@ function ChatPageInner() {
         ragEnabled={rag.ragEnabled}
         onToggleRAG={rag.toggle}
       />
-      <RAGPanel />
       <Sidebar
         isOpen={sidebarOpen}
         currentModel={webllm.loadedModel}
@@ -302,22 +299,22 @@ function ChatPageInner() {
             <div className="h-full flex flex-col items-center justify-center">
               <div className="space-y-6 text-center max-w-md w-full">
                 <h2 className="text-3xl text-white font-bold tracking-tight">N0X</h2>
-                <p className="text-xs text-txt-tertiary font-mono">
-                  {webllm.status === "unloaded" ? "select a model to start · ctrl+k for commands" : "ready. type something."}
+                <p className="text-sm text-zinc-400 font-medium mt-2 max-w-xs">
+                  {webllm.status === "unloaded" ? "Select a model to begin. All inference runs locally on your GPU — zero cloud, zero latency." : "Model loaded. Ask me anything — code, analysis, research. Everything stays on your machine."}
                 </p>
 
                 {webllm.status === "unloaded" && (
                   <div className="grid grid-cols-3 gap-2 pt-4">
                     <button
-                      onClick={() => handleModelChange("SmolLM2-360M-Instruct-q4f16_1-MLC")}
+                      onClick={() => handleModelChange("Qwen2.5-1.5B-Instruct-q4f16_1-MLC")}
                       className="p-3 rounded bg-crt-surface border border-phosphor-dim hover:border-phosphor transition-all text-left group relative"
                     >
                       <div className="absolute -top-2 right-2 text-[8px] bg-phosphor text-crt-black px-1.5 py-0.5 rounded font-mono font-bold">recommended</div>
                       <div className="flex items-center gap-1.5 mb-1">
-                        <Zap className="w-3 h-3 text-neon-amber" />
-                        <span className="text-[11px] text-txt-secondary group-hover:text-phosphor">SmolLM2</span>
+                        <Brain className="w-3 h-3 text-neon-cyan" />
+                        <span className="text-[11px] text-txt-secondary group-hover:text-phosphor">Qwen 1.5B</span>
                       </div>
-                      <div className="text-[10px] text-txt-tertiary">fast · 250mb</div>
+                      <div className="text-[10px] text-txt-tertiary">balanced · 1GB</div>
                     </button>
 
                     <button
@@ -414,8 +411,6 @@ function ChatPageInner() {
               setMemoryEnabled(!memoryEnabled);
               if (!memoryEnabled) setShowMemoryPanel(true);
             }}
-            reasoningEnabled={reasoningEnabled}
-            toggleReasoning={() => setReasoningEnabled(!reasoningEnabled)}
             ragEnabled={rag.ragEnabled}
             toggleRag={rag.toggle}
             pyodideReady={pyodide.isReady}

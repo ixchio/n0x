@@ -274,7 +274,7 @@ export const useWebLLM = create<WebLLMState>((set, get) => ({
                 messages: messages as any,
                 stream: true,
                 temperature: 0.7,
-                max_tokens: 2048,
+                max_tokens: 4096,
             });
 
             for await (const chunk of asyncGenerator) {

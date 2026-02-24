@@ -35,7 +35,6 @@ export function useChat() {
     const [streamingContent, setStreamingContent] = useState("");
     const [deepSearchEnabled, setDeepSearchEnabled] = useState(false);
     const [memoryEnabled, setMemoryEnabled] = useState(false);
-    const [reasoningEnabled, setReasoningEnabled] = useState(false);
     const [generatingImage, setGeneratingImage] = useState(false);
     const [imageProgress, setImageProgress] = useState<ImageGenProgress>({ active: false });
 
@@ -284,9 +283,6 @@ export function useChat() {
 
         // Build the single system prompt
         let systemContent = persona.systemPrompt;
-        if (reasoningEnabled) {
-            systemContent += "\n\nCRITICAL INSTRUCTION: You must think step-by-step before answering. Enclose your internal reasoning process entirely within <think> and </think> tags. Do not output anything before the <think> tag. After the </think> closing tag, provide your final response to the user.";
-        }
 
         // Build the context block for the user message
         let userContextBlock = "";
@@ -379,7 +375,7 @@ export function useChat() {
             });
             deepSearch.reset();
         }
-    }, [input, isStreaming, webllm, chatStore, deepSearchEnabled, deepSearch, memory, memoryEnabled, handleImageGen, rag, tts, persona, reasoningEnabled, agent, pyodide]);
+    }, [input, isStreaming, webllm, chatStore, deepSearchEnabled, deepSearch, memory, memoryEnabled, handleImageGen, rag, tts, persona, agent, pyodide]);
 
     const handleStop = useCallback(() => {
         webllm.stop();
@@ -424,7 +420,6 @@ export function useChat() {
         generatingImage, imageProgress,
         deepSearchEnabled, setDeepSearchEnabled,
         memoryEnabled, setMemoryEnabled,
-        reasoningEnabled, setReasoningEnabled,
 
         webllm, deepSearch, memory, pyodide, tts, rag, chatStore, persona, agent,
 
