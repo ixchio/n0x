@@ -98,7 +98,8 @@ async function extractText(file: File): Promise<string> {
 
     // DOCX (ZIP XML extraction)
     if (name.endsWith(".docx")) {
-        throw new Error("DOCX parsing without JSZip is not natively supported. Please convert to PDF or TXT.");
+        // Can't parse DOCX natively without JSZip — return helpful message
+        return `[This is a .docx file: "${file.name}". DOCX parsing requires JSZip which is not loaded. Please convert to PDF or TXT for full text extraction.]`;
     }
 
     // CSV
@@ -221,7 +222,10 @@ self.addEventListener("message", async (e: MessageEvent) => {
                 self.postMessage({ id, status: `Loading cached vectors for ${file.name}...` });
 
                 if (!voy) voy = VoyClass.deserialize(cached.serializedVoy);
-                chunkStore = new Map(cached.chunks);
+                // Additive merge — don't overwrite chunks from previously loaded files
+                for (const [k, v] of cached.chunks) {
+                    chunkStore.set(k, v);
+                }
 
                 docMetadata.chunks = cached.chunks.length;
                 docMetadata.rawText = ""; // memory optimization

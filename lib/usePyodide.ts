@@ -19,7 +19,7 @@ declare global {
     }
 }
 
-const PYODIDE_VERSION = "0.25.0";
+const PYODIDE_VERSION = "0.26.4";
 const PYODIDE_URL = `https://cdn.jsdelivr.net/pyodide/v${PYODIDE_VERSION}/full/`;
 
 export function usePyodide() {
@@ -109,8 +109,13 @@ sys.stderr = _out
             // Clear output
             await py.runPythonAsync("_out.clear()");
 
-            // Auto-load packages from imports
-            await py.loadPackagesFromImports(code);
+            // Auto-load packages from imports (graceful fallback)
+            try {
+                await py.loadPackagesFromImports(code);
+            } catch (pkgErr: any) {
+                console.warn("Package auto-load warning:", pkgErr.message);
+                // Continue execution — the import itself may still work or give a clearer error
+            }
 
             // Execute
             const result = await py.runPythonAsync(code);

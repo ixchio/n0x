@@ -59,7 +59,7 @@ export function MetricsOverlay({ tps, modelName, isLoaded, isLoading, progress, 
                                             "bg-zinc-800 text-zinc-400 border border-zinc-700"
                                 )}>
                                     <span className={cn("w-1.5 h-1.5 rounded-full", isLoaded ? "bg-green-400" : isLoading ? "bg-yellow-400 animate-pulse" : "bg-zinc-500")} />
-                                    {isLoaded ? "ONLINE (WebGPU)" : isLoading ? "LOADING WEights" : "IDLE"}
+                                    {isLoaded ? "ONLINE (WebGPU)" : isLoading ? "LOADING WEIGHTS" : "IDLE"}
                                 </span>
                             </div>
 

@@ -199,8 +199,8 @@ const CodeBlock = ({ children, className, onRunCode, codeResults, runningCode, h
                         <Terminal className="w-3 h-3" /> Execution output · {result.duration}ms
                     </div>
                     <div className="max-h-96 overflow-y-auto custom-scrollbar">
-                         {result.output && <pre className="text-[13px] text-zinc-300 font-mono whitespace-pre-wrap leading-relaxed pb-2">{result.output}</pre>}
-                         {result.error && <pre className="text-[13px] text-red-400 font-mono whitespace-pre-wrap leading-relaxed pb-2">{result.error}</pre>}
+                        {result.output && <pre className="text-[13px] text-zinc-300 font-mono whitespace-pre-wrap leading-relaxed pb-2">{result.output}</pre>}
+                        {result.error && <pre className="text-[13px] text-red-400 font-mono whitespace-pre-wrap leading-relaxed pb-2">{result.error}</pre>}
                     </div>
                 </div>
             )}
@@ -272,7 +272,10 @@ export const MessageBubble = React.memo(function MessageBubble({ role, content, 
                                 onError={(e) => {
                                     const target = e.target as HTMLImageElement;
                                     target.style.display = "none";
-                                    target.parentElement!.innerHTML = '<div class="p-8 text-center text-zinc-500 text-sm">Image failed to generate or load.</div>';
+                                    const notice = document.createElement("div");
+                                    notice.className = "p-8 text-center text-zinc-500 text-sm";
+                                    notice.textContent = "Image failed to generate or load.";
+                                    target.parentElement!.appendChild(notice);
                                 }}
                             />
                         </div>

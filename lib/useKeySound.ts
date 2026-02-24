@@ -68,6 +68,12 @@ export function tick(): void {
 
         osc.start(ctx.currentTime);
         osc.stop(ctx.currentTime + 0.015);
+
+        // Prevent GC leak: disconnect nodes after playback
+        osc.onended = () => {
+            osc.disconnect();
+            gain.disconnect();
+        };
     } catch {
         // Audio context issues — silently ignore
     }

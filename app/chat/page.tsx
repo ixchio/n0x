@@ -17,6 +17,7 @@ import { PersonaSelector } from "@/components/persona-selector";
 import { ShareMenu } from "@/components/share-menu";
 import { useChat } from "@/lib/useChat";
 import { useSTT } from "@/lib/useSTT";
+import { AgentTrace } from "@/components/agent-trace";
 
 function ChatPageInner() {
   const chat = useChat();
@@ -24,7 +25,7 @@ function ChatPageInner() {
     input, setInput, streamingContent, isStreaming, generatingImage, imageProgress,
     deepSearchEnabled, setDeepSearchEnabled, memoryEnabled, setMemoryEnabled,
     reasoningEnabled, setReasoningEnabled,
-    webllm, deepSearch, memory, pyodide, tts, rag, chatStore, persona,
+    webllm, deepSearch, memory, pyodide, tts, rag, chatStore, persona, agent,
     handleSend, handleNewChat, handleStop, handlePythonRun,
   } = chat;
   const stt = useSTT();
@@ -382,6 +383,18 @@ function ChatPageInner() {
               {streamingContent && (
                 <MessageBubble role="assistant" content={streamingContent} />
               )}
+
+              {/* Agent Trace */}
+              {agent.enabled && (agent.steps.length > 0 || agent.status !== "idle") && (
+                <AgentTrace
+                  steps={agent.steps}
+                  status={agent.status}
+                  iteration={agent.currentIteration}
+                  isActive={agent.status !== "idle"}
+                  elapsedMs={agent.elapsedMs}
+                  onAbort={handleStop}
+                />
+              )}
             </div>
           )}
         </div>
@@ -415,6 +428,8 @@ function ChatPageInner() {
             onRemoveFile={(id) => {
               rag.clear();
             }}
+            agentEnabled={agent.enabled}
+            toggleAgent={agent.toggle}
             sttSupported={stt.isSupported}
             sttListening={stt.isListening}
             onSttToggle={() => {

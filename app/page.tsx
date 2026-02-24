@@ -3,7 +3,7 @@
 import React from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { Terminal, Shield, Cpu, Zap, Brain, Globe, Code, FileText, ImageIcon, Mic, ArrowRight, Lock, Database } from "lucide-react";
+import { Terminal, Shield, Cpu, Zap, Brain, Globe, Code, FileText, ImageIcon, Mic, ArrowRight, Lock, Database, Bot } from "lucide-react";
 
 const fadeIn = {
   hidden: { opacity: 0, y: 20 },
@@ -61,12 +61,12 @@ export default function HomePage() {
           </motion.div>
 
           <motion.h1 variants={fadeIn} className="text-5xl sm:text-7xl font-bold tracking-tight text-white leading-[1.1]">
-            The Full AI Stack. <br className="hidden sm:block" />
-            <span className="text-zinc-500">One Browser Tab.</span>
+            Autonomous AI Agent. <br className="hidden sm:block" />
+            <span className="text-zinc-500">In Your Browser.</span>
           </motion.h1>
 
           <motion.p variants={fadeIn} className="text-lg sm:text-xl text-zinc-400 leading-relaxed max-w-2xl mx-auto font-medium">
-            Local LLM inference via WebGPU. RAG, code execution, image generation, and memory. 100% private. No installation or API keys required.
+            The first fully in-browser autonomous agent. WebGPU inference, tool use, RAG, code execution — zero backend, zero API keys, 100% private.
           </motion.p>
 
           <motion.div variants={fadeIn} className="flex items-center justify-center gap-4 pt-4">
@@ -87,6 +87,28 @@ export default function HomePage() {
           variants={stagger}
           className="w-full mt-32 grid grid-cols-1 md:grid-cols-3 gap-4"
         >
+          {/* Card 0 — AGENT (Hero Feature) */}
+          <motion.div variants={fadeIn} className="md:col-span-3 bg-gradient-to-br from-zinc-900/80 via-zinc-900/50 to-emerald-950/20 border border-emerald-500/20 rounded-2xl p-8 hover:border-emerald-500/40 transition-all group overflow-hidden relative shadow-glass">
+            <div className="absolute top-0 right-0 p-6 opacity-10 group-hover:opacity-20 transition-opacity">
+              <Bot className="w-56 h-56" />
+            </div>
+            <div className="absolute -top-1 left-8 text-[10px] bg-emerald-500 text-black px-3 py-1 rounded-b font-mono font-bold tracking-wider">NEW — FIRST OF ITS KIND</div>
+            <div className="relative z-10 space-y-4 pt-4">
+              <div className="w-12 h-12 bg-emerald-500/10 rounded-xl flex items-center justify-center text-emerald-400 border border-emerald-500/30">
+                <Bot className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-2xl font-bold text-white tracking-tight">Autonomous Agent Loop</h3>
+                <p className="text-zinc-400 mt-2 font-medium max-w-xl">A ReAct-style reasoning loop running entirely in your browser. The LLM thinks, picks tools (search, documents, Python, memory), executes them, reads results, and keeps going until it solves your problem. No server. No API. Just raw WebGPU autonomy.</p>
+              </div>
+              <div className="flex items-center gap-3 pt-2 text-xs font-mono text-zinc-500">
+                <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400" /> Thought → Action → Observation</span>
+                <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-blue-400" /> Multi-tool Orchestration</span>
+                <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-amber-400" /> Live Trace UI</span>
+              </div>
+            </div>
+          </motion.div>
+
           {/* Card 1 */}
           <motion.div variants={fadeIn} className="md:col-span-2 bg-zinc-900/50 border border-zinc-800/50 rounded-2xl p-8 hover:bg-zinc-900/80 transition-colors flex flex-col justify-between group overflow-hidden relative shadow-glass">
             <div className="absolute top-0 right-0 p-8 opacity-10 group-hover:opacity-20 transition-opacity">

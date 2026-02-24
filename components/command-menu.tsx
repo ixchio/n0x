@@ -27,12 +27,12 @@ export function CommandMenu({ onLoadModel, onNewChat, ttsEnabled, onToggleTTS, r
         const handler = (e: KeyboardEvent) => {
             if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
                 e.preventDefault();
-                setOpen(!open);
+                setOpen(prev => !prev);
             }
         };
         document.addEventListener("keydown", handler);
         return () => document.removeEventListener("keydown", handler);
-    }, [open]);
+    }, []);
 
     if (!open) return null;
 

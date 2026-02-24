@@ -11,7 +11,7 @@ interface ShareMenuProps {
 }
 
 const REPO = "https://github.com/ixchio/n0x";
-const APP = "https://n0xth.vercel.app";
+const APP = "https://n0x.vercel.app";
 
 // platform-specific share hooks — different vibes for different audiences
 function shareTexts(snippet: string, hasChat: boolean) {

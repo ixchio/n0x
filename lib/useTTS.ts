@@ -53,7 +53,27 @@ export const useTTS = create<TTSState>((set, get) => ({
         // Cancel current speech
         synth.cancel();
 
-        const utterance = new SpeechSynthesisUtterance(text);
+        // Strip markdown formatting so TTS doesn't speak asterisks, backticks, etc.
+        const clean = text
+            .replace(/<think>[\s\S]*?<\/think>/g, "")  // remove thinking blocks
+            .replace(/```[\s\S]*?```/g, " code block omitted ")  // remove code blocks
+            .replace(/`([^`]+)`/g, "$1")  // inline code
+            .replace(/\*\*([^*]+)\*\*/g, "$1")  // bold
+            .replace(/\*([^*]+)\*/g, "$1")  // italic
+            .replace(/__([^_]+)__/g, "$1")  // bold alt
+            .replace(/_([^_]+)_/g, "$1")  // italic alt
+            .replace(/#+\s/g, "")  // headers
+            .replace(/!\[.*?\]\(.*?\)/g, "image")  // images
+            .replace(/\[([^\]]+)\]\(.*?\)/g, "$1")  // links
+            .replace(/^\s*[-*+]\s/gm, "")  // list bullets
+            .replace(/^\s*\d+\.\s/gm, "")  // numbered lists
+            .replace(/\n{2,}/g, ". ")  // double newlines to pauses
+            .replace(/\n/g, " ")  // single newlines
+            .trim();
+
+        if (!clean) return;
+
+        const utterance = new SpeechSynthesisUtterance(clean);
         utterance.voice = voice;
         utterance.rate = 1.0;
         utterance.pitch = 1.0;

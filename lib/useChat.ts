@@ -10,6 +10,7 @@ import { useRAG } from "@/lib/useRAG";
 import { useChatStore } from "@/lib/useChatStore";
 import { useSystemPrompt } from "@/lib/useSystemPrompt";
 import { tick as keySoundTick } from "@/lib/useKeySound";
+import { useAgent, AgentToolkit } from "@/lib/useAgent";
 
 // Very simple heuristic to estimate LLM tokens (1 token ≈ 4 characters)
 function estimateTokens(text: string): number {
@@ -46,8 +47,9 @@ export function useChat() {
     const rag = useRAG();
     const chatStore = useChatStore();
     const persona = useSystemPrompt();
+    const agent = useAgent();
 
-    const isStreaming = webllm.status === "generating" || deepSearch.isActive || generatingImage;
+    const isStreaming = webllm.status === "generating" || deepSearch.isActive || generatingImage || agent.status === "thinking" || agent.status === "acting";
     let tokenCounter = 0;
 
     const handleImageGen = useCallback(async (prompt: string) => {
@@ -99,6 +101,106 @@ export function useChat() {
         if (webllm.status !== "ready") return;
 
         chatStore.addMessage({ id: Date.now().toString(), role: "user", content: message });
+
+        // ── AGENT MODE: Route through autonomous loop ──
+        // In agent mode the LLM decides which tools to use, so we give it
+        // access to everything that's physically available — not gated by
+        // the user toggles (those only control single-shot mode).
+        if (agent.enabled) {
+            try {
+                agent.reset();
+                setStreamingContent("🤖 Agent is working…");
+
+                const toolkit: AgentToolkit = {};
+
+                // Web search — always available (it's just an API call)
+                toolkit.webSearch = async (q: string) => {
+                    try {
+                        const result = await deepSearch.search(q);
+                        if (!result) return "Search returned no results. Try different search terms.";
+                        let ctx = "";
+                        if (result.summary) ctx += result.summary + "\n\n";
+                        if (result.content?.length > 0) {
+                            ctx += result.content.slice(0, 3).join("\n\n");
+                        }
+                        if (result.sources?.length > 0) {
+                            ctx += "\n\nSources:\n" + result.sources.slice(0, 5).map((s: string) => `• ${s}`).join("\n");
+                        }
+                        deepSearch.reset();
+                        return ctx.trim() || "Search completed but returned no useful content.";
+                    } catch (e: any) {
+                        deepSearch.reset();
+                        return `Search failed: ${e.message}. Try answering from your knowledge.`;
+                    }
+                };
+
+                // Document search — only if files have been uploaded
+                if (rag.documents.length > 0) {
+                    toolkit.ragSearch = async (q: string) => {
+                        try {
+                            const ctx = await rag.getFileContext(q);
+                            return ctx || "No relevant content found in the uploaded documents.";
+                        } catch (e: any) {
+                            return `Document search failed: ${e.message}`;
+                        }
+                    };
+                }
+
+                // Python — only if the runtime has been loaded
+                if (pyodide.isReady) {
+                    toolkit.python = async (code: string) => {
+                        try {
+                            const res = await pyodide.run(code);
+                            if (res.error) return `Python error:\n${res.error}`;
+                            return res.output || "(code ran successfully, no output)";
+                        } catch (e: any) {
+                            return `Python crashed: ${e.message}`;
+                        }
+                    };
+                }
+
+                // Memory — always wire up if there are any memories saved
+                if (memory.isLoaded) {
+                    toolkit.memorySave = async (content: string) => {
+                        try {
+                            await memory.saveMemory(content, ["agent"]);
+                            return "Saved to memory.";
+                        } catch {
+                            return "Failed to save memory.";
+                        }
+                    };
+                    toolkit.memoryRecall = (q: string) => {
+                        return memory.getContext(q) || "No relevant memories found.";
+                    };
+                }
+
+                const finalAnswer = await agent.runLoop(
+                    message,
+                    toolkit,
+                    webllm.generate,
+                    persona.systemPrompt,
+                );
+
+                chatStore.addMessage({
+                    id: (Date.now() + 1).toString(),
+                    role: "assistant",
+                    content: finalAnswer,
+                });
+                setStreamingContent("");
+
+                if (tts.isEnabled) tts.speak(finalAnswer);
+            } catch (err: any) {
+                console.error("Agent loop error:", err);
+                setStreamingContent("");
+                chatStore.addMessage({
+                    id: (Date.now() + 1).toString(),
+                    role: "assistant",
+                    content: `Agent failed: ${err.message}`,
+                });
+                agent.reset();
+            }
+            return;
+        }
 
         // ── Gather context from all enabled features (parallel where possible) ──
 
@@ -277,11 +379,12 @@ export function useChat() {
             });
             deepSearch.reset();
         }
-    }, [input, isStreaming, webllm, chatStore, deepSearchEnabled, deepSearch, memory, memoryEnabled, handleImageGen, rag, tts, persona, reasoningEnabled]);
+    }, [input, isStreaming, webllm, chatStore, deepSearchEnabled, deepSearch, memory, memoryEnabled, handleImageGen, rag, tts, persona, reasoningEnabled, agent, pyodide]);
 
     const handleStop = useCallback(() => {
         webllm.stop();
         deepSearch.stop();
+        agent.reset();
         // Save whatever was streamed so far
         setStreamingContent(prev => {
             if (prev && prev.trim()) {
@@ -294,7 +397,7 @@ export function useChat() {
             return "";
         });
         setGeneratingImage(false);
-    }, [webllm, deepSearch, chatStore]);
+    }, [webllm, deepSearch, chatStore, agent]);
 
     const handleNewChat = useCallback(() => {
         chatStore.newConversation();
@@ -323,7 +426,7 @@ export function useChat() {
         memoryEnabled, setMemoryEnabled,
         reasoningEnabled, setReasoningEnabled,
 
-        webllm, deepSearch, memory, pyodide, tts, rag, chatStore, persona,
+        webllm, deepSearch, memory, pyodide, tts, rag, chatStore, persona, agent,
 
         handleSend, handleNewChat, handleStop,
         handlePythonRun: runPython,

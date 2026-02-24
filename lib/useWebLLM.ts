@@ -202,8 +202,11 @@ export const useWebLLM = create<WebLLMState>((set, get) => ({
     },
 
     loadModel: async (modelId: string) => {
-        const { isSupported } = get();
+        const { isSupported, status } = get();
         if (!isSupported || isLoadingModel) return;
+
+        // Allow retry from error state
+        if (status !== "unloaded" && status !== "ready" && status !== "error") return;
 
         // OOM Protection: Check navigator.deviceMemory and block heavy models on constrained devices
         const deviceMemory = (navigator as any).deviceMemory;

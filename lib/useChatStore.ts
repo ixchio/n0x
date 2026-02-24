@@ -139,7 +139,7 @@ export function useChatStore() {
                     ...conv,
                     messages: [...conv.messages, message],
                     updatedAt: Date.now(),
-                    title: conv.messages.length === 0 && msg.role === "user" ? titleFrom(msg.content) : conv.title,
+                    title: conv.title === "New chat" && msg.role === "user" ? titleFrom(msg.content) : conv.title,
                 };
                 convs = convs.map(c => c.id === conv!.id ? conv! : c);
             }

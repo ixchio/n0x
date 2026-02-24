@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useRef, useEffect, useState, useCallback } from "react";
-import { Send, Square, Globe, Brain, Code, Paperclip, Upload, X, FileText, Mic, MicOff, Lightbulb } from "lucide-react";
+import { Send, Square, Globe, Brain, Code, Paperclip, Upload, X, FileText, Mic, MicOff, Lightbulb, Bot } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface AttachedFile { id: string; name: string; size: number; type: string; }
@@ -16,6 +16,7 @@ interface ChatInputProps {
     pyodideReady?: boolean; pyodideLoading?: boolean; pyodideEnabled?: boolean;
     onPyodideLoad?: () => void; onPyodideToggle?: (on: boolean) => void;
     onFileDrop?: (file: File) => void; attachedFiles?: AttachedFile[]; onRemoveFile?: (id: string) => void;
+    agentEnabled?: boolean; toggleAgent?: () => void;
     sttSupported?: boolean; sttListening?: boolean; onSttToggle?: () => void;
 }
 
@@ -29,6 +30,7 @@ export function ChatInput({
     input, setInput, onSend, onStop, isStreaming, deepSearchEnabled, toggleDeepSearch,
     memoryEnabled, toggleMemory, reasoningEnabled, toggleReasoning, ragEnabled, toggleRag, pyodideReady, pyodideLoading, pyodideEnabled,
     onPyodideLoad, onPyodideToggle, onFileDrop, attachedFiles = [], onRemoveFile,
+    agentEnabled, toggleAgent,
     sttSupported, sttListening, onSttToggle,
 }: ChatInputProps) {
     const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -75,6 +77,7 @@ export function ChatInput({
                 if (!pyodideReady) { onPyodideLoad(); onPyodideToggle?.(true); } else { onPyodideToggle?.(!pyodideEnabled); }
             },
         }] : []),
+        ...(toggleAgent ? [{ key: "agent", icon: Bot, label: "Agent", active: !!agentEnabled, action: toggleAgent }] : []),
     ];
 
     return (
