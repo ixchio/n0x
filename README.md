@@ -2,10 +2,11 @@
   <img src="https://raw.githubusercontent.com/ixchio/n0x/main/public/icon.png" width="80" alt="n0x logo" style="border-radius:20%" />
 </div>
 
-<h1 align="center">n0x / The Browser-Native AI Stack</h1>
+<h1 align="center">n0x</h1>
 
 <div align="center">
-  <strong>Zero backend. 100% private. Blistering fast local inference.</strong>
+  <strong>The full AI stack in one browser tab.</strong><br />
+  LLM inference, autonomous agents, RAG, code execution, image generation — zero backend, zero API keys.
 </div>
 
 <br />
@@ -15,46 +16,84 @@
   <span> · </span>
   <a href="#architecture">Architecture</a>
   <span> · </span>
-  <a href="#deployment">Deployment</a>
+  <a href="#why-this-exists">Thesis</a>
+  <span> · </span>
+  <a href="#quick-start">Quick Start</a>
 </div>
 
 <br />
 
-n0x is a demonstration of pushing edge compute to its absolute limits. Utilizing **WebGPU**, **WASM**, and **IndexedDB**, n0x runs a complete AI ecosystem entirely within the client's browser. No API keys, no cloud compute costs, and zero data leaves the user's local machine.
+## Why This Exists
 
-## Technical Capabilities
+Cloud AI is a moat for vendors, not users. Every API call ships your data to someone else's GPU, adds latency, and costs money. n0x proves that a complete AI workflow — inference, tool use, document retrieval, code execution — can run **entirely inside a browser tab** using WebGPU, WASM, and IndexedDB. No server. No account. No data leaves your machine.
 
-* **WebGPU Inference Engine**: Direct-to-metal LLM execution via `MLC/WebLLM`. Hits 40+ tokens/sec on standard consumer hardware. Models (Llama 3, Qwen 2.5, Phi 3.5) are downloaded once and aggressively cached. Features generation interruption and a collapsible reasoning process for transparent inference.
-* **WASM Vector Search (RAG)**: Drag-and-drop document processing (PDF, TXT, MD, JSON). Chunking, `all-MiniLM-L6-v2` embedding generation via `transformers.js`, and cosine similarity search via `voy-search` — fully isolated in Web Workers to prevent UI blocking, with IndexedDB caching for instant vector retrieval across sessions.
-* **Sandboxed Python Runtime**: Client-side execution of Python data analysis and scripting via `Pyodide`. Code output flows directly back into the LLM context.
-* **Persistent Telemetry & Memory**: Long-term conversational memory and engine orchestration state persisted securely via IndexedDB.
-* **Voice & Modern UI**: Fully local speech-to-text input, real-time performance metrics overlay, and a premium dark theme tailored for deep work.
+## Core Systems
 
-## Architecture & DAG Execution
+### WebGPU Inference Engine
+Direct-to-metal LLM execution via MLC/WebLLM. Quantized models (q4f16) hit **35–50 tokens/sec** on consumer hardware. 16 models available across 5 tiers — downloaded once, cached in browser storage permanently. Real-time TPS telemetry displayed by default.
 
-n0x uses an event-driven architecture to orchestrate models and APIs.
+### Autonomous Agent Loop (ReAct)
+A full ReAct-style reasoning engine running in-browser. The LLM autonomously chains tool calls — web search, document retrieval, Python execution, memory — across multiple iterations until it solves the problem. Features:
+- Multi-strategy JSON parsing (handles malformed LLM output)
+- Per-tool execution timeouts with AbortController cancellation
+- Context window budgeting (prevents OOM on small model windows)
+- Loop detection (catches repeated tool calls)
+- Live trace UI with per-step timing
+
+### WASM Vector Search (RAG)
+Drag-and-drop document ingestion (PDF, TXT, MD, JSON). Text is chunked, embedded via `all-MiniLM-L6-v2` (transformers.js), and indexed for cosine similarity search using `voy-search`. Entire pipeline runs in a Web Worker — zero UI blocking. Vectors are cached in IndexedDB across sessions.
+
+### Sandboxed Python Runtime
+Client-side Python execution via Pyodide (WASM). Code output feeds back into LLM context. Self-healing: if execution fails, the error is automatically sent back to the LLM for a retry.
+
+### Additional Capabilities
+- **Deep Search**: DuckDuckGo + Wikipedia synthesis via lightweight serverless proxy
+- **Image Generation**: Pollinations AI (Flux) with Stable Horde fallback
+- **Persistent Memory**: Long-term conversational memory via IndexedDB
+- **Voice I/O**: Browser-native speech-to-text and text-to-speech
+- **5 Persona Modes**: Default, Senior Engineer, Writer, Tutor, Analyst — each with detailed response formatting rules
+
+## Architecture
 
 ```text
-[User Input] → [Intent Router]
+[User Input] → [Mode Router]
                    │
-                   ├─→ [Deep Search Enabled?] ──→ Serverless Proxy (DuckDuckGo/Tavily)
+                   ├─→ [Agent Mode] ──→ ReAct Loop (Thought → Action → Observation)
+                   │                         │
+                   │         ┌───────────────┼───────────────┐
+                   │         ▼               ▼               ▼
+                   │    [Web Search]   [RAG Search]    [Python Exec]
+                   │         │               │               │
+                   │         └───────────────┼───────────────┘
+                   │                         ▼
+                   │                  [Next Iteration or Final Answer]
                    │
-                   ├─→ [Documents Attached?] ──→ WASM Vector DB (Voy) → Extract Context
+                   ├─→ [Direct Mode] ──→ Context Assembly
+                   │         │
+                   │         ├── Search results (if enabled)
+                   │         ├── Document context (if attached)
+                   │         └── Memory context (if enabled)
+                   │         │
+                   │         ▼
+                   │    [WebGPU LLM] → Streaming Response
                    │
-                   ├─→ [Python Requested?] ────→ Pyodide (WASM Sandbox) → Output Capture
-                   │
-                   └─→ [Memory Context] ───────→ IndexedDB Vector Retrieval
-                             │
-                             ▼
-              [WebGPU Base LLM (e.g. Qwen 2.5)]
-                             │
-                             ▼
-                   [UI Render / Telemetry]
+                   └─→ [Image Mode] ──→ Pollinations / Stable Horde API
 ```
 
-## Quick Start (Development)
+## Models & Memory Footprint
 
-Requires Node 18+ and Chromium 113+ (for WebGPU API support).
+All weights are quantized (q4f16) for optimal VRAM usage. Default: **Qwen 2.5 1.5B**.
+
+| Tier | Model | VRAM | Tokens/Sec |
+|---|---|---|---|
+| ⚡ Fast | SmolLM2 360M, Qwen 0.5B, TinyLlama 1.1B | 250MB–600MB | 50+ |
+| ⚖️ Balanced | **Qwen 2.5 1.5B** *(default)*, Llama 3.2 1B, Phi-3.5 Mini | 700MB–2GB | 30–40 |
+| 🚀 Powerful | Llama 3.2 3B, Qwen 3B, Mistral 7B, Hermes 2 Pro 8B | 2–4.5GB | 15–25 |
+| 💻 Code | Qwen Coder 1.5B, Qwen Coder 7B, DeepSeek Coder 1.3B | 800MB–4GB | 25–40 |
+
+## Quick Start
+
+Requires Node 18+ and Chromium 113+ (WebGPU).
 
 ```bash
 git clone https://github.com/ixchio/n0x.git
@@ -63,31 +102,19 @@ npm install
 npm run dev
 ```
 
-Open `localhost:3000`. The engine will initialize and download the default quantized weights on the first load.
+Open `localhost:3000`. Default model (~1GB) downloads on first load and is cached permanently.
 
-## Models & Memory Footprint
+## Privacy Model
 
-Weights are quantized (q4f16) for optimal VRAM usage.
+The inference graph and orchestration layer run entirely in the browser. PII and proprietary content never transit a network boundary. Two optional external hooks exist, both toggleable:
+- **Search**: Serverless proxy for DuckDuckGo/Tavily (CORS bypass)
+- **Image Gen**: Pollinations AI / Stable Horde API
 
-| Tier | Default Weights | VRAM Est. | Tokens/Sec (M-series) |
-|---|---|---|---|
-| **Fast** | Qwen2.5 0.5B Instruct | ~400MB | 50+ |
-| **Balanced** | Qwen2.5 1.5B Instruct | ~1.1GB | 35+ |
-| **Powerful** | Llama 3.2 3B Instruct | ~2.2GB | 20+ |
-| **Code** | Qwen2.5 Coder 1.5B | ~1.1GB | 35+ |
-
-## Security & Privacy
-
-This project is built on a "local maximum" privacy thesis.
-
-Because the inference graph and orchestration layer remain entirely in the browser, PII and proprietary code never transit a network boundary. The only exceptions are explicit external hooks:
-- **Search Retrieval**: Pings a Next.js serverless route proxy to bypass CORS.
-- **Image Generation**: Pings the free Stable Horde / Pollinations API.
-Both can be toggled off individually, guaranteeing a 100% air-gapped run state.
+Disabling both guarantees a **100% air-gapped** runtime.
 
 ## Stack
 
-`Next.js 14` `TypeScript` `WebLLM (WebGPU)` `Pyodide (WASM)` `Transformers.js` `Tailwind CSS` `Framer Motion` `Zustand`
+`Next.js 14` · `TypeScript` · `WebLLM (WebGPU)` · `Pyodide (WASM)` · `Transformers.js` · `Voy Search` · `Tailwind CSS` · `Framer Motion` · `Zustand`
 
 ## License
 
