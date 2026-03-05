@@ -60,7 +60,6 @@ export interface AgentToolkit {
 
 const MAX_ITERATIONS = 8;
 const TOOL_TIMEOUT_MS = 30_000;       // 30s max per tool execution
-const MAX_CONTEXT_CHARS = 12_000;     // ~3k tokens — keeps context within model window
 const MAX_LOOP_REPEATS = 3;           // same tool+args 3x = force stop
 
 // ─── System prompt for agent mode ────────────────────────────────────
@@ -101,7 +100,8 @@ CRITICAL RULES:
 4. Do NOT skip tools — if a tool is available and relevant, USE IT
 5. If a tool errors, try a different approach — do NOT retry the same call
 6. For math or calculations, ALWAYS use the python tool
-7. NEVER give a final answer on your first turn if tools are available — use at least one tool first`;
+7. NEVER give a final answer on your first turn if tools are available — use at least one tool first
+8. CRITICAL: Python runs in a Pyodide WASM sandbox. Traditional sockets (\`requests\`, \`urllib\`) are disabled. To make HTTP requests in python, you MUST use \`import pyodide.http\` and \`await pyodide.http.pyfetch(url)\` instead.`;
 }
 
 // ─── JSON Parser (multi-strategy) ───────────────────────────────────
@@ -259,11 +259,11 @@ async function executeTool(
 // If we shove all observations in verbatim, we OOM the window.
 // Strategy: summarize old observations, keep recent ones full.
 
-function budgetContext(msgs: { role: string; content: string }[]): { role: string; content: string }[] {
+function budgetContext(msgs: { role: string; content: string }[], maxContextChars: number): { role: string; content: string }[] {
     let totalChars = 0;
     for (const m of msgs) totalChars += m.content.length;
 
-    if (totalChars <= MAX_CONTEXT_CHARS) return msgs;
+    if (totalChars <= maxContextChars) return msgs;
 
     // Keep system prompt and original user query intact
     const result = [msgs[0], msgs[1]]; // system + user
@@ -358,6 +358,7 @@ export const useAgent = create<AgentState>((set, get) => ({
 
         let stepId = 0;
         let finalAnswer = "";
+        let consecutiveErrors = 0;
 
         const addStep = (step: Omit<AgentStep, "id" | "timestamp">) => {
             if (signal.aborted) return;
@@ -379,8 +380,9 @@ export const useAgent = create<AgentState>((set, get) => ({
             set({ currentIteration: i + 1, status: "thinking" });
             updateElapsed();
 
-            // Budget context before each LLM call
-            const budgeted = budgetContext(msgs);
+            // Budget context before each LLM call (85% of standard 4K window if undefined, otherwise dynamic based on webllm injected logic elsewhere)
+            const webLLMState = (window as any)._n0x_context_chars || 12000;
+            const budgeted = budgetContext(msgs, webLLMState);
 
             // Generate LLM response
             let llmOutput = "";
@@ -455,6 +457,13 @@ export const useAgent = create<AgentState>((set, get) => ({
 
             if (signal.aborted) break;
 
+            const isError = observation.startsWith("[Error]") || /failed|error|crashed/i.test(observation.slice(0, 50));
+            if (isError) {
+                consecutiveErrors++;
+            } else {
+                consecutiveErrors = 0;
+            }
+
             // Record observation with execution time
             const obsContent = observation.length > 2000
                 ? observation.slice(0, 2000) + "\n··· [truncated]"
@@ -467,10 +476,18 @@ export const useAgent = create<AgentState>((set, get) => ({
 
             // Append to LLM context for next iteration
             msgs.push({ role: "assistant", content: llmOutput });
-            msgs.push({
-                role: "user",
-                content: `Tool result (${toolCall.tool}, ${toolDuration}ms):\n${obsContent}\n\nUse this information to either call another tool or provide your final answer.`,
-            });
+
+            if (consecutiveErrors >= 3) {
+                msgs.push({
+                    role: "user",
+                    content: `Tool result (${toolCall.tool}, ${toolDuration}ms):\n${obsContent}\n\nSystem Intervention: You are repeatedly failing. Change your execution strategy entirely or provide your final answer now.`,
+                });
+            } else {
+                msgs.push({
+                    role: "user",
+                    content: `Tool result (${toolCall.tool}, ${toolDuration}ms):\n${obsContent}\n\nUse this information to either call another tool or provide your final answer.`,
+                });
+            }
         }
 
         // Handle abort

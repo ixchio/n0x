@@ -161,7 +161,7 @@ interface WebLLMState {
 
     // Actions
     init: () => Promise<void>;
-    loadModel: (modelId: string) => Promise<void>;
+    loadModel: (modelId: string, force?: boolean) => Promise<void>;
     generate: (messages: ChatMessage[], onToken?: (token: string) => void) => Promise<string>;
     stop: () => void;
     unload: () => Promise<void>;
@@ -201,7 +201,7 @@ export const useWebLLM = create<WebLLMState>((set, get) => ({
         }
     },
 
-    loadModel: async (modelId: string) => {
+    loadModel: async (modelId: string, force: boolean = false) => {
         const { isSupported, status } = get();
         if (!isSupported || isLoadingModel) return;
 
@@ -210,7 +210,7 @@ export const useWebLLM = create<WebLLMState>((set, get) => ({
 
         // OOM Protection: Check navigator.deviceMemory and block heavy models on constrained devices
         const deviceMemory = (navigator as any).deviceMemory;
-        if (deviceMemory) {
+        if (deviceMemory && !force) {
             const model = WEBLLM_MODELS.find(m => m.id === modelId);
             if (model) {
                 // If device has 4GB or less, block anything larger than 'fast' (which are > 1GB)
@@ -242,6 +242,11 @@ export const useWebLLM = create<WebLLMState>((set, get) => ({
                     set({ loadProgress: progress.progress });
                 },
             });
+
+            // Extract context window size dynamically for agent budgeting
+            const windowSize = (engine.chat as any).config?.context_window_size || 4096;
+            // set dynamic window global for useAgent to consume without cyclical deps
+            (window as any)._n0x_context_chars = Math.floor(windowSize * 4 * 0.85);
 
             set({ loadedModel: modelId, loadingModel: null, status: "ready" });
         } catch (e: any) {

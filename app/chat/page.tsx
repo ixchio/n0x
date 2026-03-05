@@ -253,6 +253,32 @@ function ChatPageInner() {
             </div>
           )}
 
+          {/* WebLLM Error Banner (OOM Overrides) */}
+          {webllm.error && webllm.status === "error" && (
+            <div className="max-w-lg mx-auto mt-12 mb-6">
+              <div className="bg-red-500/10 border border-red-500/30 rounded p-5 text-center space-y-3">
+                <AlertTriangle className="w-8 h-8 text-red-400 mx-auto" />
+                <h3 className="text-sm font-mono text-red-400 font-bold">Model Load Failed</h3>
+                <p className="text-xs text-red-300/80 font-mono leading-relaxed">
+                  {webllm.error}
+                </p>
+
+                {webllm.error.includes("Hardware Restricted") && (
+                  <button
+                    onClick={() => {
+                      // Use the last attempted payload from webllm's error state, or fallback if tracking isn't perfect
+                      const modelToForce = webllm.loadingModel || webllm.loadedModel || "Qwen2.5-1.5B-Instruct-q4f16_1-MLC";
+                      webllm.loadModel(modelToForce, true);
+                    }}
+                    className="mt-4 px-4 py-2 bg-red-500/20 hover:bg-red-500/30 border border-red-500/40 text-red-300 text-xs font-mono font-bold rounded transition-colors"
+                  >
+                    Force Load (I know what I'm doing)
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Loading screen */}
           {webllm.isSupported && webllm.status === "loading" && chatStore.messages.length === 0 && (
             <div className="h-full flex flex-col items-center justify-center">

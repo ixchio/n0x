@@ -171,9 +171,18 @@ function chunkText(text: string): string[] {
         if (chunk.length > maxTokensApprox * 5) {
             let start = 0;
             while (start < chunk.length) {
-                const end = Math.min(start + (maxTokensApprox * 4), chunk.length);
-                finalChunks.push(chunk.slice(start, end));
-                start += (maxTokensApprox * 4) - 200; // 200 character overlap
+                let end = Math.min(start + (maxTokensApprox * 4), chunk.length);
+
+                // Snap to nearest whitespace to avoid word bisecting
+                if (end < chunk.length) {
+                    const nextSpace = chunk.indexOf(" ", end);
+                    if (nextSpace !== -1 && nextSpace - end < 100) { // Don't snap if space is too far away
+                        end = nextSpace + 1;
+                    }
+                }
+
+                finalChunks.push(chunk.slice(start, end).trim());
+                start = end - 200; // 200 character overlap
             }
         } else if (chunk.trim()) {
             finalChunks.push(chunk);
