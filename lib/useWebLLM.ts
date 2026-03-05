@@ -64,6 +64,20 @@ export const WEBLLM_MODELS = [
         size: "~2GB",
         category: "balanced",
     },
+    {
+        id: "DeepSeek-R1-Distill-Qwen-1.5B-q4f16_1-MLC",
+        label: "R1 Distill Qwen 1.5B",
+        desc: "DeepSeek CoT reasoning",
+        size: "~1.1GB",
+        category: "balanced",
+    },
+    {
+        id: "gemma-2-2b-it-q4f16_1-MLC",
+        label: "Gemma 2 2B",
+        desc: "Google's updated 2B",
+        size: "~1.4GB",
+        category: "balanced",
+    },
 
     // === POWERFUL (2-4GB) ===
     {
@@ -81,6 +95,20 @@ export const WEBLLM_MODELS = [
         category: "powerful",
     },
     {
+        id: "DeepSeek-R1-Distill-Qwen-7B-q4f16_1-MLC",
+        label: "R1 Distill Qwen 7B",
+        desc: "SOTA 7B reasoning",
+        size: "~4.5GB",
+        category: "powerful",
+    },
+    {
+        id: "DeepSeek-R1-Distill-Llama-8B-q4f16_1-MLC",
+        label: "R1 Distill Llama 8B",
+        desc: "SOTA 8B reasoning",
+        size: "~4.8GB",
+        category: "powerful",
+    },
+    {
         id: "Mistral-7B-Instruct-v0.3-q4f16_1-MLC",
         label: "Mistral 7B v0.3",
         desc: "Top quality",
@@ -92,6 +120,20 @@ export const WEBLLM_MODELS = [
         label: "Hermes 2 Pro 8B",
         desc: "Function calling",
         size: "~4.5GB",
+        category: "powerful",
+    },
+    {
+        id: "Llama-3.1-8B-Instruct-q4f16_1-MLC",
+        label: "Llama 3.1 8B",
+        desc: "Meta's flagship 8B",
+        size: "~4.6GB",
+        category: "powerful",
+    },
+    {
+        id: "Qwen2.5-7B-Instruct-q4f16_1-MLC",
+        label: "Qwen 2.5 7B",
+        desc: "Top-tier open 7B",
+        size: "~4.2GB",
         category: "powerful",
     },
 
@@ -115,6 +157,20 @@ export const WEBLLM_MODELS = [
         label: "DeepSeek Coder 1.3B",
         desc: "Fast code gen",
         size: "~800MB",
+        category: "coding",
+    },
+    {
+        id: "Qwen2.5-Math-1.5B-Instruct-q4f16_1-MLC",
+        label: "Qwen Math 1.5B",
+        desc: "Math specialist",
+        size: "~1GB",
+        category: "coding",
+    },
+    {
+        id: "Qwen2.5-Math-7B-Instruct-q4f16_1-MLC",
+        label: "Qwen Math 7B",
+        desc: "Pro math and logic",
+        size: "~4GB",
         category: "coding",
     },
 
