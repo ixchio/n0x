@@ -1,6 +1,10 @@
 <div align="center">
   <img src="https://raw.githubusercontent.com/ixchio/n0x/main/public/icon.png" width="80" alt="n0x logo" style="border-radius:20%" />
 </div>
+<img width="1657" height="923" alt="Screenshot from 2026-03-07 00-26-12" src="https://github.com/user-attachments/assets/ba7d17e8-b26f-4cf7-a072-cf39cfb37ab4" />
+<img width="1657" height="923" alt="Screenshot from 2026-03-07 00-25-55" src="https://github.com/user-attachments/assets/dad81977-dd49-4d48-84b4-fd655825e3c2" />
+<img width="1920" height="913" alt="Screenshot from 2026-03-07 00-24-30" src="https://github.com/user-attachments/assets/2fb8a22e-e96b-4497-8bd2-3cb5ea88a758" />
+<img width="1920" height="913" alt="Screenshot from 2026-03-07 00-24-55" src="https://github.com/user-attachments/assets/99f66f62-b9d6-4374-92e4-3920ba60aaf4" />
 
 <h1 align="center">n0x</h1>
 
