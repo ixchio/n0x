@@ -15,7 +15,8 @@ async function tryPollinations(prompt: string, model: string = "flux"): Promise<
     try {
         const seed = Math.floor(Math.random() * 999999);
         const apiKey = process.env.POLLINATIONS_API_KEY;
-        const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=768&height=768&model=${model}&seed=${seed}&nologo=true&enhance=true`;
+        // Use the new gen.pollinations.ai unified endpoint
+        const url = `https://gen.pollinations.ai/image/${encodeURIComponent(prompt)}?width=768&height=768&model=${model}&seed=${seed}&nologo=true&enhance=true`;
 
         // Pollinations returns the image directly on GET — verify with a quick fetch
         // that follows redirects (the API sometimes 302s before serving the image)
@@ -79,13 +80,7 @@ async function tryAIHorde(prompt: string): Promise<GenResult | null> {
                 trusted_workers: false,
                 slow_workers: true,
                 r2: true, // use R2 CDN for faster image delivery
-                models: [
-                    "SDXL 1.0",
-                    "AlbedoBase XL (SDXL)",
-                    "Fustercluck",
-                    "Deliberate",
-                    "stable_diffusion",
-                ],
+                // Omit models array to accept ANY available worker and significantly reduce queue time
             }),
             signal: AbortSignal.timeout(10000),
         });
@@ -192,7 +187,7 @@ export async function POST(request: NextRequest) {
 
         if (!result) {
             return NextResponse.json(
-                { error: "All image providers are currently unavailable. Try again in a moment." },
+                { error: "Free image providers (Pollinations, AI Horde) are currently offline or overloaded. Please set POLLINATIONS_API_KEY in .env.local for reliable access." },
                 { status: 503 }
             );
         }
