@@ -325,7 +325,7 @@ function ChatPageInner() {
             <div className="h-full flex flex-col items-center justify-center">
               <div className="space-y-6 text-center max-w-md w-full">
                 <h2 className="text-3xl text-white font-bold tracking-tight">N0X</h2>
-                <p className="text-sm text-zinc-400 font-medium mt-2 max-w-xs">
+                <p className="text-sm text-zinc-400 font-medium mt-2 max-w-xs mx-auto">
                   {webllm.status === "unloaded" ? "Select a model to begin. All inference runs locally on your GPU — zero cloud, zero latency." : "Model loaded. Ask me anything — code, analysis, research. Everything stays on your machine."}
                 </p>
 
