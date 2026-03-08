@@ -89,6 +89,10 @@ All weights are quantized (q4f16) for optimal VRAM usage. Default: **Qwen 2.5 1.
 | ⚖️ Balanced | **Qwen 2.5 1.5B** *(default)*, Llama 3.2 1B, Phi-3.5 Mini | 700MB–2GB | 30–40 |
 | 🚀 Powerful | Llama 3.2 3B, Qwen 3B, Mistral 7B, Hermes 2 Pro 8B | 2–4.5GB | 15–25 |
 | 💻 Code | Qwen Coder 1.5B, Qwen Coder 7B, DeepSeek Coder 1.3B | 800MB–4GB | 25–40 |
+<img width="1657" height="923" alt="Screenshot from 2026-03-07 00-26-12" src="https://github.com/user-attachments/assets/ba7d17e8-b26f-4cf7-a072-cf39cfb37ab4" />
+<img width="1657" height="923" alt="Screenshot from 2026-03-07 00-25-55" src="https://github.com/user-attachments/assets/dad81977-dd49-4d48-84b4-fd655825e3c2" />
+<img width="1920" height="913" alt="Screenshot from 2026-03-07 00-24-30" src="https://github.com/user-attachments/assets/2fb8a22e-e96b-4497-8bd2-3cb5ea88a758" />
+<img width="1920" height="913" alt="Screenshot from 2026-03-07 00-24-55" src="https://github.com/user-attachments/assets/99f66f62-b9d6-4374-92e4-3920ba60aaf4" />
 
 ## Quick Start
 
