@@ -377,6 +377,10 @@ function ChatPageInner() {
                   content={msg.content}
                   image={msg.image}
                   onRunCode={(pyodide.isReady && pyEnabled) ? handlePythonRun : undefined}
+                  onBranch={() => {
+                    const newId = chatStore.branchFrom(msg.id);
+                    if (newId) chatStore.switchConversation(newId);
+                  }}
                 />
               ))}
 

@@ -261,10 +261,24 @@ export function useChat() {
 
         // Route: autonomous agent mode
         if (agent.enabled) {
+            let streamBuf = "";
+            // onThoughtToken: empty string = new iteration boundary (reset the bubble)
+            const onThoughtToken = (tok: string) => {
+                if (tok === "") {
+                    // New iteration — clear the live bubble so the next thought starts fresh
+                    streamBuf = "";
+                    setStreamingContent("🤔 Thinking…");
+                } else {
+                    streamBuf += tok;
+                    setStreamingContent(streamBuf);
+                }
+            };
             try {
                 agent.reset();
                 setStreamingContent("🤖 Agent is working…");
-                const finalAnswer = await agent.runLoop(message, buildAgentToolkit(), webllm.generate, persona.systemPrompt);
+                const finalAnswer = await agent.runLoop(
+                    message, buildAgentToolkit(), webllm.generate, persona.systemPrompt, onThoughtToken,
+                );
                 chatStore.addMessage({ id: (Date.now() + 1).toString(), role: "assistant", content: finalAnswer });
                 setStreamingContent("");
                 if (tts.isEnabled) tts.speak(finalAnswer);

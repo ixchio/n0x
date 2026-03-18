@@ -3,72 +3,52 @@
 import { create } from "zustand";
 import * as webllm from "@mlc-ai/web-llm";
 
-// Comprehensive list of WebLLM models - 2024/2025
+// Complete open-source model list: 360MB → 100GB+
+// All models are MLC-compiled and available via Hugging Face / MLC releases.
 export const WEBLLM_MODELS = [
-    // === FAST / SMALL (< 1GB) ===
+    // ── FAST / TINY (< 1GB) \u2014 works on anything ──────────────────────────────
     {
         id: "SmolLM2-360M-Instruct-q4f16_1-MLC",
         label: "SmolLM2 360M",
-        desc: "Ultra fast, lightweight",
-        size: "~250MB",
+        desc: "Ultra-fast, 360MB — any device",
+        size: "~360MB",
         category: "fast",
     },
     {
         id: "Qwen2.5-0.5B-Instruct-q4f16_1-MLC",
         label: "Qwen 2.5 0.5B",
-        desc: "Tiny but capable",
-        size: "~350MB",
+        desc: "Tiny & surprisingly capable",
+        size: "~420MB",
         category: "fast",
     },
     {
         id: "TinyLlama-1.1B-Chat-v1.0-q4f16_1-MLC",
         label: "TinyLlama 1.1B",
-        desc: "Fast general chat",
+        desc: "Blazing fast chat",
         size: "~600MB",
         category: "fast",
     },
+    {
+        id: "SmolLM2-1.7B-Instruct-q4f16_1-MLC",
+        label: "SmolLM2 1.7B",
+        desc: "Punches above its weight",
+        size: "~900MB",
+        category: "fast",
+    },
 
-    // === BALANCED (1-2GB) ===
+    // ── BALANCED (1\u20133GB) \u2014 1\u20132GB VRAM ────────────────────────────────────────
     {
         id: "Llama-3.2-1B-Instruct-q4f16_1-MLC",
         label: "Llama 3.2 1B",
-        desc: "Meta's latest small",
+        desc: "Meta's small — excellent",
         size: "~700MB",
         category: "balanced",
     },
     {
         id: "Qwen2.5-1.5B-Instruct-q4f16_1-MLC",
         label: "Qwen 2.5 1.5B",
-        desc: "Great for coding",
+        desc: "Great coding + reasoning",
         size: "~1GB",
-        category: "balanced",
-    },
-    {
-        id: "gemma-2b-it-q4f16_1-MLC",
-        label: "Gemma 2B",
-        desc: "Google's efficient",
-        size: "~1.2GB",
-        category: "balanced",
-    },
-    {
-        id: "Phi-3-mini-4k-instruct-q4f16_1-MLC",
-        label: "Phi-3 Mini 4K",
-        desc: "Microsoft reasoning",
-        size: "~2GB",
-        category: "balanced",
-    },
-    {
-        id: "Phi-3.5-mini-instruct-q4f16_1-MLC",
-        label: "Phi-3.5 Mini",
-        desc: "Smarter reasoning",
-        size: "~2GB",
-        category: "balanced",
-    },
-    {
-        id: "DeepSeek-R1-Distill-Qwen-1.5B-q4f16_1-MLC",
-        label: "R1 Distill Qwen 1.5B",
-        desc: "DeepSeek CoT reasoning",
-        size: "~1.1GB",
         category: "balanced",
     },
     {
@@ -78,15 +58,29 @@ export const WEBLLM_MODELS = [
         size: "~1.4GB",
         category: "balanced",
     },
-
-    // === POWERFUL (2-4GB) ===
+    {
+        id: "Phi-3-mini-4k-instruct-q4f16_1-MLC",
+        label: "Phi-3 Mini",
+        desc: "Microsoft — strong reasoning",
+        size: "~2GB",
+        category: "balanced",
+    },
+    {
+        id: "Phi-3.5-mini-instruct-q4f16_1-MLC",
+        label: "Phi-3.5 Mini",
+        desc: "Smarter than Phi-3",
+        size: "~2.2GB",
+        category: "balanced",
+    },
     {
         id: "Llama-3.2-3B-Instruct-q4f16_1-MLC",
         label: "Llama 3.2 3B",
         desc: "Strong all-rounder",
         size: "~2GB",
-        category: "powerful",
+        category: "balanced",
     },
+
+    // ── POWERFUL (4\u201310GB) \u2014 4\u201310GB VRAM ──────────────────────────────────────
     {
         id: "Qwen2.5-3B-Instruct-q4f16_1-MLC",
         label: "Qwen 2.5 3B",
@@ -95,31 +89,10 @@ export const WEBLLM_MODELS = [
         category: "powerful",
     },
     {
-        id: "DeepSeek-R1-Distill-Qwen-7B-q4f16_1-MLC",
-        label: "R1 Distill Qwen 7B",
-        desc: "SOTA 7B reasoning",
-        size: "~4.5GB",
-        category: "powerful",
-    },
-    {
-        id: "DeepSeek-R1-Distill-Llama-8B-q4f16_1-MLC",
-        label: "R1 Distill Llama 8B",
-        desc: "SOTA 8B reasoning",
-        size: "~4.8GB",
-        category: "powerful",
-    },
-    {
         id: "Mistral-7B-Instruct-v0.3-q4f16_1-MLC",
         label: "Mistral 7B v0.3",
-        desc: "Top quality",
+        desc: "Best 7B instruction model",
         size: "~4GB",
-        category: "powerful",
-    },
-    {
-        id: "Hermes-2-Pro-Llama-3-8B-q4f16_1-MLC",
-        label: "Hermes 2 Pro 8B",
-        desc: "Function calling",
-        size: "~4.5GB",
         category: "powerful",
     },
     {
@@ -136,27 +109,120 @@ export const WEBLLM_MODELS = [
         size: "~4.2GB",
         category: "powerful",
     },
+    {
+        id: "gemma-2-9b-it-q4f16_1-MLC",
+        label: "Gemma 2 9B",
+        desc: "Google's best 9B",
+        size: "~5.5GB",
+        category: "powerful",
+    },
+    {
+        id: "Hermes-2-Pro-Llama-3-8B-q4f16_1-MLC",
+        label: "Hermes 2 Pro 8B",
+        desc: "Tool calling specialist",
+        size: "~4.5GB",
+        category: "powerful",
+    },
+    {
+        id: "Mistral-Nemo-Instruct-2407-q4f16_1-MLC",
+        label: "Mistral Nemo 12B",
+        desc: "Strong multilingual 12B",
+        size: "~8GB",
+        category: "powerful",
+    },
+    {
+        id: "Qwen2.5-14B-Instruct-q4f16_1-MLC",
+        label: "Qwen 2.5 14B",
+        desc: "Near GPT-4 at 14B",
+        size: "~9GB",
+        category: "powerful",
+    },
+    {
+        id: "Qwen2.5-32B-Instruct-q4f16_1-MLC",
+        label: "Qwen 2.5 32B",
+        desc: "Flagship 32B — very capable",
+        size: "~20GB",
+        category: "powerful",
+    },
+    {
+        id: "Llama-3.3-70B-Instruct-q3f16_1-MLC",
+        label: "Llama 3.3 70B",
+        desc: "Meta's latest flagship — 70B",
+        size: "~30GB",
+        category: "powerful",
+    },
 
-    // === CODING FOCUSED ===
+    // ── REASONING — R1 distills (CoT trained) ─────────────────────────────────
+    {
+        id: "DeepSeek-R1-Distill-Qwen-1.5B-q4f16_1-MLC",
+        label: "R1 Qwen 1.5B",
+        desc: "CoT reasoning, tiny",
+        size: "~1.1GB",
+        category: "reasoning",
+    },
+    {
+        id: "DeepSeek-R1-Distill-Qwen-7B-q4f16_1-MLC",
+        label: "R1 Qwen 7B",
+        desc: "SOTA 7B reasoning",
+        size: "~4.5GB",
+        category: "reasoning",
+    },
+    {
+        id: "DeepSeek-R1-Distill-Llama-8B-q4f16_1-MLC",
+        label: "R1 Llama 8B",
+        desc: "SOTA 8B reasoning",
+        size: "~4.8GB",
+        category: "reasoning",
+    },
+    {
+        id: "DeepSeek-R1-Distill-Qwen-14B-q4f16_1-MLC",
+        label: "R1 Qwen 14B",
+        desc: "Elite 14B reasoning",
+        size: "~9GB",
+        category: "reasoning",
+    },
+    {
+        id: "DeepSeek-R1-Distill-Qwen-32B-q4f16_1-MLC",
+        label: "R1 Qwen 32B",
+        desc: "Near o1-level at 32B",
+        size: "~20GB",
+        category: "reasoning",
+    },
+    {
+        id: "DeepSeek-R1-Distill-Llama-70B-q3f16_1-MLC",
+        label: "R1 Llama 70B",
+        desc: "Best open reasoning, 70B",
+        size: "~30GB",
+        category: "reasoning",
+    },
+
+    // ── CODING ────────────────────────────────────────────────────────────────
     {
         id: "Qwen2.5-Coder-1.5B-Instruct-q4f16_1-MLC",
         label: "Qwen Coder 1.5B",
-        desc: "Code specialist",
+        desc: "Code — ultra fast",
         size: "~1GB",
-        category: "coding",
-    },
-    {
-        id: "Qwen2.5-Coder-7B-Instruct-q4f16_1-MLC",
-        label: "Qwen Coder 7B",
-        desc: "Pro coder",
-        size: "~4GB",
         category: "coding",
     },
     {
         id: "DeepSeek-Coder-1.3B-Instruct-q4f16_1-MLC",
         label: "DeepSeek Coder 1.3B",
-        desc: "Fast code gen",
+        desc: "Fast code generation",
         size: "~800MB",
+        category: "coding",
+    },
+    {
+        id: "Qwen2.5-Coder-7B-Instruct-q4f16_1-MLC",
+        label: "Qwen Coder 7B",
+        desc: "Pro code assistant",
+        size: "~4GB",
+        category: "coding",
+    },
+    {
+        id: "Qwen2.5-Coder-32B-Instruct-q4f16_1-MLC",
+        label: "Qwen Coder 32B",
+        desc: "Top open-source coder",
+        size: "~20GB",
         category: "coding",
     },
     {
@@ -169,12 +235,12 @@ export const WEBLLM_MODELS = [
     {
         id: "Qwen2.5-Math-7B-Instruct-q4f16_1-MLC",
         label: "Qwen Math 7B",
-        desc: "Pro math and logic",
+        desc: "Pro math & logic",
         size: "~4GB",
         category: "coding",
     },
 
-    // === UNCENSORED ===
+    // ── UNCENSORED ────────────────────────────────────────────────────────────
     {
         id: "WizardCoder-15B-V1.0-q4f16_1-MLC",
         label: "WizardCoder 15B",
@@ -184,13 +250,14 @@ export const WEBLLM_MODELS = [
     },
 ];
 
-// Group models by category
+// Group models by category for the model selector UI
 export const MODEL_CATEGORIES = {
-    fast: { label: "⚡ Fast (< 1GB)", desc: "Quick responses, lower quality" },
-    balanced: { label: "⚖️ Balanced (1-2GB)", desc: "Good speed and quality" },
-    powerful: { label: "🚀 Powerful (2-4GB+)", desc: "Best quality, slower" },
-    coding: { label: "💻 Coding", desc: "Optimized for code" },
-    uncensored: { label: "🔓 Uncensored", desc: "No filters" },
+    fast:      { label: "⚡ Tiny (< 1GB)",       desc: "Any device, instant responses" },
+    balanced:  { label: "⚖️ Balanced (1–3GB)",   desc: "Good speed & quality" },
+    powerful:  { label: "🚀 Powerful (4–30GB+)",  desc: "High quality — needs VRAM" },
+    reasoning: { label: "🧠 Reasoning (R1 CoT)",  desc: "Chain-of-thought specialist" },
+    coding:    { label: "💻 Coding",               desc: "Optimised for code & math" },
+    uncensored:{ label: "🔓 Uncensored",           desc: "No safety filters" },
 };
 
 export type WebLLMStatus = "unloaded" | "loading" | "ready" | "generating" | "error";

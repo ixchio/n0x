@@ -1,17 +1,16 @@
 /// <reference lib="webworker" />
 
-// We need to import the dependencies dynamically because Next.js webpack
-// handles worker bundling slightly differently when using external pure-ESM or WASM modules.
-
 let voy: any = null;
 let embedder: any = null;
 let VoyClass: any = null;
 let pipelineFn: any = null;
 let pdfjsLib: any = null;
 const RESOURCE_NAME = "Xenova/all-MiniLM-L6-v2";
-let chunkStore = new Map<string, string>();
 
-const MAX_DIRECT_INJECT_SIZE = 8000; // ~8KB = inject full text directly
+// chunkId → { text, embedding }
+const chunkStore = new Map<string, { text: string; embedding: number[] }>();
+
+const MAX_DIRECT_INJECT_SIZE = 8000;
 
 // --- IndexedDB Caching ---
 const DB_NAME = "n0x_rag_cache";
@@ -77,6 +76,82 @@ async function loadDeps() {
     }
 }
 
+// ── DOCX Extraction (DecompressionStream + DOMParser — zero extra deps) ──
+
+async function extractDocx(file: File): Promise<string> {
+    try {
+        const arrayBuffer = await file.arrayBuffer();
+        const bytes = new Uint8Array(arrayBuffer);
+
+        // ZIP signature check
+        if (bytes[0] !== 0x50 || bytes[1] !== 0x4B) throw new Error("Not a valid ZIP/DOCX");
+
+        // Parse the ZIP central directory to find word/document.xml
+        const findFile = (name: string): Uint8Array | null => {
+            let offset = 0;
+            while (offset < bytes.length - 30) {
+                // Local file header signature: 0x04034b50
+                if (bytes[offset] !== 0x50 || bytes[offset+1] !== 0x4B ||
+                    bytes[offset+2] !== 0x03 || bytes[offset+3] !== 0x04) break;
+                const compression = bytes[offset+8] | (bytes[offset+9] << 8);
+                const compressedSize = bytes[offset+18] | (bytes[offset+19] << 8) | (bytes[offset+20] << 16) | (bytes[offset+21] << 24);
+                const fileNameLen = bytes[offset+26] | (bytes[offset+27] << 8);
+                const extraLen   = bytes[offset+28] | (bytes[offset+29] << 8);
+                const fileNameBytes = bytes.slice(offset+30, offset+30+fileNameLen);
+                const fileName = new TextDecoder().decode(fileNameBytes);
+                const dataOffset = offset + 30 + fileNameLen + extraLen;
+                const compressedData = bytes.slice(dataOffset, dataOffset + compressedSize);
+
+                if (fileName === name) {
+                    if (compression === 0) return compressedData; // stored
+                    if (compression === 8) {
+                        // deflate — decompress synchronously via a tiny inline approach
+                        return compressedData;
+                    }
+                }
+                offset = dataOffset + compressedSize;
+            }
+            return null;
+        };
+
+        // We'll use DecompressionStream for deflate
+        const compressed = findFile("word/document.xml");
+        if (!compressed) return `[DOCX: "${file.name}" — could not locate word/document.xml]`;
+
+        // Build deflate stream and decompress
+        const ds = new DecompressionStream("deflate-raw");
+        const writer = ds.writable.getWriter();
+        const reader = ds.readable.getReader();
+        writer.write(compressed.buffer as ArrayBuffer);
+        writer.close();
+
+        const chunks: Uint8Array[] = [];
+        let done = false;
+        while (!done) {
+            const { value, done: d } = await reader.read();
+            if (value) chunks.push(value);
+            done = d;
+        }
+        const total = chunks.reduce((s, c) => s + c.length, 0);
+        const merged = new Uint8Array(total);
+        let pos = 0;
+        for (const c of chunks) { merged.set(c, pos); pos += c.length; }
+        const xml = new TextDecoder().decode(merged);
+
+        // Strip XML tags, decode common entities
+        const text = xml
+            .replace(/<w:p[ >]/g, "\n<w:p ") // paragraph → newline
+            .replace(/<[^>]+>/g, "")
+            .replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+            .replace(/&apos;/g, "'").replace(/&quot;/g, '"')
+            .replace(/\s+/g, " ")
+            .trim();
+        return text || `[DOCX: "${file.name}" — extracted but empty]`;
+    } catch (e: any) {
+        return `[DOCX parse error for "${file.name}": ${e.message}]`;
+    }
+}
+
 // ── Text extraction ──
 
 async function extractText(file: File): Promise<string> {
@@ -91,15 +166,28 @@ async function extractText(file: File): Promise<string> {
         for (let i = 1; i <= pdf.numPages; i++) {
             const page = await pdf.getPage(i);
             const content = await page.getTextContent();
-            text += content.items.map((item: any) => item.str).join(" ") + "\n";
+            // Preserve reading order — items with large x-gap get a space, y-gap get newline
+            const items = content.items as any[];
+            let line = "";
+            for (let j = 0; j < items.length; j++) {
+                const item = items[j];
+                const str = item.str || "";
+                const hasEOL = item.hasEOL;
+                line += str;
+                if (hasEOL || j === items.length - 1) {
+                    text += line.trim() + "\n";
+                    line = "";
+                } else if (item.width > 0) {
+                    line += " ";
+                }
+            }
         }
         return text;
     }
 
-    // DOCX (ZIP XML extraction)
+    // DOCX
     if (name.endsWith(".docx")) {
-        // Can't parse DOCX natively without JSZip — return helpful message
-        return `[This is a .docx file: "${file.name}". DOCX parsing requires JSZip which is not loaded. Please convert to PDF or TXT for full text extraction.]`;
+        return await extractDocx(file);
     }
 
     // CSV
@@ -107,10 +195,8 @@ async function extractText(file: File): Promise<string> {
         const text = await file.text();
         const lines = text.split("\n").filter(l => l.trim());
         if (lines.length === 0) return text;
-
         const headers = lines[0].split(",").map(h => h.trim().replace(/"/g, ""));
-        const rows = lines.slice(1, 51); // Cap at 50 rows for context
-
+        const rows = lines.slice(1, 51);
         let formatted = `CSV Data (${lines.length - 1} rows):\nColumns: ${headers.join(", ")}\n\n`;
         for (const row of rows) {
             const cells = row.split(",").map(c => c.trim().replace(/"/g, ""));
@@ -135,61 +221,110 @@ async function extractText(file: File): Promise<string> {
     return await file.text();
 }
 
-// ── Semantic Chunking ──
-function chunkText(text: string): string[] {
-    const chunks: string[] = [];
-    const maxTokensApprox = 400; // ~1600 characters max per chunk for better embedding coherence
-    const minTokensApprox = 50;  // Don't create chunks smaller than ~200 chars if we can avoid it
+// ── Sentence-boundary-aware chunking with 50% overlap ──
+// Strategy: split into sentences, group into windows, slide by half-window.
+// This dramatically outperforms fixed-size character slicing for retrieval accuracy.
 
-    // 1. Try to split by Markdown Headers (#)
-    const headerSplit = text.split(/\n#+\s+/);
+const TARGET_CHUNK_SENTENCES = 8;   // ~200–400 words per chunk
+const OVERLAP_SENTENCES       = 4;   // 50% overlap
+const MAX_CHUNK_CHARS         = 2000; // hard cap — prevents embedding OOM
+const MIN_CHUNK_CHARS         = 80;   // skip near-empty chunks
 
-    for (const section of headerSplit) {
-        if (section.length < maxTokensApprox * 4) {
-            chunks.push(section);
-            continue;
+function splitIntoSentences(text: string): string[] {
+    // Split on sentence-ending punctuation followed by whitespace or end
+    // Preserves the delimiter by using a lookahead-like approach
+    const raw = text.split(/(?<=[.!?])\s+/);
+    // Further split on newlines (markdown headers, list items)
+    const sentences: string[] = [];
+    for (const s of raw) {
+        const lines = s.split(/\n+/);
+        for (const l of lines) {
+            const t = l.trim();
+            if (t) sentences.push(t);
         }
-
-        // 2. If section is too big, split by paragraphs
-        const paragraphSplit = section.split(/\n\n+/);
-        let currentChunk = "";
-
-        for (const para of paragraphSplit) {
-            if (currentChunk.length + para.length > maxTokensApprox * 4 && currentChunk.length > minTokensApprox * 4) {
-                chunks.push(currentChunk);
-                currentChunk = para;
-            } else {
-                currentChunk += (currentChunk ? "\n\n" : "") + para;
-            }
-        }
-        if (currentChunk) chunks.push(currentChunk);
     }
+    return sentences;
+}
 
-    // 3. Fallback: if any chunk is STILL too big, slice it brutally
+function chunkText(text: string): string[] {
+    const sentences = splitIntoSentences(text);
+    if (sentences.length === 0) return [];
+
     const finalChunks: string[] = [];
-    for (const chunk of chunks) {
-        if (chunk.length > maxTokensApprox * 5) {
-            let start = 0;
-            while (start < chunk.length) {
-                let end = Math.min(start + (maxTokensApprox * 4), chunk.length);
+    let i = 0;
 
-                // Snap to nearest whitespace to avoid word bisecting
-                if (end < chunk.length) {
-                    const nextSpace = chunk.indexOf(" ", end);
-                    if (nextSpace !== -1 && nextSpace - end < 100) { // Don't snap if space is too far away
-                        end = nextSpace + 1;
-                    }
-                }
-
-                finalChunks.push(chunk.slice(start, end).trim());
-                start = end - 200; // 200 character overlap
-            }
-        } else if (chunk.trim()) {
+    while (i < sentences.length) {
+        // Build a window of TARGET_CHUNK_SENTENCES sentences
+        let chunk = "";
+        let j = i;
+        while (j < sentences.length && j < i + TARGET_CHUNK_SENTENCES) {
+            const candidate = chunk ? chunk + " " + sentences[j] : sentences[j];
+            if (candidate.length > MAX_CHUNK_CHARS && chunk) break;
+            chunk = candidate;
+            j++;
+        }
+        // If a single sentence exceeds the hard cap, slice it brutally
+        if (!chunk && j < sentences.length) {
+            chunk = sentences[j].slice(0, MAX_CHUNK_CHARS);
+            j++;
+        }
+        if (chunk.length >= MIN_CHUNK_CHARS) {
             finalChunks.push(chunk);
         }
+        // Advance by half the window for 50% overlap
+        i = Math.max(i + Math.max(1, Math.floor((j - i) * 0.5)), i + 1);
     }
-
     return finalChunks;
+}
+
+// ── Cosine similarity between two embedding vectors ──
+function cosine(a: number[], b: number[]): number {
+    let dot = 0, na = 0, nb = 0;
+    for (let i = 0; i < a.length; i++) { dot += a[i] * b[i]; na += a[i] * a[i]; nb += b[i] * b[i]; }
+    return na === 0 || nb === 0 ? 0 : dot / (Math.sqrt(na) * Math.sqrt(nb));
+}
+
+// ── MMR re-ranking: Maximum Marginal Relevance ──
+// Picks `k` chunks that are most relevant to the query AND most diverse from each other.
+// lambda=0.6 means 60% relevance, 40% diversity.
+function mmrRerank(
+    queryEmbedding: number[],
+    candidateIds: string[],
+    k: number,
+    lambda = 0.6,
+): string[] {
+    if (candidateIds.length <= k) return candidateIds;
+
+    const selected: string[] = [];
+    const remaining = [...candidateIds];
+
+    while (selected.length < k && remaining.length > 0) {
+        let bestId = "";
+        let bestScore = -Infinity;
+
+        for (const id of remaining) {
+            const entry = chunkStore.get(id);
+            if (!entry) continue;
+            const relevance = cosine(queryEmbedding, entry.embedding);
+
+            // Max similarity to already-selected chunks
+            let maxSim = 0;
+            for (const selId of selected) {
+                const selEntry = chunkStore.get(selId);
+                if (!selEntry) continue;
+                const sim = cosine(entry.embedding, selEntry.embedding);
+                if (sim > maxSim) maxSim = sim;
+            }
+
+            const score = lambda * relevance - (1 - lambda) * maxSim;
+            if (score > bestScore) { bestScore = score; bestId = id; }
+        }
+
+        if (!bestId) break;
+        selected.push(bestId);
+        remaining.splice(remaining.indexOf(bestId), 1);
+    }
+    return selected;
 }
 
 // ── Message Handler ──
@@ -233,7 +368,12 @@ self.addEventListener("message", async (e: MessageEvent) => {
                 if (!voy) voy = VoyClass.deserialize(cached.serializedVoy);
                 // Additive merge — don't overwrite chunks from previously loaded files
                 for (const [k, v] of cached.chunks) {
-                    chunkStore.set(k, v);
+                    // v may be the old string format (from pre-upgrade cache) or the new {text, embedding} shape
+                    if (typeof v === "string") {
+                        chunkStore.set(k, { text: v, embedding: [] });
+                    } else {
+                        chunkStore.set(k, v as { text: string; embedding: number[] });
+                    }
                 }
 
                 docMetadata.chunks = cached.chunks.length;
@@ -260,7 +400,7 @@ self.addEventListener("message", async (e: MessageEvent) => {
 
             for (let i = 0; i < chunks.length; i++) {
                 const output = await embedder(chunks[i], { pooling: "mean", normalize: true });
-                const embedding = Array.from(output.data);
+                const embedding = Array.from(output.data) as number[];
 
                 voy.add({
                     embeddings: [{
@@ -271,18 +411,20 @@ self.addEventListener("message", async (e: MessageEvent) => {
                     }]
                 });
 
-                chunkStore.set(`${fileHash}-${i}`, chunks[i]);
+                // Store text + embedding for MMR
+                chunkStore.set(`${fileHash}-${i}`, { text: chunks[i], embedding });
 
                 if (i % 5 === 4) {
                     self.postMessage({ id, status: `Embedding chunk ${i + 1}/${chunks.length}...` });
                 }
             }
 
-            // Save to Cache
+            // Save to Cache (store text+embedding pairs)
             try {
                 self.postMessage({ id, status: `Caching vectors...` });
                 const serialized = voy.serialize();
-                await saveVectorsToCache(fileHash, serialized, Array.from(chunkStore.entries()));
+                const chunkEntries: [string, { text: string; embedding: number[] }][] = Array.from(chunkStore.entries());
+                await saveVectorsToCache(fileHash, serialized, chunkEntries as any);
             } catch (e) {
                 console.warn("Failed to serialize voy index", e);
             }
@@ -302,14 +444,18 @@ self.addEventListener("message", async (e: MessageEvent) => {
             }
 
             const output = await embedder(query, { pooling: "mean", normalize: true });
-            const queryEmbedding = Array.from(output.data);
-            const results: any = voy.search(queryEmbedding as any, limit);
-            const hits = results.hits || results.neighbors || results || [];
+            const queryEmbedding = Array.from(output.data) as number[];
 
-            // Ensure hits is an array before mapping
+            // Fetch a larger candidate pool (8× limit) then MMR-rerank down to `limit`
+            const candidateCount = Math.min(Math.max(limit * 3, 8), chunkStore.size);
+            const rawResults: any = voy.search(queryEmbedding as any, candidateCount);
+            const hits = rawResults.hits || rawResults.neighbors || rawResults || [];
             const cleanHits = Array.isArray(hits) ? hits : [];
+            const candidateIds: string[] = cleanHits.map((h: any) => h.id).filter((id: string) => chunkStore.has(id));
 
-            const chunks = cleanHits.map((hit: any) => chunkStore.get(hit.id) || "");
+            // MMR reranking
+            const rerankedIds = mmrRerank(queryEmbedding, candidateIds, limit);
+            const chunks = rerankedIds.map(cid => chunkStore.get(cid)?.text || "").filter(Boolean);
             self.postMessage({ id, result: chunks, done: true });
         }
         else if (action === "CLEAR") {

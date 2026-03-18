@@ -172,6 +172,36 @@ export function useChatStore() {
 
     const switchConversation = useCallback((id: string) => setActiveId(id), [setActiveId]);
 
+    /**
+     * Branch: creates a new conversation seeded with all messages up to and
+     * including the message identified by `messageId`, then switches to it.
+     * Returns the new conversation ID.
+     */
+    const branchFrom = useCallback((messageId: string): string => {
+        const id = activeRef.current;
+        const sourceConv = conversations.find(c => c.id === id);
+        if (!sourceConv) return "";
+
+        const cutIdx = sourceConv.messages.findIndex(m => m.id === messageId);
+        if (cutIdx === -1) return "";
+
+        const slicedMessages = sourceConv.messages.slice(0, cutIdx + 1);
+        const newId = `conv_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+        const firstUserMsg = slicedMessages.find(m => m.role === "user");
+        const branchConv: Conversation = {
+            id: newId,
+            title: `Branch: ${firstUserMsg ? titleFrom(firstUserMsg.content) : "conversation"}`,
+            messages: slicedMessages.map(m => ({ ...m })),
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+        };
+
+        setConversations(prev => [branchConv, ...prev]);
+        persist(branchConv);
+        setActiveId(newId);
+        return newId;
+    }, [conversations, persist, setActiveId]);
+
     const deleteConversation = useCallback(async (id: string) => {
         let db: IDBDatabase | null = null;
         try {
@@ -191,6 +221,6 @@ export function useChatStore() {
         conversations, activeId, messages, isLoaded,
         activeConversation: active,
         addMessage, updateMessage,
-        newConversation, switchConversation, deleteConversation,
+        newConversation, switchConversation, deleteConversation, branchFrom,
     };
 }

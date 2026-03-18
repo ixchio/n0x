@@ -44,6 +44,7 @@ interface AgentState {
         tools: AgentToolkit,
         generate: (msgs: { role: string; content: string }[], onToken?: (t: string) => void) => Promise<string>,
         systemPrompt: string,
+        onThoughtToken?: (token: string) => void,
     ) => Promise<string>;
 }
 
@@ -333,7 +334,7 @@ export const useAgent = create<AgentState>((set, get) => ({
         set({ status: "done" });
     },
 
-    runLoop: async (query, tools, generate, systemPrompt) => {
+    runLoop: async (query, tools, generate, systemPrompt, onThoughtToken) => {
         // Cancel any existing run
         if (activeAbort) activeAbort.abort();
         activeAbort = new AbortController();
@@ -384,10 +385,14 @@ export const useAgent = create<AgentState>((set, get) => ({
             // Budget context before each LLM call using the model's actual context window
             const budgeted = budgetContext(msgs, contextCharsLimit);
 
-            // Generate LLM response
+            // Generate LLM response — stream tokens live if callback provided
             let llmOutput = "";
+            // Signal the start of a new thought iteration by emitting empty string
+            onThoughtToken?.("");
             try {
-                llmOutput = await generate(budgeted, undefined);
+                llmOutput = await generate(budgeted, onThoughtToken ? (tok) => {
+                    onThoughtToken(tok);
+                } : undefined);
             } catch (e: any) {
                 if (signal.aborted) break;
                 addStep({ type: "error", content: `LLM generation failed: ${e.message}` });

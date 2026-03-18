@@ -4,7 +4,7 @@ import React, { useState, useRef } from "react";
 import ReactMarkdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
-import { Copy, Check, Play, Loader2, Eye, EyeOff, ZoomIn, Download, Bot, Terminal, Brain, ChevronDown, ChevronRight } from "lucide-react";
+import { Copy, Check, Play, Loader2, Eye, EyeOff, ZoomIn, Download, Bot, Terminal, Brain, ChevronDown, ChevronRight, GitBranch } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface MessageBubbleProps {
@@ -12,6 +12,7 @@ interface MessageBubbleProps {
     content: string;
     image?: string;
     onRunCode?: (code: string) => Promise<{ output: string; error: string | null; duration: number }>;
+    onBranch?: () => void;
 }
 
 const PY_BLOCKLIST = [
@@ -208,7 +209,7 @@ const CodeBlock = ({ children, className, onRunCode, codeResults, runningCode, h
     );
 };
 
-export const MessageBubble = React.memo(function MessageBubble({ role, content, image, onRunCode }: MessageBubbleProps) {
+export const MessageBubble = React.memo(function MessageBubble({ role, content, image, onRunCode, onBranch }: MessageBubbleProps) {
     const [runningCode, setRunningCode] = useState<string | null>(null);
     const [codeResults, setCodeResults] = useState<Record<string, { output: string; error: string | null; duration: number }>>({});
     const [imageZoomed, setImageZoomed] = useState(false);
@@ -241,9 +242,20 @@ export const MessageBubble = React.memo(function MessageBubble({ role, content, 
 
     if (role === "user") {
         return (
-            <div className="flex justify-end animate-in fade-in slide-in-from-bottom-2 duration-300">
-                <div className="max-w-[75%] bg-zinc-800 text-white px-5 py-3.5 rounded-2xl rounded-tr-sm text-[15px] shadow-sm leading-relaxed">
-                    <div className="whitespace-pre-wrap">{content}</div>
+            <div className="flex justify-end animate-in fade-in slide-in-from-bottom-2 duration-300 group">
+                <div className="relative max-w-[75%]">
+                    <div className="bg-zinc-800 text-white px-5 py-3.5 rounded-2xl rounded-tr-sm text-[15px] shadow-sm leading-relaxed">
+                        <div className="whitespace-pre-wrap">{content}</div>
+                    </div>
+                    {onBranch && (
+                        <button
+                            onClick={onBranch}
+                            title="Branch conversation from here"
+                            className="absolute -left-8 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-lg text-zinc-500 hover:text-white hover:bg-zinc-800"
+                        >
+                            <GitBranch className="w-3.5 h-3.5" />
+                        </button>
+                    )}
                 </div>
             </div>
         );
@@ -255,7 +267,16 @@ export const MessageBubble = React.memo(function MessageBubble({ role, content, 
                 <Bot className="w-5 h-5" />
             </div>
 
-            <div className="flex-1 min-w-0 max-w-4xl space-y-4 pt-1.5">
+            <div className="flex-1 min-w-0 max-w-4xl space-y-4 pt-1.5 relative">
+                {onBranch && (
+                    <button
+                        onClick={onBranch}
+                        title="Branch conversation from here"
+                        className="absolute -left-12 top-1 opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-lg text-zinc-500 hover:text-white hover:bg-zinc-800"
+                    >
+                        <GitBranch className="w-3.5 h-3.5" />
+                    </button>
+                )}
                 {image && (
                     <div className="relative inline-block">
                         <div
