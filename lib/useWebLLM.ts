@@ -228,6 +228,13 @@ let engine: webllm.MLCEngine | null = null;
 let abortController: AbortController | null = null;
 let isLoadingModel = false;
 
+/**
+ * The context window budget in characters for the currently loaded model.
+ * Exported so useAgent can read it without a circular dependency or window pollution.
+ * Defaults to 12 000 chars (~3 000 tokens) until a model is loaded.
+ */
+export let contextCharsLimit = 12_000;
+
 export const useWebLLM = create<WebLLMState>((set, get) => ({
     status: "unloaded",
     loadProgress: 0,
@@ -301,8 +308,8 @@ export const useWebLLM = create<WebLLMState>((set, get) => ({
 
             // Extract context window size dynamically for agent budgeting
             const windowSize = (engine.chat as any).config?.context_window_size || 4096;
-            // set dynamic window global for useAgent to consume without cyclical deps
-            (window as any)._n0x_context_chars = Math.floor(windowSize * 4 * 0.85);
+            // Update the exported module variable so useAgent can read it directly
+            contextCharsLimit = Math.floor(windowSize * 4 * 0.85);
 
             set({ loadedModel: modelId, loadingModel: null, status: "ready" });
         } catch (e: any) {

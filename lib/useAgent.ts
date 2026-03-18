@@ -1,6 +1,7 @@
 "use client";
 
 import { create } from "zustand";
+import { contextCharsLimit } from "@/lib/useWebLLM";
 
 // ─── ReAct Agent Loop v2 ──────────────────────────────────────────────
 // The first fully in-browser autonomous agent.
@@ -380,9 +381,8 @@ export const useAgent = create<AgentState>((set, get) => ({
             set({ currentIteration: i + 1, status: "thinking" });
             updateElapsed();
 
-            // Budget context before each LLM call (85% of standard 4K window if undefined, otherwise dynamic based on webllm injected logic elsewhere)
-            const webLLMState = (window as any)._n0x_context_chars || 12000;
-            const budgeted = budgetContext(msgs, webLLMState);
+            // Budget context before each LLM call using the model's actual context window
+            const budgeted = budgetContext(msgs, contextCharsLimit);
 
             // Generate LLM response
             let llmOutput = "";
