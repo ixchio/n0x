@@ -347,7 +347,7 @@ export function useChat(providerCtx?: {
             let full = "";
             tokenCounter = 0;
             const generate = getGenerateFn();
-            await generate(msgs, (tok) => {
+            await generate(msgs, (tok: string) => {
                 full += tok;
                 setStreamingContent(full);
                 tokenCounter++;
