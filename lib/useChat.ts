@@ -11,6 +11,7 @@ import { useChatStore } from "@/lib/useChatStore";
 import { useSystemPrompt } from "@/lib/useSystemPrompt";
 import { tick as keySoundTick } from "@/lib/useKeySound";
 import { useAgent, AgentToolkit } from "@/lib/useAgent";
+import { useWebContainer } from "@/lib/useWebContainer";
 
 const CHARS_PER_TOKEN = 4;
 function estimateTokens(text: string): number {
@@ -30,7 +31,11 @@ const IMG_PATTERNS = [
     /^\/image\s+/i,
 ];
 
-export function useChat() {
+export function useChat(providerCtx?: { 
+    provider: "browser" | "ollama" | "cloud", 
+    ollama: any, 
+    cloudAI: any 
+}) {
     const [input, setInput] = useState("");
     const [streamingContent, setStreamingContent] = useState("");
     const [deepSearchEnabled, setDeepSearchEnabled] = useState(false);
@@ -42,14 +47,31 @@ export function useChat() {
     const deepSearch = useDeepSearch();
     const memory = useMemory();
     const pyodide = usePyodide();
+    const webContainer = useWebContainer();
     const tts = useTTS();
     const rag = useRAG();
     const chatStore = useChatStore();
     const persona = useSystemPrompt();
     const agent = useAgent();
 
-    const isStreaming = webllm.status === "generating" || deepSearch.isActive || generatingImage || agent.status === "thinking" || agent.status === "acting";
+    // Determine current provider status for UI
+    let activeProviderReady = false;
+    if (providerCtx?.provider === "ollama") activeProviderReady = providerCtx.ollama.isSupported;
+    else if (providerCtx?.provider === "cloud") activeProviderReady = !!providerCtx.cloudAI.apiKey;
+    else activeProviderReady = webllm.status === "ready";
+
+    const isStreaming = webllm.status === "generating" || 
+        providerCtx?.ollama.status === "generating" || 
+        providerCtx?.cloudAI.status === "generating" || 
+        deepSearch.isActive || generatingImage || agent.status === "thinking" || agent.status === "acting";
+
     let tokenCounter = 0;
+
+    const getGenerateFn = useCallback(() => {
+        if (providerCtx?.provider === "ollama") return providerCtx.ollama.generate;
+        if (providerCtx?.provider === "cloud") return providerCtx.cloudAI.generate;
+        return webllm.generate;
+    }, [providerCtx, webllm.generate]);
 
     const handleImageGen = useCallback(async (prompt: string) => {
         setGeneratingImage(true);
@@ -142,8 +164,33 @@ export function useChat() {
             toolkit.memoryRecall = (q: string) => memory.getContext(q) || "No relevant memories found.";
         }
 
+        // Image generation — always available (API call)
+        toolkit.imageGen = async (prompt: string) => {
+            try {
+                const res = await fetch("/api/image-gen", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ prompt }),
+                });
+                const data = await res.json();
+                if (data.success && data.image) {
+                    // Add the image as a message in the chat
+                    chatStore.addMessage({
+                        id: (Date.now() + Math.random()).toString(),
+                        role: "assistant",
+                        content: `Generated image: "${prompt}"`,
+                        image: data.image,
+                    });
+                    return `Image generated successfully via ${data.provider}. The image is now displayed in the chat.`;
+                }
+                return `Image generation failed: ${data.error || "unknown error"}`;
+            } catch (e: any) {
+                return `Image generation failed: ${e.message}`;
+            }
+        };
+
         return toolkit;
-    }, [deepSearch, rag, pyodide, memory]);
+    }, [deepSearch, rag, pyodide, memory, chatStore]);
 
     const gatherContext = useCallback(async (message: string) => {
         let ragCtx = "";
@@ -256,7 +303,7 @@ export function useChat() {
             return;
         }
 
-        if (webllm.status !== "ready") return;
+        if (!activeProviderReady) return;
         chatStore.addMessage({ id: Date.now().toString(), role: "user", content: message });
 
         // Route: autonomous agent mode
@@ -277,7 +324,7 @@ export function useChat() {
                 agent.reset();
                 setStreamingContent("🤖 Agent is working…");
                 const finalAnswer = await agent.runLoop(
-                    message, buildAgentToolkit(), webllm.generate, persona.systemPrompt, onThoughtToken,
+                    message, buildAgentToolkit(), getGenerateFn(), persona.systemPrompt, onThoughtToken,
                 );
                 chatStore.addMessage({ id: (Date.now() + 1).toString(), role: "assistant", content: finalAnswer });
                 setStreamingContent("");
@@ -299,7 +346,8 @@ export function useChat() {
             setStreamingContent("");
             let full = "";
             tokenCounter = 0;
-            await webllm.generate(msgs, (tok) => {
+            const generate = getGenerateFn();
+            await generate(msgs, (tok) => {
                 full += tok;
                 setStreamingContent(full);
                 tokenCounter++;
@@ -322,10 +370,13 @@ export function useChat() {
             chatStore.addMessage({ id: (Date.now() + 1).toString(), role: "assistant", content: "failed to generate response. try again." });
             deepSearch.reset();
         }
-    }, [input, isStreaming, webllm, chatStore, deepSearch, memory, memoryEnabled, handleImageGen, rag, tts, persona, agent, buildAgentToolkit, gatherContext, buildMessages]);
+    }, [input, isStreaming, activeProviderReady, chatStore, deepSearch, memory, memoryEnabled, handleImageGen, rag, tts, persona, agent, buildAgentToolkit, gatherContext, buildMessages, getGenerateFn]);
 
     const handleStop = useCallback(() => {
-        webllm.stop();
+        if (providerCtx?.provider === "ollama") providerCtx.ollama.stop();
+        else if (providerCtx?.provider === "cloud") providerCtx.cloudAI.stop();
+        else webllm.stop();
+
         deepSearch.stop();
         agent.reset();
         // Save whatever was streamed so far
@@ -374,3 +425,4 @@ export function useChat() {
         handlePythonRun: runPython,
     };
 }
+

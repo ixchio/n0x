@@ -68,12 +68,11 @@ async function tryAIHorde(prompt: string): Promise<GenResult | null> {
                 params: {
                     width: 512,
                     height: 512,
-                    steps: 30,
-                    cfg_scale: 7.5,
+                    steps: 20,
+                    cfg_scale: 7.0,
                     sampler_name: "k_euler_a",
                     karras: true,
                     n: 1,
-                    post_processing: ["RealESRGAN_x2plus"], // upscale
                 },
                 nsfw: true,
                 censor_nsfw: false,

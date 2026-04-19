@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useRef, useEffect, useState, useCallback } from "react";
-import { Send, Square, Globe, Brain, Code, Paperclip, Upload, X, FileText, Mic, MicOff, Lightbulb, Bot } from "lucide-react";
+import { Send, Square, Globe, Brain, Code, Paperclip, Upload, X, FileText, Mic, MicOff, Lightbulb, Bot, ImageIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface AttachedFile { id: string; name: string; size: number; type: string; }
@@ -18,6 +18,7 @@ interface ChatInputProps {
     onFileDrop?: (file: File) => void; attachedFiles?: AttachedFile[]; onRemoveFile?: (id: string) => void;
     agentEnabled?: boolean; toggleAgent?: () => void;
     sttSupported?: boolean; sttListening?: boolean; onSttToggle?: () => void;
+    onImagePrefill?: () => void;
 }
 
 function formatSize(bytes: number): string {
@@ -32,6 +33,7 @@ export function ChatInput({
     onPyodideLoad, onPyodideToggle, onFileDrop, attachedFiles = [], onRemoveFile,
     agentEnabled, toggleAgent,
     sttSupported, sttListening, onSttToggle,
+    onImagePrefill,
 }: ChatInputProps) {
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -77,6 +79,7 @@ export function ChatInput({
             },
         }] : []),
         ...(toggleAgent ? [{ key: "agent", icon: Bot, label: "Agent", active: !!agentEnabled, action: toggleAgent }] : []),
+        ...(onImagePrefill ? [{ key: "image", icon: ImageIcon, label: "Image", active: false, action: onImagePrefill }] : []),
     ];
 
     return (

@@ -69,9 +69,13 @@ async function loadDeps() {
         VoyClass = voyModule.Voy;
     }
     if (!pipelineFn) {
-        const transformers = await import("@xenova/transformers");
+        const transformers = await import("@huggingface/transformers");
         transformers.env.allowLocalModels = false;
         transformers.env.useBrowserCache = true;
+        // Optionally configure WebGPU if supported by environment
+        if ((navigator as any).gpu && transformers.env.backends.onnx.wasm) {
+            transformers.env.backends.onnx.wasm.numThreads = 1;
+        }
         pipelineFn = transformers.pipeline;
     }
 }
@@ -390,7 +394,12 @@ self.addEventListener("message", async (e: MessageEvent) => {
             self.postMessage({ id, status: `Loading Embedding Model...` });
 
             if (!embedder) {
-                embedder = await pipelineFn("feature-extraction", RESOURCE_NAME);
+                // Determine if WebGPU is available in worker context
+                const isWebGPU = !!(navigator as any).gpu;
+                embedder = await pipelineFn("feature-extraction", RESOURCE_NAME, {
+                    device: isWebGPU ? "webgpu" : "wasm",
+                    dtype: "fp32" // WebGPU requires fp32 for many models
+                });
             }
             if (!voy) {
                 voy = new VoyClass({ embeddings: [] });
@@ -438,9 +447,17 @@ self.addEventListener("message", async (e: MessageEvent) => {
         else if (action === "SEARCH") {
             const { query, limit = 3 } = payload;
 
-            if (!voy || !embedder) {
+            if (!voy) {
                 self.postMessage({ id, result: [], done: true });
                 return;
+            }
+
+            if (!embedder) {
+                const isWebGPU = !!(navigator as any).gpu;
+                embedder = await pipelineFn("feature-extraction", RESOURCE_NAME, {
+                    device: isWebGPU ? "webgpu" : "wasm",
+                    dtype: "fp32"
+                });
             }
 
             const output = await embedder(query, { pooling: "mean", normalize: true });

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useRef, useEffect, useCallback, useState, useMemo } from "react";
-import { ChevronDown, Loader2, Zap, Brain, Code, Shield, Volume2, VolumeX, Cpu, Menu, AlertTriangle, Download } from "lucide-react";
+import { ChevronDown, Loader2, Zap, Brain, Code, Shield, Volume2, VolumeX, Cpu, Menu, AlertTriangle, Download, Cloud, Server, Monitor, ImageIcon, Search, Bot, FileText, Sparkles } from "lucide-react";
 import { MetricsOverlay } from "@/components/metrics-overlay";
 import { Sidebar } from "@/components/sidebar";
 import { MessageBubble } from "@/components/message-bubble";
@@ -9,6 +9,8 @@ import { ChatInput } from "@/components/chat-input";
 import { AgentThinking } from "@/components/agent-thinking";
 import { MemoryPanel } from "@/components/memory-panel";
 import { WEBLLM_MODELS, MODEL_CATEGORIES } from "@/lib/useWebLLM";
+import { useOllama } from "@/lib/useOllama";
+import { useCloudAI } from "@/lib/useCloudAI";
 import { cn } from "@/lib/utils";
 import { CommandMenu } from "@/components/command-menu";
 import { ErrorBoundary } from "@/components/error-boundary";
@@ -18,8 +20,18 @@ import { useChat } from "@/lib/useChat";
 import { useSTT } from "@/lib/useSTT";
 import { AgentTrace } from "@/components/agent-trace";
 
+type AIProvider = "browser" | "ollama" | "cloud";
+
 function ChatPageInner() {
-  const chat = useChat();
+  const [provider, setProvider] = useState<AIProvider>("browser");
+  const [ollamaUrl, setOllamaUrl] = useState("http://localhost:11434");
+  const [cloudApiKey, setCloudApiKey] = useState("");
+  const [cloudBaseUrl, setCloudBaseUrl] = useState("https://api.groq.com/openai/v1");
+
+  const ollama = useOllama();
+  const cloudAI = useCloudAI();
+
+  const chat = useChat({ provider, ollama, cloudAI });
   const {
     input, setInput, streamingContent, isStreaming, generatingImage, imageProgress,
     deepSearchEnabled, setDeepSearchEnabled, memoryEnabled, setMemoryEnabled,
@@ -41,6 +53,7 @@ function ChatPageInner() {
   const [showMetrics, setShowMetrics] = useState(true);
   const [isExploding, setIsExploding] = useState(false);
   const [pyEnabled, setPyEnabled] = useState(false);
+  const [providerMenuOpen, setProviderMenuOpen] = useState(false);
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const userScrolledUpRef = useRef(false);
@@ -182,6 +195,115 @@ function ChatPageInner() {
                       </div>
                     );
                   })}
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Provider switcher */}
+          <div className="relative ml-2">
+            <button
+              onClick={() => setProviderMenuOpen(!providerMenuOpen)}
+              className={cn(
+                "flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] font-mono transition-all border",
+                provider === "browser" ? "text-emerald-400 border-emerald-500/20 bg-emerald-500/5" :
+                provider === "ollama" ? "text-orange-400 border-orange-500/20 bg-orange-500/5" :
+                "text-blue-400 border-blue-500/20 bg-blue-500/5"
+              )}
+            >
+              {provider === "browser" && <Monitor className="w-3 h-3" />}
+              {provider === "ollama" && <Server className="w-3 h-3" />}
+              {provider === "cloud" && <Cloud className="w-3 h-3" />}
+              {provider === "browser" ? "WebGPU" : provider === "ollama" ? "Ollama" : "Cloud"}
+            </button>
+
+            {providerMenuOpen && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setProviderMenuOpen(false)} />
+                <div className="absolute top-full left-0 mt-2 w-64 bg-card border border-border shadow-xl rounded-xl z-50 p-2 space-y-1">
+                  <button
+                    onClick={() => { setProvider("browser"); setProviderMenuOpen(false); }}
+                    className={cn("w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-xs text-left transition-all", provider === "browser" ? "bg-emerald-500/10 border border-emerald-500/20 text-white" : "text-zinc-400 hover:bg-zinc-900 hover:text-white")}
+                  >
+                    <Monitor className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <div>
+                      <div className="font-semibold">Browser (WebGPU)</div>
+                      <div className="text-[10px] text-zinc-500">Runs in your browser — zero server, max privacy</div>
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setProvider("ollama");
+                      setProviderMenuOpen(false);
+                      ollama.setBaseUrl(ollamaUrl);
+                    }}
+                    className={cn("w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-xs text-left transition-all", provider === "ollama" ? "bg-orange-500/10 border border-orange-500/20 text-white" : "text-zinc-400 hover:bg-zinc-900 hover:text-white")}
+                  >
+                    <Server className="w-4 h-4 text-orange-400 shrink-0" />
+                    <div>
+                      <div className="font-semibold">Ollama (Local)</div>
+                      <div className="text-[10px] text-zinc-500">Use any model from your Ollama server</div>
+                      {provider === "ollama" && ollama.isSupported && (
+                        <div className="text-[10px] text-emerald-400 mt-0.5">✓ Connected · {ollama.models.length} models</div>
+                      )}
+                      {provider === "ollama" && !ollama.isSupported && ollama.error && (
+                        <div className="text-[10px] text-red-400 mt-0.5">{ollama.error}</div>
+                      )}
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setProvider("cloud");
+                      setProviderMenuOpen(false);
+                    }}
+                    className={cn("w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-xs text-left transition-all", provider === "cloud" ? "bg-blue-500/10 border border-blue-500/20 text-white" : "text-zinc-400 hover:bg-zinc-900 hover:text-white")}
+                  >
+                    <Cloud className="w-4 h-4 text-blue-400 shrink-0" />
+                    <div>
+                      <div className="font-semibold">Cloud API</div>
+                      <div className="text-[10px] text-zinc-500">Groq, OpenRouter, or any OpenAI-compatible API</div>
+                    </div>
+                  </button>
+
+                  {/* Ollama URL config */}
+                  {provider === "ollama" && (
+                    <div className="pt-2 border-t border-zinc-800 mt-2">
+                      <label className="text-[10px] text-zinc-500 font-mono px-1">Ollama URL</label>
+                      <input
+                        type="text"
+                        value={ollamaUrl}
+                        onChange={(e) => { setOllamaUrl(e.target.value); ollama.setBaseUrl(e.target.value); }}
+                        className="w-full mt-1 px-2 py-1.5 rounded-md bg-zinc-900 border border-zinc-800 text-xs font-mono text-zinc-300 focus:border-orange-500/30 outline-none"
+                        placeholder="http://localhost:11434"
+                      />
+                    </div>
+                  )}
+
+                  {/* Cloud API config */}
+                  {provider === "cloud" && (
+                    <div className="pt-2 border-t border-zinc-800 mt-2 space-y-2">
+                      <div>
+                        <label className="text-[10px] text-zinc-500 font-mono px-1">API Key</label>
+                        <input
+                          type="password"
+                          value={cloudApiKey}
+                          onChange={(e) => { setCloudApiKey(e.target.value); cloudAI.setCredentials(cloudBaseUrl, e.target.value); }}
+                          className="w-full mt-1 px-2 py-1.5 rounded-md bg-zinc-900 border border-zinc-800 text-xs font-mono text-zinc-300 focus:border-blue-500/30 outline-none"
+                          placeholder="sk-..."
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-zinc-500 font-mono px-1">Base URL</label>
+                        <input
+                          type="text"
+                          value={cloudBaseUrl}
+                          onChange={(e) => { setCloudBaseUrl(e.target.value); cloudAI.setCredentials(e.target.value, cloudApiKey); }}
+                          className="w-full mt-1 px-2 py-1.5 rounded-md bg-zinc-900 border border-zinc-800 text-xs font-mono text-zinc-300 focus:border-blue-500/30 outline-none"
+                          placeholder="https://api.groq.com/openai/v1"
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
               </>
             )}
@@ -332,6 +454,17 @@ function ChatPageInner() {
                 {webllm.status === "unloaded" && (
                   <div className="grid grid-cols-3 gap-2 pt-4">
                     <button
+                      onClick={() => handleModelChange("SmolLM2-360M-Instruct-q4f16_1-MLC")}
+                      className="p-3 rounded bg-crt-surface border border-crt-border hover:border-phosphor-dim transition-all text-left group"
+                    >
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <Zap className="w-3 h-3 text-neon-amber" />
+                        <span className="text-[11px] text-txt-secondary group-hover:text-phosphor">SmolLM2 360M</span>
+                      </div>
+                      <div className="text-[10px] text-txt-tertiary">ultra-fast · 360MB</div>
+                    </button>
+
+                    <button
                       onClick={() => handleModelChange("Qwen2.5-1.5B-Instruct-q4f16_1-MLC")}
                       className="p-3 rounded bg-crt-surface border border-phosphor-dim hover:border-phosphor transition-all text-left group relative"
                     >
@@ -344,25 +477,60 @@ function ChatPageInner() {
                     </button>
 
                     <button
-                      onClick={() => handleModelChange("Qwen2.5-1.5B-Instruct-q4f16_1-MLC")}
-                      className="p-3 rounded bg-crt-surface border border-crt-border hover:border-phosphor-dim transition-all text-left group"
-                    >
-                      <div className="flex items-center gap-1.5 mb-1">
-                        <Brain className="w-3 h-3 text-neon-cyan" />
-                        <span className="text-[11px] text-txt-secondary group-hover:text-phosphor">Qwen 1.5B</span>
-                      </div>
-                      <div className="text-[10px] text-txt-tertiary">balanced · 1gb</div>
-                    </button>
-
-                    <button
                       onClick={() => handleModelChange("Qwen2.5-Coder-1.5B-Instruct-q4f16_1-MLC")}
                       className="p-3 rounded bg-crt-surface border border-crt-border hover:border-phosphor-dim transition-all text-left group"
                     >
                       <div className="flex items-center gap-1.5 mb-1">
                         <Code className="w-3 h-3 text-phosphor" />
-                        <span className="text-[11px] text-txt-secondary group-hover:text-phosphor">Coder</span>
+                        <span className="text-[11px] text-txt-secondary group-hover:text-phosphor">Coder 1.5B</span>
                       </div>
-                      <div className="text-[10px] text-txt-tertiary">code · 1gb</div>
+                      <div className="text-[10px] text-txt-tertiary">code · 1GB</div>
+                    </button>
+                  </div>
+                )}
+
+                {/* Suggestion Chips — show when model is loaded */}
+                {webllm.status === "ready" && (
+                  <div className="grid grid-cols-2 gap-2 pt-6 max-w-sm">
+                    <button
+                      onClick={() => { setInput("generate an image of "); }}
+                      className="flex items-center gap-2 p-3 rounded-xl bg-zinc-900/50 border border-zinc-800/50 hover:border-pink-500/30 hover:bg-zinc-900/80 transition-all text-left group"
+                    >
+                      <ImageIcon className="w-4 h-4 text-pink-400" />
+                      <div>
+                        <div className="text-xs text-zinc-300 font-medium">Generate Image</div>
+                        <div className="text-[10px] text-zinc-600">AI-powered, free</div>
+                      </div>
+                    </button>
+                    <button
+                      onClick={() => { setDeepSearchEnabled(true); setInput("search the web for "); }}
+                      className="flex items-center gap-2 p-3 rounded-xl bg-zinc-900/50 border border-zinc-800/50 hover:border-blue-500/30 hover:bg-zinc-900/80 transition-all text-left group"
+                    >
+                      <Search className="w-4 h-4 text-blue-400" />
+                      <div>
+                        <div className="text-xs text-zinc-300 font-medium">Web Search</div>
+                        <div className="text-[10px] text-zinc-600">DDG + Wikipedia</div>
+                      </div>
+                    </button>
+                    <button
+                      onClick={() => { agent.toggle(); setInput(""); }}
+                      className="flex items-center gap-2 p-3 rounded-xl bg-zinc-900/50 border border-zinc-800/50 hover:border-emerald-500/30 hover:bg-zinc-900/80 transition-all text-left group"
+                    >
+                      <Bot className="w-4 h-4 text-emerald-400" />
+                      <div>
+                        <div className="text-xs text-zinc-300 font-medium">Agent Mode</div>
+                        <div className="text-[10px] text-zinc-600">Autonomous tools</div>
+                      </div>
+                    </button>
+                    <button
+                      onClick={() => document.querySelector<HTMLInputElement>('input[type="file"]')?.click()}
+                      className="flex items-center gap-2 p-3 rounded-xl bg-zinc-900/50 border border-zinc-800/50 hover:border-amber-500/30 hover:bg-zinc-900/80 transition-all text-left group"
+                    >
+                      <FileText className="w-4 h-4 text-amber-400" />
+                      <div>
+                        <div className="text-xs text-zinc-300 font-medium">Upload Docs</div>
+                        <div className="text-[10px] text-zinc-600">PDF, DOCX, CSV</div>
+                      </div>
                     </button>
                   </div>
                 )}
@@ -469,6 +637,9 @@ function ChatPageInner() {
                 stt.clear();
                 stt.start();
               }
+            }}
+            onImagePrefill={() => {
+              setInput("generate an image of ");
             }}
           />
         </div>

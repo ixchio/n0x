@@ -56,6 +56,9 @@ export interface AgentToolkit {
     python?: (code: string) => Promise<string>;
     memorySave?: (content: string) => Promise<string>;
     memoryRecall?: (query: string) => string;
+    imageGen?: (prompt: string) => Promise<string>;
+    webContainerWrite?: (path: string, contents: string) => Promise<string>;
+    webContainerExec?: (command: string, args: string[]) => Promise<string>;
 }
 
 // ─── Config ─────────────────────────────────────────────────────────
@@ -71,39 +74,54 @@ function buildAgentPrompt(base: string, availableTools: string[]): string {
         ? availableTools.join(", ")
         : "none (answer from your own knowledge)";
 
+    // Build tool reference only for available tools (shorter prompt = better for small models)
+    const toolDocs: Record<string, string> = {
+        webSearch: '• webSearch — search the web. Args: {"query": "..."}',
+        ragSearch: '• ragSearch — search uploaded documents. Args: {"query": "..."}',
+        python: '• python — run Python code. Args: {"code": "..."}',
+        memorySave: '• memorySave — save info for later. Args: {"content": "..."}',
+        memoryRecall: '• memoryRecall — recall saved info. Args: {"query": "..."}',
+        imageGen: '• imageGen — generate an image from a description. Args: {"prompt": "detailed image description"}',
+    };
+    const relevantDocs = availableTools
+        .filter(t => toolDocs[t])
+        .map(t => toolDocs[t])
+        .join("\n");
+
     return `${base}
 
-You are an autonomous AI agent. You MUST solve problems step-by-step by using tools.
+You are an autonomous AI agent. Solve problems step-by-step using tools.
 
 AVAILABLE TOOLS: ${toolList}
 
-TO USE A TOOL, you must output EXACTLY this JSON format on its own line:
+TO USE A TOOL, output this JSON on its own line:
 {"tool": "TOOL_NAME", "args": {"key": "value"}}
 
 Tool reference:
-• webSearch — search the live web. Args: {"query": "search terms"}
-• ragSearch — search user's uploaded documents. Args: {"query": "search terms"}
-• python — execute Python code. Args: {"code": "python code here"}
-• memorySave — persist information. Args: {"content": "text to save"}
-• memoryRecall — recall saved info. Args: {"query": "search terms"}
+${relevantDocs}
 
-EXAMPLE 1 — User asks "what is the population of France?"
-I need to search for the current population of France.
+EXAMPLES:
+
+User: "what is the population of France?"
+I need to find the current population.
 {"tool": "webSearch", "args": {"query": "population of France 2025"}}
 
-EXAMPLE 2 — User asks "calculate 17 * 23 + 5"
-Let me use Python to compute this accurately.
-{"tool": "python", "args": {"code": "result = 17 * 23 + 5\\nprint(result)"}}
+User: "calculate 17 * 23 + 5"
+{"tool": "python", "args": {"code": "print(17 * 23 + 5)"}}
 
-CRITICAL RULES:
-1. You MUST think first, then call exactly ONE tool per turn
-2. After receiving a tool result, either call another tool OR give your FINAL answer
-3. Your FINAL answer must contain NO JSON tool calls — just plain text
-4. Do NOT skip tools — if a tool is available and relevant, USE IT
-5. If a tool errors, try a different approach — do NOT retry the same call
-6. For math or calculations, ALWAYS use the python tool
-7. NEVER give a final answer on your first turn if tools are available — use at least one tool first
-8. CRITICAL: Python runs in a Pyodide WASM sandbox. Traditional sockets (\`requests\`, \`urllib\`) are disabled. To make HTTP requests in python, you MUST use \`import pyodide.http\` and \`await pyodide.http.pyfetch(url)\` instead.`;
+User: "generate a picture of a sunset over mountains"
+{"tool": "imageGen", "args": {"prompt": "breathtaking sunset over mountain range, golden hour, dramatic clouds, photorealistic"}}
+
+RULES:
+1. Think first, then call ONE tool per turn
+2. After a tool result, call another tool OR give your FINAL answer
+3. FINAL answer = plain text, NO JSON
+4. Use tools when available — don't skip them
+5. If a tool errors, try a different approach
+6. For math, ALWAYS use python
+7. For images, use imageGen with a detailed, descriptive prompt
+8. IMPORTANT: Output the JSON on its own line with no extra text around it
+9. Python runs in Pyodide WASM — use \`pyodide.http.pyfetch(url)\` for HTTP, not \`requests\``;
 }
 
 // ─── JSON Parser (multi-strategy) ───────────────────────────────────
@@ -228,12 +246,15 @@ async function executeTool(
             case "python": return toolkit.python ? () => toolkit.python!(args.code || args.script || "") : null;
             case "memorySave": return toolkit.memorySave ? () => toolkit.memorySave!(args.content || args.text || "") : null;
             case "memoryRecall": return toolkit.memoryRecall ? () => Promise.resolve(toolkit.memoryRecall!(args.query || args.q || "")) : null;
+            case "imageGen": return toolkit.imageGen ? () => toolkit.imageGen!(args.prompt || args.description || "") : null;
+            case "webContainerWrite": return toolkit.webContainerWrite ? () => toolkit.webContainerWrite!(args.path || "", args.contents || "") : null;
+            case "webContainerExec": return toolkit.webContainerExec ? () => toolkit.webContainerExec!(args.command || "", args.args || []) : null;
             default: return null;
         }
     })();
 
     if (!toolFn) {
-        const valid = ["webSearch", "ragSearch", "python", "memorySave", "memoryRecall"];
+        const valid = ["webSearch", "ragSearch", "python", "memorySave", "memoryRecall", "imageGen", "webContainerWrite", "webContainerExec"];
         if (!valid.includes(toolName)) {
             return `[Error] Unknown tool "${toolName}". Available: ${valid.join(", ")}`;
         }
@@ -350,6 +371,9 @@ export const useAgent = create<AgentState>((set, get) => ({
         if (tools.python) availableTools.push("python");
         if (tools.memorySave) availableTools.push("memorySave");
         if (tools.memoryRecall) availableTools.push("memoryRecall");
+        if (tools.imageGen) availableTools.push("imageGen");
+        if (tools.webContainerWrite) availableTools.push("webContainerWrite");
+        if (tools.webContainerExec) availableTools.push("webContainerExec");
 
         const agentPrompt = buildAgentPrompt(systemPrompt, availableTools);
 

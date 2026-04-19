@@ -22,6 +22,7 @@ const TOOL_CONFIG: Record<string, { icon: React.ElementType; color: string; labe
     python: { icon: Code, color: "text-green-400", label: "PYTHON EXEC", bg: "bg-green-500/8", border: "border-green-500/20" },
     memorySave: { icon: Brain, color: "text-purple-400", label: "MEMORY WRITE", bg: "bg-purple-500/8", border: "border-purple-500/20" },
     memoryRecall: { icon: Brain, color: "text-purple-400", label: "MEMORY READ", bg: "bg-purple-500/8", border: "border-purple-500/20" },
+    imageGen: { icon: Zap, color: "text-pink-400", label: "IMAGE GEN", bg: "bg-pink-500/8", border: "border-pink-500/20" },
 };
 
 // ─── Step Card ──────────────────────────────────────────────────────

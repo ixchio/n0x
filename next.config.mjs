@@ -11,7 +11,17 @@ const nextConfig = {
       ...config.experiments,
       asyncWebAssembly: true,
     };
-    // @xenova/transformers depends on onnxruntime-node which contains native .node binaries.
+
+    // onnxruntime-web ships ort.webgpu.bundle.min.mjs which uses `import.meta` and
+    // binary-like WASM inlining that SWC/webpack cannot parse. Exclude from all processing.
+    config.module.rules.push({
+      test: /ort\.webgpu\.bundle\.min\.mjs$/,
+      resolve: { fullySpecified: false },
+      type: "javascript/esm",
+      use: [],
+    });
+
+    // @huggingface/transformers depends on onnxruntime-node which contains native .node binaries.
     // On the client: alias to false (not needed — uses onnxruntime-web in browser).
     // On the server: mark as external so webpack doesn't try to parse .node binaries.
     if (!isServer) {
@@ -28,12 +38,22 @@ const nextConfig = {
     } else {
       config.externals = config.externals || [];
       config.externals.push("onnxruntime-node");
+      // @huggingface/transformers references ONNX runtime WASM modules that only work
+      // in the browser. On server, externalize the entire transformers node entry point.
+      config.externals.push("@huggingface/transformers");
     }
     return config;
   },
-  // Allow connecting to Ollama from client-side
+  // Allow connecting to Ollama from client-side and add WebContainers headers
   async headers() {
     return [
+      {
+        source: "/(.*)",
+        headers: [
+          { key: "Cross-Origin-Embedder-Policy", value: "require-corp" },
+          { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
+        ],
+      },
       {
         source: "/api/:path*",
         headers: [

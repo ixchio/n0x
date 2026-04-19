@@ -285,7 +285,7 @@ interface WebLLMState {
     // Actions
     init: () => Promise<void>;
     loadModel: (modelId: string, force?: boolean) => Promise<void>;
-    generate: (messages: ChatMessage[], onToken?: (token: string) => void) => Promise<string>;
+    generate: (messages: ChatMessage[], onToken?: (token: string) => void, responseFormat?: { type: string; schema?: object }) => Promise<string>;
     stop: () => void;
     unload: () => Promise<void>;
 }
@@ -388,7 +388,7 @@ export const useWebLLM = create<WebLLMState>((set, get) => ({
         }
     },
 
-    generate: async (messages: ChatMessage[], onToken?: (token: string) => void) => {
+    generate: async (messages: ChatMessage[], onToken?: (token: string) => void, responseFormat?: { type: string; schema?: object }) => {
         const { status } = get();
         if (!engine || status !== "ready") {
             throw new Error("Model not loaded");
@@ -405,12 +405,19 @@ export const useWebLLM = create<WebLLMState>((set, get) => ({
         try {
             let fullResponse = "";
 
-            const asyncGenerator = await engine.chat.completions.create({
+            const createOpts: any = {
                 messages: messages as any,
                 stream: true,
                 temperature: 0.7,
                 max_tokens: 4096,
-            });
+            };
+
+            // Add structured output if requested
+            if (responseFormat) {
+                createOpts.response_format = responseFormat;
+            }
+
+            const asyncGenerator = await engine.chat.completions.create(createOpts) as any;
 
             for await (const chunk of asyncGenerator) {
                 if (abortController?.signal.aborted) break;
