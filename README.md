@@ -4,7 +4,7 @@
 <h1 align="center">n0x</h1>
 
 <div align="center">
-  <strong>The full AI stack — in one browser tab.</strong><br />
+  <strong>The full AI stack  in one browser tab.</strong><br />
   LLM inference · Autonomous agents · RAG · Code execution · Image generation<br />
   Zero backend. Zero API keys. Zero data leaves your machine.
 </div>
