@@ -289,6 +289,8 @@ export const MessageBubble = React.memo(function MessageBubble({ role, content, 
                             <img
                                 src={image}
                                 alt="Generated"
+                                crossOrigin="anonymous"
+                                loading="lazy"
                                 className={cn("w-full h-auto", imageZoomed && "max-w-full max-h-full object-contain rounded-xl")}
                                 onError={(e) => {
                                     const target = e.target as HTMLImageElement;

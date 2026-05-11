@@ -44,13 +44,16 @@ const nextConfig = {
     }
     return config;
   },
-  // Allow connecting to Ollama from client-side and add WebContainers headers
+  // COEP "credentialless" allows cross-origin resources (Ollama, Cloud APIs,
+  // Pollinations images, Pyodide CDN) WITHOUT requiring CORP headers on every
+  // response. "require-corp" was blocking all of those — this is the fix.
+  // SharedArrayBuffer (needed by WebContainers) still works with credentialless.
   async headers() {
     return [
       {
         source: "/(.*)",
         headers: [
-          { key: "Cross-Origin-Embedder-Policy", value: "require-corp" },
+          { key: "Cross-Origin-Embedder-Policy", value: "credentialless" },
           { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
         ],
       },

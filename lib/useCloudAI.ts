@@ -47,6 +47,23 @@ const GROQ_MODELS = [
     "deepseek-r1-distill-llama-70b"
 ];
 
+// Custom sessionStorage adapter — API keys should NOT persist in localStorage
+// across browser sessions (XSS risk). sessionStorage clears on tab close.
+const sessionStorageAdapter = {
+    getItem: (name: string) => {
+        if (typeof window === "undefined") return null;
+        return sessionStorage.getItem(name);
+    },
+    setItem: (name: string, value: string) => {
+        if (typeof window === "undefined") return;
+        sessionStorage.setItem(name, value);
+    },
+    removeItem: (name: string) => {
+        if (typeof window === "undefined") return;
+        sessionStorage.removeItem(name);
+    },
+};
+
 export const useCloudAI = create<CloudState>()(
     persist(
         (set, get) => ({
@@ -177,6 +194,7 @@ export const useCloudAI = create<CloudState>()(
         }),
         {
             name: "n0x-cloud-storage",
+            storage: sessionStorageAdapter as any,
             partialize: (state) => ({ baseUrl: state.baseUrl, apiKey: state.apiKey }),
         }
     )

@@ -48,12 +48,17 @@ function ChatPageInner() {
   }, []);
 
   const [headerModelOpen, setHeaderModelOpen] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  // Default sidebar closed on mobile (<768px), open on desktop
+  const [sidebarOpen, setSidebarOpen] = useState(() => {
+    if (typeof window === "undefined") return true;
+    return window.innerWidth >= 768;
+  });
   const [showMemoryPanel, setShowMemoryPanel] = useState(false);
   const [showMetrics, setShowMetrics] = useState(true);
   const [isExploding, setIsExploding] = useState(false);
   const [pyEnabled, setPyEnabled] = useState(false);
   const [providerMenuOpen, setProviderMenuOpen] = useState(false);
+  const [showShortcuts, setShowShortcuts] = useState(false);
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const userScrolledUpRef = useRef(false);
@@ -106,6 +111,25 @@ function ChatPageInner() {
       setIsExploding(false);
     }, 400);
   }, [handleNewChat]);
+
+  // Global keyboard shortcuts
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      // Don't capture when typing in inputs
+      const tag = (e.target as HTMLElement).tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      if (e.key === "?" && !e.metaKey && !e.ctrlKey) {
+        e.preventDefault();
+        setShowShortcuts(s => !s);
+      }
+      if (e.key === "n" && (e.metaKey || e.ctrlKey) && e.shiftKey) {
+        e.preventDefault();
+        onNewChat();
+      }
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [onNewChat]);
 
   return (
     <div className="h-screen flex bg-background font-sans overflow-hidden text-foreground selection:bg-white/20">
@@ -653,6 +677,37 @@ function ChatPageInner() {
         onDelete={memory.deleteMemory}
         onSearch={memory.searchMemories}
       />
+
+      {/* Keyboard shortcuts overlay */}
+      {showShortcuts && (
+        <>
+          <div className="fixed inset-0 bg-black/80 z-50" onClick={() => setShowShortcuts(false)} />
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 max-w-sm w-full shadow-2xl">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-semibold text-white">Keyboard Shortcuts</h3>
+                <button onClick={() => setShowShortcuts(false)} className="text-zinc-500 hover:text-white">
+                  <span className="text-lg">×</span>
+                </button>
+              </div>
+              <div className="space-y-2 text-xs">
+                {[
+                  ["⌘/Ctrl + K", "Command palette"],
+                  ["⌘/Ctrl + Shift + N", "New conversation"],
+                  ["?", "Toggle this help"],
+                  ["Enter", "Send message"],
+                  ["Shift + Enter", "New line in input"],
+                ].map(([key, desc]) => (
+                  <div key={key} className="flex items-center justify-between py-1.5 border-b border-zinc-800/50 last:border-0">
+                    <span className="text-zinc-400">{desc}</span>
+                    <kbd className="px-2 py-0.5 bg-zinc-800 border border-zinc-700 rounded text-zinc-300 font-mono text-[10px]">{key}</kbd>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

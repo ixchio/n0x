@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useCallback, useRef } from "react";
-import { Share2, X, Copy, Check, ExternalLink, Camera, Download } from "lucide-react";
+import { Share2, X, Copy, Check, ExternalLink, Camera, Download, FileText, FileJson } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface ShareMenuProps {
@@ -317,6 +317,46 @@ export function ShareMenu({ messages = [], modelName, appUrl = REPO }: ShareMenu
                                 {copied ? <Check className="w-3.5 h-3.5 ml-0.5 text-phosphor" /> : <Copy className="w-3.5 h-3.5 ml-0.5" />}
                                 <span>{copied ? "copied!" : "copy share text"}</span>
                             </button>
+
+                            {/* Export section */}
+                            {hasChat && messages.length >= 1 && (
+                                <>
+                                    <div className="my-1 border-t border-crt-border" />
+                                    <button
+                                        onClick={() => {
+                                            const md = messages.map(m => `**${m.role === "user" ? "You" : "N0X"}:**\n${m.content}`).join("\n\n---\n\n");
+                                            const header = `# N0X Conversation\n*Model: ${modelName || "unknown"} · ${new Date().toLocaleDateString()}*\n\n---\n\n`;
+                                            const blob = new Blob([header + md], { type: "text/markdown" });
+                                            const url = URL.createObjectURL(blob);
+                                            const a = document.createElement("a");
+                                            a.href = url; a.download = `n0x-chat-${Date.now()}.md`; a.click();
+                                            URL.revokeObjectURL(url);
+                                            setOpen(false);
+                                        }}
+                                        className="w-full flex items-center gap-3 px-3 py-2 rounded text-xs font-mono text-txt-secondary hover:bg-crt-hover hover:text-phosphor transition-all"
+                                    >
+                                        <FileText className="w-3.5 h-3.5 ml-0.5" />
+                                        <span>export as Markdown</span>
+                                        <Download className="w-3 h-3 ml-auto opacity-30" />
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            const data = { model: modelName, exportedAt: new Date().toISOString(), messages };
+                                            const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+                                            const url = URL.createObjectURL(blob);
+                                            const a = document.createElement("a");
+                                            a.href = url; a.download = `n0x-chat-${Date.now()}.json`; a.click();
+                                            URL.revokeObjectURL(url);
+                                            setOpen(false);
+                                        }}
+                                        className="w-full flex items-center gap-3 px-3 py-2 rounded text-xs font-mono text-txt-secondary hover:bg-crt-hover hover:text-phosphor transition-all"
+                                    >
+                                        <FileJson className="w-3.5 h-3.5 ml-0.5" />
+                                        <span>export as JSON</span>
+                                        <Download className="w-3 h-3 ml-auto opacity-30" />
+                                    </button>
+                                </>
+                            )}
                         </div>
                     </div>
                 </>

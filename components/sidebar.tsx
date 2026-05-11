@@ -38,7 +38,10 @@ export function Sidebar({ isOpen, currentModel, onNewChat, conversations = [], a
     if (!isOpen) return null;
 
     return (
-        <aside className="w-64 h-full bg-[#0a0a0a] border-r border-zinc-900 flex flex-col shrink-0 font-sans">
+        <>
+        {/* Mobile backdrop */}
+        <div className="fixed inset-0 bg-black/60 z-30 md:hidden" onClick={() => {/* parent handles close via menu button */}} />
+        <aside className="fixed md:relative z-40 w-64 h-full bg-[#0a0a0a] border-r border-zinc-900 flex flex-col shrink-0 font-sans">
             {/* Header */}
             <div className="p-4 border-b border-zinc-900 flex items-center gap-2">
                 <Box className="w-4 h-4 text-white" />
@@ -117,5 +120,6 @@ export function Sidebar({ isOpen, currentModel, onNewChat, conversations = [], a
                 </div>
             </div>
         </aside>
+        </>
     );
 }

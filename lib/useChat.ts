@@ -65,8 +65,6 @@ export function useChat(providerCtx?: {
         providerCtx?.cloudAI.status === "generating" || 
         deepSearch.isActive || generatingImage || agent.status === "thinking" || agent.status === "acting";
 
-    let tokenCounter = 0;
-
     const getGenerateFn = useCallback(() => {
         if (providerCtx?.provider === "ollama") return providerCtx.ollama.generate;
         if (providerCtx?.provider === "cloud") return providerCtx.cloudAI.generate;
@@ -345,13 +343,13 @@ export function useChat(providerCtx?: {
         try {
             setStreamingContent("");
             let full = "";
-            tokenCounter = 0;
+            let tokCount = 0;
             const generate = getGenerateFn();
             await generate(msgs, (tok: string) => {
                 full += tok;
                 setStreamingContent(full);
-                tokenCounter++;
-                if (tokenCounter % 3 === 0) keySoundTick();
+                tokCount++;
+                if (tokCount % 3 === 0) keySoundTick();
             });
 
             chatStore.addMessage({ id: (Date.now() + 1).toString(), role: "assistant", content: full });

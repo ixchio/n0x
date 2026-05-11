@@ -1,11 +1,11 @@
 {
-    "name": "N0X",
+    "name": "N0X — AI in Your Browser",
     "short_name": "N0X",
-    "description": "The full AI stack, in one browser tab",
+    "description": "The full AI stack in one browser tab. LLMs, agents, RAG, code exec, image gen — all local via WebGPU.",
     "start_url": "/chat",
     "display": "standalone",
     "background_color": "#0a0a0a",
-    "theme_color": "#33ff33",
+    "theme_color": "#0a0a0a",
     "orientation": "any",
     "icons": [
         {
@@ -15,7 +15,7 @@
             "purpose": "any maskable"
         },
         {
-            "src": "/icon-512.png",
+            "src": "/icon.png",
             "sizes": "512x512",
             "type": "image/png",
             "purpose": "any maskable"
@@ -23,7 +23,8 @@
     ],
     "categories": [
         "productivity",
-        "utilities"
+        "utilities",
+        "developer-tools"
     ],
     "prefer_related_applications": false
 }
