@@ -1,139 +1,119 @@
 <div align="center">
-  <img src="https://raw.githubusercontent.com/ixchio/n0x/main/public/icon.png" width="80" alt="n0x logo" style="border-radius:20%" />
-</div>
-<h1 align="center">n0x</h1>
-
-<div align="center">
-  <strong>The full AI stack  in one browser tab.</strong><br />
-  LLM inference · Autonomous agents · RAG · Code execution · Image generation<br />
-  Zero backend. Zero API keys. Zero data leaves your machine.
-</div>
-
-<br />
-
-<div align="center">
-  <a href="https://n0x.vercel.app">Live Demo</a>
-  <span> · </span>
-  <a href="#architecture">Architecture</a>
-  <span> · </span>
-  <a href="#models">Models</a>
-  <span> · </span>
-  <a href="#quick-start">Quick Start</a>
-  <span> · </span>
-  <a href="#privacy">Privacy</a>
+  <img src="https://raw.githubusercontent.com/ixchio/n0x/main/public/icon.png" width="72" alt="n0x" style="border-radius:20%" />
+  <h1>n0x</h1>
+  <p><strong>Run the full AI stack in a browser tab.</strong></p>
+  <p>
+    <a href="https://n0x.vercel.app"><strong>Try it →</strong></a>&nbsp;&nbsp;
+    <a href="#how-it-works">How it works</a>&nbsp;&nbsp;
+    <a href="#run-it-yourself">Run locally</a>
+  </p>
 </div>
 
 <br />
 
-<img width="1657" height="923" alt="n0x chat interface" src="https://github.com/user-attachments/assets/ba7d17e8-b26f-4cf7-a072-cf39cfb37ab4" />
+<img width="1657" height="923" alt="n0x" src="https://github.com/user-attachments/assets/ba7d17e8-b26f-4cf7-a072-cf39cfb37ab4" />
 
 ---
 
-## What is n0x?
+n0x puts an LLM, an autonomous agent, document Q&A, a Python runtime, image generation, and web search into one browser tab. No server. No account. No API keys. Open a tab, pick a model, start working.
 
-n0x is an in-browser AI workstation. It runs a complete AI stack — language model, autonomous agent, retrieval-augmented generation, Python runtime, image generation — without a server, an account, or a single API key. Your data never leaves your machine.
-
-It runs on WebGPU and WASM, today, in Chrome.
+The default path is **fully local** — your prompts, files, and model weights never leave your machine. WebGPU handles inference at 35–60 tok/s on a normal laptop GPU. But if you want more power, flip to Ollama or plug in a cloud API (Groq, OpenRouter, any OpenAI-compatible endpoint) and you're running the same tool stack against bigger models.
 
 ---
 
-## Core Features
+## Why this exists
 
-### ⚡ WebGPU Inference Engine
-Direct-to-metal LLM execution via MLC/WebLLM. Quantized models hit **35–60 tokens/sec** on consumer hardware. 40 open-source models from **360MB to 70B** — downloaded once, cached in browser storage forever. Real-time TPS telemetry displayed in the header.
+Every AI tool I tried either wanted my data, wanted my money, or both. I wanted something I could open in a browser and just use — no Docker, no Python venv, no sign-up wall, no "you've hit your free tier limit."
 
-### 🤖 Streaming Autonomous Agent (ReAct)
-A full ReAct-style reasoning engine. The LLM autonomously chains tool calls across multiple iterations — thoughts stream **live token-by-token** directly into the chat. Features:
-- **Live thought streaming** — watch the model reason in real time
-- Multi-strategy JSON parsing (handles malformed LLM output)
-- Per-tool execution timeouts with `AbortController` cancellation
-- Context window budgeting (prevents OOM crashes on small models)
-- Loop detection with automatic recovery
-- Live trace UI with per-step timing and token cost
-
-### 📄 Best-in-Class Document RAG
-Drag-and-drop any file and ask questions about it. The entire pipeline runs in a Web Worker — zero UI blocking.
-
-| | Detail |
-|---|---|
-| **Supported files** | PDF, DOCX, TXT, MD, JSON, CSV, HTML |
-| **PDF text extraction** | pdfjs-dist with reading-order preservation |
-| **DOCX extraction** | Native DecompressionStream + XML parse — zero extra dependencies |
-| **Chunking** | Sentence-boundary-aware sliding window, 50% overlap |
-| **Embedding** | `all-MiniLM-L6-v2` via Transformers.js (runs in worker) |
-| **Search** | Voy cosine search → **MMR re-ranking** (relevant + diverse, no duplicates) |
-| **Cache** | Vectors persisted to IndexedDB — instant reload on next visit |
-
-### 🐍 Sandboxed Python Runtime
-Client-side Python via Pyodide (WASM). Code output feeds directly back into LLM context. Self-healing: execution errors are automatically sent to the LLM for a retry.
-
-### 🔀 Conversation Branching
-Hover any message and click the **branch icon** to fork the conversation from that exact point. Explore alternative directions without losing the original thread. Branches are persisted and appear in the sidebar.
-
-### 🌐 Web Search & Deep Research
-DuckDuckGo + Wikipedia synthesis via a lightweight serverless proxy. Optional Tavily API for enhanced, citation-rich results.
-
-### 🎨 Image Generation
-Pollinations AI (Flux) with Stable Horde as a fallback. Trigger with natural language: *"generate an image of…"*
-
-### 🧠 Persistent Memory
-Long-term conversational memory stored in IndexedDB. The agent can save and recall facts across sessions.
-
-### 🎙️ Voice I/O
-Browser-native speech-to-text (Web Speech API) and streaming text-to-speech. Works offline.
-
-### 🎭 Persona System
-5 built-in system prompt personas — Default, Senior Engineer, Writer, Tutor, Analyst — each with detailed formatting and tone rules.
+So I built n0x. It's an actual workstation, not a chatbot wrapper.
 
 ---
 
-## Architecture
+## What you get
 
-```text
-[User Input] → [Mode Router]
-                   │
-                   ├─→ [Agent Mode] ──→ ReAct Loop
-                   │         │          ├─ Thought (streamed live) → Action → Observation
-                   │         │          └─ Iterate until Final Answer
-                   │         │
-                   │    [Tool Registry]
-                   │         ├── Web Search   (DuckDuckGo / Tavily)
-                   │         ├── RAG Search   (voy + MMR)
-                   │         ├── Python Exec  (Pyodide WASM)
-                   │         └── Memory       (IndexedDB)
-                   │
-                   ├─→ [Direct Mode] ──→ Context Assembly
-                   │         ├── RAG context (sentence chunks, MMR reranked)
-                   │         ├── Web search results
-                   │         └── Memory context
-                   │         └── [WebGPU LLM] → Streaming Response
-                   │
-                   └─→ [Image Mode] ──→ Pollinations / Stable Horde
+**Pick your backend.** Three providers, one interface:
+
+| Provider | What runs | Setup |
+|---|---|---|
+| **Browser (WebGPU)** | 40+ open-source models, 360MB→70B, running on your GPU via WebLLM | Zero. Just pick a model. |
+| **Ollama** | Any model from your local Ollama server | `ollama serve` — n0x auto-detects it |
+| **Cloud API** | Groq, OpenRouter, or any OpenAI-compatible endpoint | Paste a key + base URL |
+
+Switch between them mid-conversation. Your chat history stays.
+
+---
+
+**Agent mode.** A ReAct reasoning loop that actually works. The LLM chains tool calls autonomously — web search, document lookup, Python execution, memory recall — and you watch it think in real time, token by token. It handles malformed JSON output, recovers from loops, budgets its context window, and times out gracefully. The trace UI shows every step with timing and token cost.
+
+**Document Q&A.** Drop a PDF, DOCX, TXT, CSV, or markdown file into the chat. n0x chunks it with sentence-boundary-aware splitting, embeds it with MiniLM-L6 (in a Web Worker, so the UI doesn't freeze), indexes it with Voy cosine search, and re-ranks results with MMR so you get relevant answers without duplicate noise. Vectors are cached in IndexedDB — upload once, query forever.
+
+**Python runtime.** Pyodide runs in a WASM sandbox. Code output feeds back into the conversation. If execution fails, the error goes to the LLM automatically for a fix.
+
+**Image generation.** Type "generate an image of..." and Pollinations (Flux, z-image-turbo, klein, and more) handles the rest. Works with a free API key or no key at all. Loading skeleton, retry on failure, zoom and download built in.
+
+**Web search.** DuckDuckGo + Wikipedia synthesis. Plug in a Tavily key for deeper, citation-rich results.
+
+**Memory.** The agent stores and recalls facts across sessions. Persistent in IndexedDB.
+
+**Voice.** Speech-to-text and text-to-speech via the Web Speech API. Works offline.
+
+**Branching.** Fork any message into an alternate conversation thread. Both branches persist in the sidebar.
+
+**Personas.** Five system prompts — Default, Senior Engineer, Writer, Tutor, Analyst — each with their own tone, formatting rules, and domain focus.
+
+---
+
+## How it works
+
 ```
+                              ┌─────────────────────┐
+                              │    Provider Layer    │
+                              │  WebGPU · Ollama ·   │
+                              │  Cloud API (OpenAI)  │
+                              └────────┬────────────┘
+                                       │
+┌──────────┐     ┌───────────┐    ┌────▼────┐
+│  User     │────▶  Router    │───▶│  LLM    │
+│  Input    │     │           │    │ Stream  │
+└──────────┘     │  direct /  │    └────┬────┘
+                 │  agent /   │         │
+                 │  image     │    ┌────▼─────────────────────┐
+                 └───────────┘    │  Agent (ReAct Loop)       │
+                                  │  thought → action →       │
+                                  │  observation → repeat     │
+                                  │                           │
+                                  │  Tools:                   │
+                                  │   ├ Web Search (DDG/Tavily)│
+                                  │   ├ RAG (Voy + MMR)       │
+                                  │   ├ Python (Pyodide WASM) │
+                                  │   ├ Memory (IndexedDB)    │
+                                  │   └ Image Gen (Pollinations)│
+                                  └───────────────────────────┘
+```
+
+Everything above the line runs in the browser. The only network calls are optional: search queries go through a CORS proxy, image prompts go to Pollinations. Disable both and you have a fully air-gapped AI workstation.
 
 ---
 
 ## Models
 
-40 open-source models. All MLC-compiled, all real — no mocks. Default: **Qwen 2.5 1.5B** (~1GB, loads in seconds on a warm cache).
+40+ models. MLC-compiled, quantized, cached in browser storage after first download. Real inference, not API calls.
 
-| Category | Models | Size Range | Speed |
+| | Examples | Size | Speed |
 |---|---|---|---|
-| ⚡ **Tiny** | SmolLM2 360M, Qwen 0.5B, TinyLlama, SmolLM2 1.7B | 360MB – 900MB | 60+ t/s |
-| ⚖️ **Balanced** | Qwen 2.5 1.5B *(default)*, Llama 3.2 1B, Gemma 2 2B, Phi-3.5 Mini, Llama 3.2 3B | 700MB – 2.2GB | 35–50 t/s |
-| 🚀 **Powerful** | Mistral 7B, Llama 3.1 8B, Qwen 2.5 7B, Gemma 2 9B, Mistral Nemo 12B, **Qwen 2.5 32B**, **Llama 3.3 70B** | 4GB – 30GB | 8–25 t/s |
-| 🧠 **Reasoning** | R1 Qwen 1.5B → R1 Qwen 32B, **R1 Llama 70B** | 1.1GB – 30GB | varies |
-| 💻 **Coding** | Qwen Coder 1.5B/7B/32B, DeepSeek Coder, Qwen Math 1.5B/7B | 800MB – 20GB | varies |
-| 🔓 **Uncensored** | WizardCoder 15B | ~8GB | 12–18 t/s |
+| **Tiny** | SmolLM2 360M, Qwen 0.5B | 360MB–900MB | 60+ t/s |
+| **Balanced** | Qwen 2.5 1.5B *(default)*, Phi-3.5, Llama 3.2 3B | 700MB–2.2GB | 35–50 t/s |
+| **Heavy** | Mistral 7B, Qwen 2.5 7B, Llama 3.1 8B, Gemma 2 9B | 4–6GB | 15–25 t/s |
+| **Flagship** | Qwen 2.5 32B, Llama 3.3 70B, R1 Llama 70B | 10–30GB | 8–15 t/s |
+| **Code** | Qwen Coder 1.5B/7B/32B, DeepSeek Coder | 800MB–20GB | varies |
 
-> Low-resource? Start with **SmolLM2 360MB** or **Qwen 0.5B** — they're responsive on any device with a GPU.
-> High-resource? Load **Llama 3.3 70B** or **R1 Llama 70B** for flagship-level quality entirely offline.
+Start with Qwen 2.5 1.5B (~1GB). It loads in seconds on a warm cache and handles most tasks well. Scale up from there.
 
 ---
 
-## Quick Start
+## Run it yourself
 
-Requires **Node 18+** and **Chrome / Edge 113+** (WebGPU support).
+Chrome or Edge (WebGPU required). Node 18+.
 
 ```bash
 git clone https://github.com/ixchio/n0x.git
@@ -142,57 +122,41 @@ npm install
 npm run dev
 ```
 
-Open `http://localhost:3000`. The default model (~1GB) downloads on first launch and is cached permanently — subsequent loads are instant.
+Open `localhost:3000`. First launch downloads the default model (~1GB) — after that it loads from cache instantly.
 
-### Optional Environment Variables
+### Optional env vars
 
 ```env
-TAVILY_API_KEY=      # Enhanced web search (server-side only, never exposed to client)
-POLLINATIONS_API_KEY= # Watermark-free image generation
+TAVILY_API_KEY=        # Better search results (server-side, never touches the client)
+POLLINATIONS_API_KEY=  # Image gen without watermarks + higher rate limits
 ```
 
-Neither is required. n0x runs fully offline without them.
+Both are optional. Everything works without them.
 
 ---
 
 ## Privacy
 
-The inference graph and orchestration layer run entirely in the browser. Your prompts, documents, and model weights are **never transmitted to any server**.
+Your prompts, documents, and model weights stay in your browser. Period.
 
-Two optional external hooks exist, both independently toggleable:
+The only data that leaves your machine:
+- **Search queries** — routed through a DuckDuckGo CORS proxy (if you use search)
+- **Image prompts** — sent to Pollinations API (if you generate images)
 
-| Hook | Purpose | Data sent |
-|---|---|---|
-| Search proxy | DuckDuckGo / Tavily CORS bypass | Your search query only |
-| Image API | Pollinations / Stable Horde | Your image prompt only |
-
-Disabling both gives you a **100% air-gapped runtime**.
+Turn both off and nothing leaves your machine. Not metadata, not telemetry, nothing.
 
 ---
 
 ## Stack
 
-| Layer | Technology |
-|---|---|
-| Framework | Next.js 14, TypeScript |
-| LLM Runtime | WebLLM (`@mlc-ai/web-llm`), WebGPU |
-| Embeddings | Transformers.js (`@xenova/transformers`) |
-| Vector Search | Voy Search |
-| Python Runtime | Pyodide (WASM) |
-| Styling | Tailwind CSS, Framer Motion |
-| State | Zustand |
-| Storage | IndexedDB (models, vectors, memory, conversations) |
+Next.js 14 · TypeScript · WebLLM (WebGPU) · Transformers.js · Voy · Pyodide · Zustand · Tailwind · IndexedDB
 
 ---
 
-## Screenshots
-
-<img width="1657" height="923" alt="Chat interface" src="https://github.com/user-attachments/assets/dad81977-dd49-4d48-84b4-fd655825e3c2" />
+<img width="1657" height="923" alt="Chat" src="https://github.com/user-attachments/assets/dad81977-dd49-4d48-84b4-fd655825e3c2" />
 <img width="1920" height="913" alt="Agent trace" src="https://github.com/user-attachments/assets/2fb8a22e-e96b-4497-8bd2-3cb5ea88a758" />
-<img width="1920" height="913" alt="Model selector" src="https://github.com/user-attachments/assets/99f66f62-b9d6-4374-92e4-3920ba60aaf4" />
+<img width="1920" height="913" alt="Model picker" src="https://github.com/user-attachments/assets/99f66f62-b9d6-4374-92e4-3920ba60aaf4" />
 
 ---
 
-## License
-
-MIT © [ixchio](https://github.com/ixchio)
+MIT · [ixchio](https://github.com/ixchio)
