@@ -240,7 +240,7 @@ export default function HomePage() {
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-6 text-zinc-400">
               {[
                 { icon: Code, label: "Python Sandbox", sub: "Pyodide WASM runtime" },
-                { icon: Globe, label: "Deep Search", sub: "DDG + Tavily synthesis" },
+                { icon: Globe, label: "Deep Search", sub: "DDG + SearXNG + Wikipedia" },
                 { icon: ImageIcon, label: "Image Gen", sub: "Flux / Stable Horde" },
                 { icon: Mic, label: "Voice I/O", sub: "STT + TTS native" },
                 { icon: Brain, label: "Persistent Memory", sub: "IndexedDB long-term" },
@@ -281,7 +281,7 @@ export default function HomePage() {
       <footer className="w-full border-t border-zinc-800/50 py-8 relative z-10">
         <div className="max-w-6xl mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-zinc-500 font-mono">
           <span>© {new Date().getFullYear()} ixchio · MIT License</span>
-          <span>Requires Chromium 113+ · WebGPU enabled</span>
+          <span>WebGPU for local models · Ollama & Cloud API also supported</span>
           <Link href="https://github.com/ixchio/n0x" className="hover:text-zinc-300 transition-colors">github.com/ixchio/n0x</Link>
         </div>
       </footer>

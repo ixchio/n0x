@@ -26,7 +26,15 @@ import { Onboarding } from "@/components/onboarding";
 type AIProvider = "browser" | "ollama" | "cloud" | "chrome-ai";
 
 function ChatPageInner() {
-  const [provider, setProvider] = useState<AIProvider>("browser");
+  const [provider, _setProvider] = useState<AIProvider>(() => {
+    if (typeof window === "undefined") return "browser";
+    const saved = localStorage.getItem("n0x-provider") as AIProvider | null;
+    return saved && ["browser", "ollama", "cloud", "chrome-ai"].includes(saved) ? saved : "browser";
+  });
+  const setProvider = useCallback((p: AIProvider) => {
+    _setProvider(p);
+    localStorage.setItem("n0x-provider", p);
+  }, []);
   const [ollamaUrl, setOllamaUrl] = useState("http://localhost:11434");
   const [cloudApiKey, setCloudApiKey] = useState("");
   const [cloudBaseUrl, setCloudBaseUrl] = useState("https://api.groq.com/openai/v1");
@@ -156,10 +164,15 @@ function ChatPageInner() {
 
       <main className="flex-1 flex flex-col min-w-0 relative">
         <MetricsOverlay
-          tps={webllm.stats?.tps || 0}
-          modelName={WEBLLM_MODELS.find(m => m.id === webllm.loadedModel)?.label || webllm.loadedModel || ""}
-          isLoaded={webllm.status === "ready"}
-          isLoading={webllm.status === "loading"}
+          tps={provider === "ollama" ? (ollama.stats?.tps || 0) : provider === "cloud" ? (cloudAI.stats?.tps || 0) : (webllm.stats?.tps || 0)}
+          modelName={
+            provider === "ollama" ? (ollama.loadedModel || "Ollama")
+            : provider === "cloud" ? (cloudAI.loadedModel || "Cloud API")
+            : provider === "chrome-ai" ? "Chrome AI"
+            : WEBLLM_MODELS.find(m => m.id === webllm.loadedModel)?.label || webllm.loadedModel || ""
+          }
+          isLoaded={provider === "ollama" ? ollama.isSupported : provider === "cloud" ? !!cloudAI.apiKey : provider === "chrome-ai" ? chromeAI?.status === "ready" : webllm.status === "ready"}
+          isLoading={provider === "browser" && webllm.status === "loading"}
           progress={webllm.loadProgress}
           isOpen={showMetrics}
           onToggle={() => setShowMetrics(!showMetrics)}
@@ -351,8 +364,8 @@ function ChatPageInner() {
             )}
           </div>
 
-          {/* Only show these controls when NOT loading */}
-          {webllm.status !== "loading" && (
+          {/* Only hide toolbar during WebGPU model download */}
+          {!(provider === "browser" && webllm.status === "loading") && (
             <>
               {/* Persona */}
               <div className="ml-3">
@@ -367,21 +380,31 @@ function ChatPageInner() {
                 {tts.isEnabled ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}
               </button>
 
-              {/* TPS */}
-              {webllm.stats.tps > 0 && (
-                <div className={cn(
-                  "ml-3 font-mono text-[11px] flex items-center gap-1",
-                  webllm.stats.tps > 50 ? "text-phosphor text-glow-sm" :
-                    webllm.stats.tps > 20 ? "text-phosphor-dim" : "text-txt-tertiary"
-                )}>
-                  <Zap className="w-3 h-3" />
-                  {webllm.stats.tps} t/s
-                </div>
-              )}
+              {/* TPS — provider-aware */}
+              {(() => {
+                const tps = provider === "ollama" ? ollama.stats?.tps
+                  : provider === "cloud" ? cloudAI.stats?.tps
+                  : webllm.stats.tps;
+                return tps > 0 ? (
+                  <div className={cn(
+                    "ml-3 font-mono text-[11px] flex items-center gap-1",
+                    tps > 50 ? "text-phosphor text-glow-sm" :
+                      tps > 20 ? "text-phosphor-dim" : "text-txt-tertiary"
+                  )}>
+                    <Zap className="w-3 h-3" />
+                    {tps} t/s
+                  </div>
+                ) : null;
+              })()}
 
               {/* Share */}
               <div className="ml-3">
-                <ShareMenu messages={chatStore.messages} modelName={WEBLLM_MODELS.find(m => m.id === webllm.loadedModel)?.label} />
+                <ShareMenu messages={chatStore.messages} modelName={
+                  provider === "ollama" ? (ollama.loadedModel || "Ollama")
+                  : provider === "cloud" ? (cloudAI.loadedModel || "Cloud API")
+                  : provider === "chrome-ai" ? "Chrome AI"
+                  : WEBLLM_MODELS.find(m => m.id === webllm.loadedModel)?.label
+                } />
               </div>
             </>
           )}
