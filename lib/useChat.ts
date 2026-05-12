@@ -305,7 +305,20 @@ export function useChat(providerCtx?: {
             return;
         }
 
-        if (!activeProviderReady) return;
+        if (!activeProviderReady) {
+            chatStore.addMessage({ id: Date.now().toString(), role: "user", content: message });
+            const hint = providerCtx?.provider === "browser"
+                ? "Load a model first — pick one from the welcome screen or use the model selector."
+                : providerCtx?.provider === "ollama"
+                ? "Ollama isn't connected. Make sure Ollama is running and check the URL in provider settings."
+                : providerCtx?.provider === "cloud"
+                ? "Cloud API key not set. Click the provider button and enter your API key."
+                : providerCtx?.provider === "chrome-ai"
+                ? "Chrome AI is initializing. Please wait a moment and try again."
+                : "No AI provider is ready. Select a provider from the toolbar.";
+            chatStore.addMessage({ id: (Date.now() + 1).toString(), role: "assistant", content: `⚠️ ${hint}` });
+            return;
+        }
         chatStore.addMessage({ id: Date.now().toString(), role: "user", content: message });
 
         // Route: autonomous agent mode

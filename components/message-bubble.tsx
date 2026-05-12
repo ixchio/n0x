@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
@@ -128,18 +128,19 @@ const CodeBlock = ({ children, className, onRunCode, codeResults, runningCode, h
     const isRunning = runningCode === codeId;
 
     // Auto-open preview for artifacts (full HTML documents)
-    const [autoPreviewDone, setAutoPreviewDone] = useState(false);
-    if (isArtifact && !autoPreviewDone && !showPreview) {
-        setShowPreview(true);
-        setAutoPreviewDone(true);
-        // Trigger iframe render
-        setTimeout(() => {
-            if (iframeRef.current) {
-                const doc = iframeRef.current.contentDocument;
-                if (doc) { doc.open(); doc.write(buildSandboxHtml(code, lang)); doc.close(); }
-            }
-        }, 100);
-    }
+    const autoPreviewRef = useRef(false);
+    useEffect(() => {
+        if (isArtifact && !autoPreviewRef.current) {
+            autoPreviewRef.current = true;
+            setShowPreview(true);
+            setTimeout(() => {
+                if (iframeRef.current) {
+                    const doc = iframeRef.current.contentDocument;
+                    if (doc) { doc.open(); doc.write(buildSandboxHtml(code, lang)); doc.close(); }
+                }
+            }, 100);
+        }
+    }, [isArtifact, code, lang]);
 
     return (
         <div className={cn("my-4 border rounded-xl overflow-hidden shadow-sm bg-[#0a0a0a]", isArtifact && showPreview ? "border-purple-500/30" : "border-zinc-800")}>

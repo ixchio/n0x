@@ -15,6 +15,8 @@ interface Conversation {
 interface SidebarProps {
     isOpen: boolean;
     currentModel: string | null;
+    provider?: "browser" | "ollama" | "cloud" | "chrome-ai";
+    onClose?: () => void;
     onNewChat: () => void;
     conversations?: Conversation[];
     activeId?: string | null;
@@ -34,13 +36,13 @@ function timeAgo(ts: number): string {
     return new Date(ts).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
-export function Sidebar({ isOpen, currentModel, onNewChat, conversations = [], activeId, onSwitch, onDelete }: SidebarProps) {
+export function Sidebar({ isOpen, currentModel, provider = "browser", onClose, onNewChat, conversations = [], activeId, onSwitch, onDelete }: SidebarProps) {
     if (!isOpen) return null;
 
     return (
         <>
         {/* Mobile backdrop */}
-        <div className="fixed inset-0 bg-black/60 z-30 md:hidden" onClick={() => {/* parent handles close via menu button */}} />
+        <div className="fixed inset-0 bg-black/60 z-30 md:hidden" onClick={onClose} />
         <aside className="fixed md:relative z-40 w-64 h-full bg-[#0a0a0a] border-r border-zinc-900 flex flex-col shrink-0 font-sans">
             {/* Header */}
             <div className="p-4 border-b border-zinc-900 flex items-center gap-2">
@@ -104,16 +106,19 @@ export function Sidebar({ isOpen, currentModel, onNewChat, conversations = [], a
             {/* Status Panel (Footer) */}
             <div className="p-4 border-t border-zinc-900 bg-zinc-950/50 space-y-3">
                 <div className="flex flex-col gap-1 text-[11px]">
-                    <span className="text-zinc-500 font-medium uppercase tracking-wider text-[10px]">Active Model</span>
+                    <span className="text-zinc-500 font-medium uppercase tracking-wider text-[10px]">Active Provider</span>
                     <div className="flex items-center gap-2 mt-1">
                         <div className={cn(
                             "w-2 h-2 rounded-full",
-                            currentModel ? "bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.4)] animate-pulse" : "bg-zinc-700"
+                            (currentModel || provider !== "browser") ? "bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.4)] animate-pulse" : "bg-zinc-700"
                         )} />
                         <span className="text-zinc-300 font-mono truncate">
-                            {currentModel
-                                ? WEBLLM_MODELS.find(m => m.id === currentModel)?.label || "Loaded"
-                                : "None selected"
+                            {provider === "browser"
+                                ? (currentModel ? WEBLLM_MODELS.find(m => m.id === currentModel)?.label || "Loaded" : "No model selected")
+                                : provider === "ollama" ? "Ollama (local)"
+                                : provider === "cloud" ? "Cloud API"
+                                : provider === "chrome-ai" ? "Chrome AI"
+                                : "None"
                             }
                         </span>
                     </div>

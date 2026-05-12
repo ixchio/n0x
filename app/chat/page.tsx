@@ -58,7 +58,7 @@ function ChatPageInner() {
     return window.innerWidth >= 768;
   });
   const [showMemoryPanel, setShowMemoryPanel] = useState(false);
-  const [showMetrics, setShowMetrics] = useState(true);
+  const [showMetrics, setShowMetrics] = useState(false);
   const [isExploding, setIsExploding] = useState(false);
   const [pyEnabled, setPyEnabled] = useState(false);
   const [providerMenuOpen, setProviderMenuOpen] = useState(false);
@@ -76,12 +76,7 @@ function ChatPageInner() {
     tts.init();
   }, []);
 
-  useEffect(() => {
-    if (webllm.isSupported && webllm.status === "unloaded" && !webllm.loadedModel) {
-      const timer = setTimeout(() => webllm.loadModel(DEFAULT_MODEL), 500);
-      return () => clearTimeout(timer);
-    }
-  }, [webllm.isSupported, webllm.status, webllm.loadedModel]);
+  // Don't auto-load — let users see the welcome screen and pick a model or provider
 
   // Auto-scroll
   useEffect(() => {
@@ -150,6 +145,8 @@ function ChatPageInner() {
       <Sidebar
         isOpen={sidebarOpen}
         currentModel={webllm.loadedModel}
+        provider={provider}
+        onClose={() => setSidebarOpen(false)}
         onNewChat={onNewChat}
         conversations={chatStore.conversations}
         activeId={chatStore.activeId}
@@ -180,7 +177,7 @@ function ChatPageInner() {
               className="flex items-center gap-2 text-xs font-mono text-txt-secondary hover:text-phosphor transition-colors"
             >
               <Cpu className="w-3.5 h-3.5" />
-              <span>{WEBLLM_MODELS.find(m => m.id === webllm.loadedModel)?.label || "no model"}</span>
+              <span>{provider === "browser" ? (WEBLLM_MODELS.find(m => m.id === webllm.loadedModel)?.label || "no model") : provider === "ollama" ? "Ollama" : provider === "cloud" ? "Cloud API" : provider === "chrome-ai" ? "Chrome AI" : "no model"}</span>
               <ChevronDown className={cn("w-3 h-3 opacity-40 transition-transform", headerModelOpen && "rotate-180")} />
             </button>
 
@@ -389,8 +386,8 @@ function ChatPageInner() {
             </>
           )}
 
-          {/* Loading — show only spinner + progress */}
-          {webllm.status === "loading" && (
+          {/* Loading — show only spinner + progress (WebGPU model download) */}
+          {provider === "browser" && webllm.status === "loading" && (
             <div className="ml-auto text-[11px] font-mono text-phosphor-dim flex items-center gap-2">
               <Loader2 className="w-3 h-3 animate-spin" />
               {Math.round(webllm.loadProgress * 100)}%
@@ -402,23 +399,7 @@ function ChatPageInner() {
 
         {/* Messages */}
         <div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-6">
-          {/* WebGPU not supported banner */}
-          {!webllm.isSupported && (
-            <div className="max-w-lg mx-auto mt-12">
-              <div className="bg-red-500/10 border border-red-500/30 rounded p-5 text-center space-y-3">
-                <AlertTriangle className="w-8 h-8 text-red-400 mx-auto" />
-                <h3 className="text-sm font-mono text-red-400 font-bold">WebGPU not available</h3>
-                <p className="text-xs text-txt-secondary font-mono leading-relaxed">
-                  your browser doesn't support WebGPU yet. N0X needs it to run AI models locally.
-                </p>
-                <div className="text-[11px] text-txt-tertiary font-mono space-y-1">
-                  <p>✅ Chrome 113+ or Edge 113+</p>
-                  <p>⚠️ Firefox — enable <code className="text-phosphor-dim">dom.webgpu.enabled</code> in about:config</p>
-                  <p>⚠️ Safari 17+ — macOS Sonoma / iOS 17 only</p>
-                </div>
-              </div>
-            </div>
-          )}
+          {/* WebGPU unsupported hint is now integrated into the welcome screen */}
 
           {/* WebLLM Error Banner (OOM Overrides) */}
           {webllm.error && webllm.status === "error" && (
@@ -487,16 +468,28 @@ function ChatPageInner() {
             </div>
           )}
 
-          {/* Welcome screen (model loaded, no messages) */}
-          {webllm.isSupported && chatStore.messages.length === 0 && !deepSearch.isActive && webllm.status !== "loading" ? (
+          {/* Welcome screen (no messages yet) */}
+          {chatStore.messages.length === 0 && !deepSearch.isActive && webllm.status !== "loading" ? (
             <div className="h-full flex flex-col items-center justify-center">
               <div className="space-y-6 text-center max-w-md w-full">
                 <h2 className="text-3xl text-white font-bold tracking-tight">N0X</h2>
                 <p className="text-sm text-zinc-400 font-medium mt-2 max-w-xs mx-auto">
-                  {webllm.status === "unloaded" ? "Select a model to begin. All inference runs locally on your GPU — zero cloud, zero latency." : "Model loaded. Ask me anything — code, analysis, research. Everything stays on your machine."}
+                  {provider === "browser" && !webllm.isSupported
+                    ? "Your browser doesn't support WebGPU yet — switch to Ollama or Cloud below, or try Chrome 113+."
+                    : provider === "browser" && webllm.status === "unloaded"
+                    ? "Select a model to begin. All inference runs locally on your GPU — zero cloud, zero latency."
+                    : provider === "browser" && webllm.status === "ready"
+                    ? "Model loaded. Ask me anything — code, analysis, research. Everything stays on your machine."
+                    : provider === "ollama"
+                    ? "Connected to Ollama. Ask me anything — everything stays on your local network."
+                    : provider === "cloud"
+                    ? "Cloud API configured. Ask me anything — fast inference, unlimited context."
+                    : provider === "chrome-ai"
+                    ? "Chrome AI ready. Ask me anything — instant inference, zero download, fully private."
+                    : "Ready to go. Ask me anything."}
                 </p>
 
-                {webllm.status === "unloaded" && (
+                {provider === "browser" && webllm.isSupported && webllm.status === "unloaded" && (
                   <div className="grid grid-cols-3 gap-2 pt-4">
                     <button
                       onClick={() => handleModelChange("SmolLM2-360M-Instruct-q4f16_1-MLC")}
@@ -534,9 +527,29 @@ function ChatPageInner() {
                   </div>
                 )}
 
-                {/* Suggestion Chips — show when model is loaded */}
-                {webllm.status === "ready" && (
-                  <div className="grid grid-cols-2 gap-2 pt-6 max-w-sm">
+                {/* Provider switch hint when WebGPU unavailable */}
+                {provider === "browser" && !webllm.isSupported && (
+                  <div className="flex flex-col items-center gap-3 pt-4">
+                    <p className="text-xs text-zinc-500">WebGPU isn't available in this browser. Try another provider:</p>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setProvider("ollama")}
+                        className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-orange-500/10 border border-orange-500/20 text-xs text-orange-300 hover:bg-orange-500/20 transition-all"
+                      >
+                        <Server className="w-3.5 h-3.5" /> Ollama (Local)
+                      </button>
+                      <button
+                        onClick={() => setProvider("cloud")}
+                        className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-blue-500/10 border border-blue-500/20 text-xs text-blue-300 hover:bg-blue-500/20 transition-all"
+                      >
+                        <Cloud className="w-3.5 h-3.5" /> Cloud API
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Suggestion Chips — always visible for image gen, web search, etc. */}
+                <div className="grid grid-cols-2 gap-2 pt-6 max-w-sm mx-auto">
                     <button
                       onClick={() => { setInput("generate an image of "); }}
                       className="flex items-center gap-2 p-3 rounded-xl bg-zinc-900/50 border border-zinc-800/50 hover:border-pink-500/30 hover:bg-zinc-900/80 transition-all text-left group"
@@ -577,8 +590,7 @@ function ChatPageInner() {
                         <div className="text-[10px] text-zinc-600">PDF, DOCX, CSV</div>
                       </div>
                     </button>
-                  </div>
-                )}
+                </div>
               </div>
             </div>
           ) : (
