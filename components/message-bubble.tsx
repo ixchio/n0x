@@ -233,6 +233,8 @@ export const MessageBubble = React.memo(function MessageBubble({ role, content, 
     const [runningCode, setRunningCode] = useState<string | null>(null);
     const [codeResults, setCodeResults] = useState<Record<string, { output: string; error: string | null; duration: number }>>({});
     const [imageZoomed, setImageZoomed] = useState(false);
+    const [imageLoading, setImageLoading] = useState(true);
+    const [imageError, setImageError] = useState(false);
     const [showThinking, setShowThinking] = useState(false);
 
     let thinking = "";
@@ -299,35 +301,50 @@ export const MessageBubble = React.memo(function MessageBubble({ role, content, 
                 )}
                 {image && (
                     <div className="relative inline-block">
+                        {/* Loading skeleton */}
+                        {imageLoading && !imageError && (
+                            <div className="max-w-md w-[300px] h-[300px] rounded-xl bg-zinc-900 border border-zinc-800 flex flex-col items-center justify-center gap-3 animate-pulse">
+                                <div className="w-8 h-8 border-2 border-zinc-600 border-t-zinc-300 rounded-full animate-spin" />
+                                <span className="text-xs text-zinc-500 font-mono">generating image…</span>
+                            </div>
+                        )}
+                        {/* Error state with retry */}
+                        {imageError && (
+                            <div className="max-w-md w-[300px] rounded-xl bg-zinc-900 border border-red-500/20 p-6 flex flex-col items-center gap-3">
+                                <span className="text-sm text-zinc-400">Image failed to load</span>
+                                <button
+                                    onClick={() => { setImageError(false); setImageLoading(true); }}
+                                    className="px-4 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-xs text-zinc-300 transition-colors"
+                                >
+                                    Retry
+                                </button>
+                            </div>
+                        )}
+                        {/* Actual image */}
                         <div
                             className={cn(
                                 "rounded-xl overflow-hidden border border-zinc-800 cursor-pointer transition-all shadow-sm",
-                                imageZoomed ? "fixed inset-4 z-50 flex items-center justify-center bg-black/95 border-none" : "max-w-md bg-zinc-900"
+                                imageZoomed ? "fixed inset-4 z-50 flex items-center justify-center bg-black/95 border-none" : "max-w-md bg-zinc-900",
+                                (imageLoading || imageError) && !imageZoomed && "hidden"
                             )}
                             onClick={() => setImageZoomed(!imageZoomed)}
                         >
                             <img
+                                key={imageError ? "retry" : "initial"}
                                 src={image}
                                 alt="Generated"
                                 crossOrigin="anonymous"
-                                loading="lazy"
+                                onLoad={() => { setImageLoading(false); setImageError(false); }}
+                                onError={() => { setImageLoading(false); setImageError(true); }}
                                 className={cn("w-full h-auto", imageZoomed && "max-w-full max-h-full object-contain rounded-xl")}
-                                onError={(e) => {
-                                    const target = e.target as HTMLImageElement;
-                                    target.style.display = "none";
-                                    const notice = document.createElement("div");
-                                    notice.className = "p-8 text-center text-zinc-500 text-sm";
-                                    notice.textContent = "Image failed to generate or load.";
-                                    target.parentElement!.appendChild(notice);
-                                }}
                             />
                         </div>
-                        {!imageZoomed && (
+                        {!imageZoomed && !imageLoading && !imageError && (
                             <div className="absolute bottom-3 right-3 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
                                 <button onClick={(e) => { e.stopPropagation(); setImageZoomed(true); }} className="p-2 bg-black/60 hover:bg-black/80 backdrop-blur text-white rounded-lg transition-colors">
                                     <ZoomIn className="w-4 h-4" />
                                 </button>
-                                <a href={image} download={`n0x-${Date.now()}.webp`} onClick={(e) => e.stopPropagation()} className="p-2 bg-black/60 hover:bg-black/80 backdrop-blur text-white rounded-lg transition-colors">
+                                <a href={image} download={`n0x-${Date.now()}.png`} onClick={(e) => e.stopPropagation()} className="p-2 bg-black/60 hover:bg-black/80 backdrop-blur text-white rounded-lg transition-colors">
                                     <Download className="w-4 h-4" />
                                 </a>
                             </div>

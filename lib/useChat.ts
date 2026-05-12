@@ -77,14 +77,14 @@ export function useChat(providerCtx?: {
 
     const handleImageGen = useCallback(async (prompt: string) => {
         setGeneratingImage(true);
-        setImageProgress({ active: true, phase: "submitting..." });
+        setImageProgress({ active: true, phase: "sending to Pollinations..." });
 
         chatStore.addMessage({ id: Date.now().toString(), role: "user", content: prompt });
         const msgId = (Date.now() + 1).toString();
-        chatStore.addMessage({ id: msgId, role: "assistant", content: "generating image..." });
+        chatStore.addMessage({ id: msgId, role: "assistant", content: "🎨 Generating image…" });
 
         try {
-            setImageProgress({ active: true, phase: "waiting for provider..." });
+            setImageProgress({ active: true, phase: "generating with Flux…" });
             const res = await fetch("/api/image-gen", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -95,13 +95,14 @@ export function useChat(providerCtx?: {
             const data = await res.json();
 
             if (data.success && data.image) {
-                setImageProgress({ active: true, phase: `done (${data.provider})`, provider: data.provider });
-                chatStore.updateMessage(msgId, { content: `generated: "${prompt}"`, image: data.image });
+                const model = data.provider?.replace("pollinations-", "").replace("free-", "") || "ai";
+                setImageProgress({ active: true, phase: `done · ${model}`, provider: data.provider });
+                chatStore.updateMessage(msgId, { content: `🎨 "${prompt.replace(/^(generate|create|make|draw|paint|render)\s+(an?\s+)?(image|picture|photo)\s+(of\s+)?/i, "").trim()}"`, image: data.image });
             } else {
-                chatStore.updateMessage(msgId, { content: `failed: ${data.error || "unknown"}` });
+                chatStore.updateMessage(msgId, { content: `⚠️ Image generation failed: ${data.error || "provider unavailable"}` });
             }
         } catch (err: any) {
-            chatStore.updateMessage(msgId, { content: `failed: ${err.message}` });
+            chatStore.updateMessage(msgId, { content: `⚠️ Image generation failed: ${err.message}` });
         } finally {
             setGeneratingImage(false);
             setImageProgress({ active: false });
