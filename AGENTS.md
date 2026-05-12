@@ -43,9 +43,28 @@ npm run start    # Start production server
 - **Onboarding**: First-time overlay for Product Hunt visitors, stored in localStorage
 - **Chrome AI**: Zero-download provider using Chrome's built-in Gemini Nano
 
+## UI Audit Findings (2026-05-11)
+### Fixed
+- **Welcome screen**: No longer auto-loads model; shows model picker OR provider switch buttons (when WebGPU unavailable). Suggestion chips (image gen, web search, agent, upload docs) always visible.
+- **Red WebGPU error banner**: Removed. Integrated graceful messaging into welcome screen.
+- **Mobile sidebar**: Added `onClose` prop; backdrop tap closes sidebar.
+- **Silent send failure**: `useChat.ts` `handleSend` now shows error for uninitialized providers.
+- **Message re-render loop**: `autoPreviewDone` state → `autoPreviewRef` (useRef) in message-bubble.
+- **PWA icons**: Were JPEG files saved as `.png` with wrong dimensions. Now real PNGs at 192×192 and 512×512. Added `apple-touch-icon.png` (180×180).
+- **Provider persistence**: `localStorage.getItem("n0x-provider")` — survives page refresh.
+- **Provider-aware UI**: TPS counter, MetricsOverlay, ShareMenu all read from active provider (was hardcoded to WebLLM).
+- **Toolbar visibility**: Controls stay visible during Ollama/Cloud use (was hidden when WebLLM loading).
+- **Landing page accuracy**: Footer says "Ollama & Cloud API also supported". Deep Search subtitle says "DDG + SearXNG + Wikipedia".
+- **SEO**: Added `robots.txt`, `icons` metadata in layout, apple-touch-icon.
+
+### Not Fixed (needs design/manual work)
+- **OG image**: No `og:image` exists. Critical for Product Hunt social shares. Needs a designed 1200×630 image.
+- **Year in footer**: Auto-generates from `new Date().getFullYear()` — currently shows 2026 (correct).
+
 ## Known Limitations
 - WebGPU required for local inference (Chrome 113+, Edge 113+)
 - Chrome AI (Gemini Nano) requires Chrome 138+ with flags enabled
 - PWA service worker only registered in production
 - SearXNG instances in deep-search are hardcoded and may go down
 - No conversation search across all conversations yet
+- No OG image for social sharing (needs design)
