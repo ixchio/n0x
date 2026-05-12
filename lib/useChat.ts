@@ -310,7 +310,7 @@ export function useChat(providerCtx?: {
             const hint = providerCtx?.provider === "browser"
                 ? "Load a model first — pick one from the welcome screen or use the model selector."
                 : providerCtx?.provider === "ollama"
-                ? "Ollama isn't connected. Make sure Ollama is running and check the URL in provider settings."
+                ? "Ollama isn't connected. Download it from [ollama.com/download](https://ollama.com/download), run `ollama serve`, then pull a model with `ollama pull llama3.2`. n0x will auto-detect it."
                 : providerCtx?.provider === "cloud"
                 ? "Cloud API key not set. Click the provider button and enter your API key."
                 : providerCtx?.provider === "chrome-ai"

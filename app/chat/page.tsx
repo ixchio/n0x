@@ -84,7 +84,13 @@ function ChatPageInner() {
     tts.init();
   }, []);
 
-  // Don't auto-load — let users see the welcome screen and pick a model or provider
+  // Poll Ollama when selected — auto-detect when user starts the server
+  useEffect(() => {
+    if (provider === "ollama") {
+      ollama.startPolling();
+      return () => ollama.stopPolling();
+    }
+  }, [provider]);
 
   // Auto-scroll
   useEffect(() => {
@@ -503,8 +509,10 @@ function ChatPageInner() {
                     ? "Select a model to begin. All inference runs locally on your GPU — zero cloud, zero latency."
                     : provider === "browser" && webllm.status === "ready"
                     ? "Model loaded. Ask me anything — code, analysis, research. Everything stays on your machine."
-                    : provider === "ollama"
-                    ? "Connected to Ollama. Ask me anything — everything stays on your local network."
+                    : provider === "ollama" && ollama.isSupported
+                    ? `Connected to Ollama · ${ollama.models.length} model${ollama.models.length !== 1 ? "s" : ""} available. Ask me anything.`
+                    : provider === "ollama" && !ollama.isSupported
+                    ? "Can't reach Ollama — make sure it's installed and running on your machine."
                     : provider === "cloud"
                     ? "Cloud API configured. Ask me anything — fast inference, unlimited context."
                     : provider === "chrome-ai"
@@ -567,6 +575,38 @@ function ChatPageInner() {
                       >
                         <Cloud className="w-3.5 h-3.5" /> Cloud API
                       </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Ollama setup guide — shown when Ollama provider is selected but not reachable */}
+                {provider === "ollama" && !ollama.isSupported && (
+                  <div className="flex flex-col items-center gap-3 pt-4 max-w-sm mx-auto">
+                    <div className="w-full rounded-xl bg-orange-500/5 border border-orange-500/15 p-4 space-y-3 text-left">
+                      <div className="flex items-center gap-2 text-orange-300 text-xs font-semibold">
+                        <Download className="w-3.5 h-3.5" />
+                        Ollama not found — quick setup:
+                      </div>
+                      <ol className="text-[11px] text-zinc-400 space-y-1.5 list-decimal list-inside leading-relaxed">
+                        <li>
+                          Download from{" "}
+                          <a href="https://ollama.com/download" target="_blank" rel="noopener noreferrer"
+                            className="text-orange-300 underline underline-offset-2 hover:text-orange-200">
+                            ollama.com/download
+                          </a>
+                        </li>
+                        <li>Install and run: <code className="bg-zinc-800 px-1.5 py-0.5 rounded text-[10px] text-zinc-300 font-mono">ollama serve</code></li>
+                        <li>Pull a model: <code className="bg-zinc-800 px-1.5 py-0.5 rounded text-[10px] text-zinc-300 font-mono">ollama pull llama3.2</code></li>
+                      </ol>
+                      <p className="text-[10px] text-zinc-500">
+                        n0x auto-detects when Ollama starts — no refresh needed.
+                      </p>
+                      {ollama.error && (
+                        <div className="flex items-start gap-1.5 text-[10px] text-red-400/80 pt-1 border-t border-zinc-800">
+                          <AlertTriangle className="w-3 h-3 mt-0.5 shrink-0" />
+                          <span>{ollama.error}</span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
