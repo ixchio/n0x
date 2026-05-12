@@ -88,6 +88,8 @@ const CodeBlock = ({ children, className, onRunCode, codeResults, runningCode, h
     const isPython = lang === "python" || lang === "py";
     const isWeb = ["html", "htm", "javascript", "js", "css"].includes(lang);
     const pyRunnable = isPython && canRunPython(code);
+    // Auto-detect "artifact" — a full HTML document with <html or <!doctype
+    const isArtifact = isWeb && lang === "html" && (code.toLowerCase().includes("<!doctype") || code.toLowerCase().includes("<html"));
 
     if (!match) {
         return (
@@ -125,11 +127,28 @@ const CodeBlock = ({ children, className, onRunCode, codeResults, runningCode, h
     const result = codeResults?.[codeId];
     const isRunning = runningCode === codeId;
 
+    // Auto-open preview for artifacts (full HTML documents)
+    const [autoPreviewDone, setAutoPreviewDone] = useState(false);
+    if (isArtifact && !autoPreviewDone && !showPreview) {
+        setShowPreview(true);
+        setAutoPreviewDone(true);
+        // Trigger iframe render
+        setTimeout(() => {
+            if (iframeRef.current) {
+                const doc = iframeRef.current.contentDocument;
+                if (doc) { doc.open(); doc.write(buildSandboxHtml(code, lang)); doc.close(); }
+            }
+        }, 100);
+    }
+
     return (
-        <div className="my-4 border border-zinc-800 rounded-xl overflow-hidden shadow-sm bg-[#0a0a0a]">
+        <div className={cn("my-4 border rounded-xl overflow-hidden shadow-sm bg-[#0a0a0a]", isArtifact && showPreview ? "border-purple-500/30" : "border-zinc-800")}>
             {/* Header */}
             <div className="flex items-center justify-between px-4 py-2 bg-zinc-900/50 border-b border-zinc-800">
-                <span className="text-[11px] text-zinc-400 font-mono font-medium">{lang}</span>
+                <div className="flex items-center gap-2">
+                    <span className="text-[11px] text-zinc-400 font-mono font-medium">{lang}</span>
+                    {isArtifact && <span className="text-[9px] text-purple-400 bg-purple-500/10 px-1.5 py-0.5 rounded font-mono font-semibold">ARTIFACT</span>}
+                </div>
                 <div className="flex items-center gap-1.5">
                     {isWeb && (
                         <button
@@ -181,9 +200,9 @@ const CodeBlock = ({ children, className, onRunCode, codeResults, runningCode, h
                 </div>
             )}
 
-            {/* Web preview iframe */}
+            {/* Web preview iframe — taller for artifacts */}
             {showPreview && isWeb && (
-                <div className="relative bg-white w-full h-[400px]">
+                <div className={cn("relative bg-white w-full", isArtifact ? "h-[500px]" : "h-[400px]")}>
                     <iframe
                         ref={iframeRef}
                         sandbox="allow-scripts allow-popups allow-forms"

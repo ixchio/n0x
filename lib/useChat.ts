@@ -32,9 +32,10 @@ const IMG_PATTERNS = [
 ];
 
 export function useChat(providerCtx?: { 
-    provider: "browser" | "ollama" | "cloud", 
+    provider: "browser" | "ollama" | "cloud" | "chrome-ai", 
     ollama: any, 
-    cloudAI: any 
+    cloudAI: any,
+    chromeAI?: any,
 }) {
     const [input, setInput] = useState("");
     const [streamingContent, setStreamingContent] = useState("");
@@ -56,16 +57,19 @@ export function useChat(providerCtx?: {
 
     // Determine current provider status for UI
     let activeProviderReady = false;
-    if (providerCtx?.provider === "ollama") activeProviderReady = providerCtx.ollama.isSupported;
+    if (providerCtx?.provider === "chrome-ai") activeProviderReady = providerCtx.chromeAI?.status === "ready";
+    else if (providerCtx?.provider === "ollama") activeProviderReady = providerCtx.ollama.isSupported;
     else if (providerCtx?.provider === "cloud") activeProviderReady = !!providerCtx.cloudAI.apiKey;
     else activeProviderReady = webllm.status === "ready";
 
     const isStreaming = webllm.status === "generating" || 
         providerCtx?.ollama.status === "generating" || 
         providerCtx?.cloudAI.status === "generating" || 
+        providerCtx?.chromeAI?.status === "generating" ||
         deepSearch.isActive || generatingImage || agent.status === "thinking" || agent.status === "acting";
 
     const getGenerateFn = useCallback(() => {
+        if (providerCtx?.provider === "chrome-ai") return providerCtx.chromeAI!.generate;
         if (providerCtx?.provider === "ollama") return providerCtx.ollama.generate;
         if (providerCtx?.provider === "cloud") return providerCtx.cloudAI.generate;
         return webllm.generate;
@@ -371,7 +375,8 @@ export function useChat(providerCtx?: {
     }, [input, isStreaming, activeProviderReady, chatStore, deepSearch, memory, memoryEnabled, handleImageGen, rag, tts, persona, agent, buildAgentToolkit, gatherContext, buildMessages, getGenerateFn]);
 
     const handleStop = useCallback(() => {
-        if (providerCtx?.provider === "ollama") providerCtx.ollama.stop();
+        if (providerCtx?.provider === "chrome-ai") providerCtx.chromeAI?.stop();
+        else if (providerCtx?.provider === "ollama") providerCtx.ollama.stop();
         else if (providerCtx?.provider === "cloud") providerCtx.cloudAI.stop();
         else webllm.stop();
 

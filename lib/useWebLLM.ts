@@ -291,9 +291,17 @@ interface WebLLMState {
 }
 
 // Module-level variables to hold non-reactive instances
-let engine: webllm.MLCEngine | null = null;
+let engine: webllm.MLCEngine | webllm.WebWorkerMLCEngine | null = null;
 let abortController: AbortController | null = null;
 let isLoadingModel = false;
+// Cumulative token counter persisted to localStorage for cost savings display
+const TOKENS_KEY = "n0x_total_tokens";
+export function getTotalTokens(): number {
+    try { return parseInt(localStorage.getItem(TOKENS_KEY) || "0", 10) || 0; } catch { return 0; }
+}
+function addTokens(n: number) {
+    try { localStorage.setItem(TOKENS_KEY, String(getTotalTokens() + n)); } catch {}
+}
 
 /**
  * The context window budget in characters for the currently loaded model.
@@ -366,12 +374,23 @@ export const useWebLLM = create<WebLLMState>((set, get) => ({
                 engine = null;
             }
 
-            // Create new engine with progress callback
-            engine = await webllm.CreateMLCEngine(modelId, {
-                initProgressCallback: (progress) => {
+            // Try Web Worker engine first (keeps UI at 60fps during inference)
+            // Falls back to main-thread engine if Worker isn't available
+            const initOpts = {
+                initProgressCallback: (progress: any) => {
                     set({ loadProgress: progress.progress });
                 },
-            });
+            };
+            try {
+                engine = await webllm.CreateWebWorkerMLCEngine(
+                    new Worker(new URL("@mlc-ai/web-llm", import.meta.url), { type: "module" }),
+                    modelId,
+                    initOpts,
+                );
+            } catch {
+                // Worker failed — fall back to main thread engine
+                engine = await webllm.CreateMLCEngine(modelId, initOpts);
+            }
 
             // Extract context window size dynamically for agent budgeting
             const windowSize = (engine.chat as any).config?.context_window_size || 4096;
@@ -444,6 +463,7 @@ export const useWebLLM = create<WebLLMState>((set, get) => ({
             const duration = (now - startTime) / 1000;
             const tps = duration > 0 ? Math.round(tokenCount / duration) : 0;
             set({ stats: { tps, totalTokens: tokenCount, lastTokenTime: now }, status: "ready" });
+            addTokens(tokenCount); // persist for cost savings counter
 
             return fullResponse;
         } catch (e: any) {

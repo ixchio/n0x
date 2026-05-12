@@ -11,6 +11,8 @@ import { MemoryPanel } from "@/components/memory-panel";
 import { WEBLLM_MODELS, MODEL_CATEGORIES } from "@/lib/useWebLLM";
 import { useOllama } from "@/lib/useOllama";
 import { useCloudAI } from "@/lib/useCloudAI";
+import { useChromeAI } from "@/lib/useChromeAI";
+import { getTotalTokens } from "@/lib/useWebLLM";
 import { cn } from "@/lib/utils";
 import { CommandMenu } from "@/components/command-menu";
 import { ErrorBoundary } from "@/components/error-boundary";
@@ -19,8 +21,9 @@ import { ShareMenu } from "@/components/share-menu";
 import { useChat } from "@/lib/useChat";
 import { useSTT } from "@/lib/useSTT";
 import { AgentTrace } from "@/components/agent-trace";
+import { Onboarding } from "@/components/onboarding";
 
-type AIProvider = "browser" | "ollama" | "cloud";
+type AIProvider = "browser" | "ollama" | "cloud" | "chrome-ai";
 
 function ChatPageInner() {
   const [provider, setProvider] = useState<AIProvider>("browser");
@@ -30,8 +33,9 @@ function ChatPageInner() {
 
   const ollama = useOllama();
   const cloudAI = useCloudAI();
+  const chromeAI = useChromeAI();
 
-  const chat = useChat({ provider, ollama, cloudAI });
+  const chat = useChat({ provider, ollama, cloudAI, chromeAI });
   const {
     input, setInput, streamingContent, isStreaming, generatingImage, imageProgress,
     deepSearchEnabled, setDeepSearchEnabled, memoryEnabled, setMemoryEnabled,
@@ -65,9 +69,10 @@ function ChatPageInner() {
 
   const DEFAULT_MODEL = "Qwen2.5-1.5B-Instruct-q4f16_1-MLC";
 
-  // Auto-load smallest model on first visit
+  // Auto-load smallest model on first visit + check Chrome AI
   useEffect(() => {
     webllm.init();
+    chromeAI.init();
     tts.init();
   }, []);
 
@@ -133,6 +138,7 @@ function ChatPageInner() {
 
   return (
     <div className="h-screen flex bg-background font-sans overflow-hidden text-foreground selection:bg-white/20">
+      <Onboarding onComplete={() => {}} chromeAIAvailable={chromeAI.isSupported} />
       <CommandMenu
         onLoadModel={handleModelChange}
         onNewChat={onNewChat}
@@ -231,14 +237,16 @@ function ChatPageInner() {
               className={cn(
                 "flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] font-mono transition-all border",
                 provider === "browser" ? "text-emerald-400 border-emerald-500/20 bg-emerald-500/5" :
+                provider === "chrome-ai" ? "text-purple-400 border-purple-500/20 bg-purple-500/5" :
                 provider === "ollama" ? "text-orange-400 border-orange-500/20 bg-orange-500/5" :
                 "text-blue-400 border-blue-500/20 bg-blue-500/5"
               )}
             >
               {provider === "browser" && <Monitor className="w-3 h-3" />}
+              {provider === "chrome-ai" && <Sparkles className="w-3 h-3" />}
               {provider === "ollama" && <Server className="w-3 h-3" />}
               {provider === "cloud" && <Cloud className="w-3 h-3" />}
-              {provider === "browser" ? "WebGPU" : provider === "ollama" ? "Ollama" : "Cloud"}
+              {provider === "browser" ? "WebGPU" : provider === "chrome-ai" ? "Chrome AI" : provider === "ollama" ? "Ollama" : "Cloud"}
             </button>
 
             {providerMenuOpen && (
@@ -255,6 +263,19 @@ function ChatPageInner() {
                       <div className="text-[10px] text-zinc-500">Runs in your browser — zero server, max privacy</div>
                     </div>
                   </button>
+                  {chromeAI.isSupported && (
+                    <button
+                      onClick={() => { setProvider("chrome-ai"); setProviderMenuOpen(false); }}
+                      className={cn("w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-xs text-left transition-all", provider === "chrome-ai" ? "bg-purple-500/10 border border-purple-500/20 text-white" : "text-zinc-400 hover:bg-zinc-900 hover:text-white")}
+                    >
+                      <Sparkles className="w-4 h-4 text-purple-400 shrink-0" />
+                      <div>
+                        <div className="font-semibold">Chrome AI <span className="text-[9px] text-purple-400 font-mono ml-1">INSTANT</span></div>
+                        <div className="text-[10px] text-zinc-500">Gemini Nano — zero download, on-device</div>
+                        {chromeAI.status === "ready" && <div className="text-[10px] text-emerald-400 mt-0.5">✓ Ready</div>}
+                      </div>
+                    </button>
+                  )}
                   <button
                     onClick={() => {
                       setProvider("ollama");

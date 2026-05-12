@@ -288,6 +288,64 @@ function cosine(a: number[], b: number[]): number {
     return na === 0 || nb === 0 ? 0 : dot / (Math.sqrt(na) * Math.sqrt(nb));
 }
 
+// ── BM25 scoring for hybrid search ──
+
+const BM25_K1 = 1.2;
+const BM25_B = 0.75;
+
+function tokenize(text: string): string[] {
+    return text.toLowerCase().replace(/[^\w\s]/g, " ").split(/\s+/).filter(t => t.length > 1);
+}
+
+function bm25Score(query: string, candidateIds: string[]): Map<string, number> {
+    const queryTerms = tokenize(query);
+    const N = chunkStore.size;
+    const allValues = Array.from(chunkStore.values());
+    const avgDl = (() => {
+        let sum = 0;
+        for (let i = 0; i < allValues.length; i++) sum += tokenize(allValues[i].text).length;
+        return sum / Math.max(N, 1);
+    })();
+
+    const df = new Map<string, number>();
+    for (const term of queryTerms) {
+        let count = 0;
+        for (let i = 0; i < allValues.length; i++) {
+            if (allValues[i].text.toLowerCase().includes(term)) count++;
+        }
+        df.set(term, count);
+    }
+
+    const scores = new Map<string, number>();
+    for (const id of candidateIds) {
+        const entry = chunkStore.get(id);
+        if (!entry) continue;
+        const tokens = tokenize(entry.text);
+        const dl = tokens.length;
+        let score = 0;
+        for (const term of queryTerms) {
+            const termFreq = tokens.filter(t => t === term).length;
+            const docFreq = df.get(term) || 0;
+            const idf = Math.log((N - docFreq + 0.5) / (docFreq + 0.5) + 1);
+            score += idf * ((termFreq * (BM25_K1 + 1)) / (termFreq + BM25_K1 * (1 - BM25_B + BM25_B * (dl / avgDl))));
+        }
+        scores.set(id, score);
+    }
+    return scores;
+}
+
+// Reciprocal Rank Fusion — merges vector + BM25 ranked lists
+function rrfFusion(rankings: string[][], k = 60): string[] {
+    const scores = new Map<string, number>();
+    for (const ranking of rankings) {
+        for (let i = 0; i < ranking.length; i++) {
+            const id = ranking[i];
+            scores.set(id, (scores.get(id) || 0) + 1 / (k + i + 1));
+        }
+    }
+    return Array.from(scores.entries()).sort((a, b) => b[1] - a[1]).map(e => e[0]);
+}
+
 // ── MMR re-ranking: Maximum Marginal Relevance ──
 // Picks `k` chunks that are most relevant to the query AND most diverse from each other.
 // lambda=0.6 means 60% relevance, 40% diversity.
@@ -463,15 +521,28 @@ self.addEventListener("message", async (e: MessageEvent) => {
             const output = await embedder(query, { pooling: "mean", normalize: true });
             const queryEmbedding = Array.from(output.data) as number[];
 
-            // Fetch a larger candidate pool (8× limit) then MMR-rerank down to `limit`
-            const candidateCount = Math.min(Math.max(limit * 3, 8), chunkStore.size);
-            const rawResults: any = voy.search(queryEmbedding as any, candidateCount);
+            // ── Hybrid search: Vector (Voy) + BM25 → RRF fusion → MMR rerank ──
+            const poolSize = Math.min(Math.max(limit * 4, 12), chunkStore.size);
+
+            // 1) Vector ranking
+            const rawResults: any = voy.search(queryEmbedding as any, poolSize);
             const hits = rawResults.hits || rawResults.neighbors || rawResults || [];
             const cleanHits = Array.isArray(hits) ? hits : [];
-            const candidateIds: string[] = cleanHits.map((h: any) => h.id).filter((id: string) => chunkStore.has(id));
+            const vectorRanking: string[] = cleanHits.map((h: any) => h.id).filter((id: string) => chunkStore.has(id));
 
-            // MMR reranking
-            const rerankedIds = mmrRerank(queryEmbedding, candidateIds, limit);
+            // 2) BM25 keyword ranking over same candidates
+            const allChunkIds = Array.from(chunkStore.keys());
+            const bm25Scores = bm25Score(query, allChunkIds);
+            const bm25Ranking = Array.from(bm25Scores.entries())
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, poolSize)
+                .map(e => e[0]);
+
+            // 3) RRF fusion of both rankings
+            const fusedIds = rrfFusion([vectorRanking, bm25Ranking]);
+
+            // 4) MMR reranking for diversity
+            const rerankedIds = mmrRerank(queryEmbedding, fusedIds, limit);
             const chunks = rerankedIds.map(cid => chunkStore.get(cid)?.text || "").filter(Boolean);
             self.postMessage({ id, result: chunks, done: true });
         }

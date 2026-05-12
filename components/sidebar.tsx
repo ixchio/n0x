@@ -1,8 +1,8 @@
 "use client";
 
 import React from "react";
-import { Plus, Trash2, MessageSquare, Box } from "lucide-react";
-import { WEBLLM_MODELS } from "@/lib/useWebLLM";
+import { Plus, Trash2, MessageSquare, Box, TrendingDown } from "lucide-react";
+import { WEBLLM_MODELS, getTotalTokens } from "@/lib/useWebLLM";
 import { cn } from "@/lib/utils";
 
 interface Conversation {
@@ -102,7 +102,7 @@ export function Sidebar({ isOpen, currentModel, onNewChat, conversations = [], a
             </div>
 
             {/* Status Panel (Footer) */}
-            <div className="p-4 border-t border-zinc-900 bg-zinc-950/50">
+            <div className="p-4 border-t border-zinc-900 bg-zinc-950/50 space-y-3">
                 <div className="flex flex-col gap-1 text-[11px]">
                     <span className="text-zinc-500 font-medium uppercase tracking-wider text-[10px]">Active Model</span>
                     <div className="flex items-center gap-2 mt-1">
@@ -118,6 +118,23 @@ export function Sidebar({ isOpen, currentModel, onNewChat, conversations = [], a
                         </span>
                     </div>
                 </div>
+                {/* Cost savings counter */}
+                {(() => {
+                    const tokens = getTotalTokens();
+                    if (tokens < 100) return null;
+                    // Average cloud cost: ~$0.30 per 1M tokens (blended input/output)
+                    const saved = (tokens / 1_000_000) * 0.30;
+                    return (
+                        <div className="flex items-center gap-2 text-[11px] text-emerald-400/80 bg-emerald-500/5 border border-emerald-500/10 rounded-lg px-3 py-2">
+                            <TrendingDown className="w-3.5 h-3.5 shrink-0" />
+                            <div>
+                                <span className="font-mono font-bold">${saved < 0.01 ? "<0.01" : saved.toFixed(2)}</span>
+                                <span className="text-zinc-500 ml-1">saved vs cloud</span>
+                                <div className="text-[9px] text-zinc-600 mt-0.5">{tokens.toLocaleString()} tokens processed locally</div>
+                            </div>
+                        </div>
+                    );
+                })()}
             </div>
         </aside>
         </>
