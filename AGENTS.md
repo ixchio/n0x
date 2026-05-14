@@ -57,6 +57,23 @@ npm run start    # Start production server
 - **Landing page accuracy**: Footer says "Ollama & Cloud API also supported". Deep Search subtitle says "DDG + SearXNG + Wikipedia".
 - **SEO**: Added `robots.txt`, `icons` metadata in layout, apple-touch-icon.
 
+### Fixed (2026-05-14)
+- **Cloud API**: Was completely broken — no model selector, no model fetching, hardcoded model lists, state sync bug.
+  - Added `fetchModels()` to auto-fetch from provider's `/models` endpoint
+  - Added model selector dropdown in provider config panel
+  - Added model selector in header dropdown (was only showing WebGPU models)
+  - Fixed state sync: `cloudApiKey`/`cloudBaseUrl` local state now initializes from Zustand store (sessionStorage)
+  - Added `cloudAI.init()` call when cloud provider is selected
+  - Selected model now persisted in sessionStorage alongside credentials
+  - Auto-fetch models with debounce when credentials change
+- **Context window**: Was hardcoded to 3500 tokens for ALL providers, crippling RAG/memory for Cloud API (128k models).
+  - Cloud: 30k tokens, Ollama: 12k tokens, WebGPU/Chrome AI: 3500 tokens
+- **Agent context budget**: Was tied to WebGPU model's context window via `contextCharsLimit`.
+  - Added `contextBudget` param to `runLoop()` — Cloud gets 120k chars, Ollama gets 48k chars
+- **Token counter**: Cloud API and Ollama tokens weren't tracked. Exported `addTokens()` from useWebLLM.
+- **Welcome screen**: Was showing "Cloud API configured" even without API key set.
+- **Header model label**: Was showing "Ollama" / "Cloud API" instead of actual model name.
+
 ### Not Fixed (needs design/manual work)
 - **OG image**: No `og:image` exists. Critical for Product Hunt social shares. Needs a designed 1200×630 image.
 - **Year in footer**: Auto-generates from `new Date().getFullYear()` — currently shows 2026 (correct).

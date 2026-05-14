@@ -36,8 +36,8 @@ function ChatPageInner() {
     localStorage.setItem("n0x-provider", p);
   }, []);
   const [ollamaUrl, setOllamaUrl] = useState("http://localhost:11434");
-  const [cloudApiKey, setCloudApiKey] = useState("");
-  const [cloudBaseUrl, setCloudBaseUrl] = useState("https://api.groq.com/openai/v1");
+  const [cloudApiKey, setCloudApiKey] = useState(() => useCloudAI.getState().apiKey || "");
+  const [cloudBaseUrl, setCloudBaseUrl] = useState(() => useCloudAI.getState().baseUrl || "https://api.groq.com/openai/v1");
 
   const ollama = useOllama();
   const cloudAI = useCloudAI();
@@ -89,6 +89,13 @@ function ChatPageInner() {
     if (provider === "ollama") {
       ollama.startPolling();
       return () => ollama.stopPolling();
+    }
+  }, [provider]);
+
+  // Initialize Cloud AI when cloud provider is selected
+  useEffect(() => {
+    if (provider === "cloud") {
+      cloudAI.init();
     }
   }, [provider]);
 
@@ -196,7 +203,7 @@ function ChatPageInner() {
               className="flex items-center gap-2 text-xs font-mono text-txt-secondary hover:text-phosphor transition-colors"
             >
               <Cpu className="w-3.5 h-3.5" />
-              <span>{provider === "browser" ? (WEBLLM_MODELS.find(m => m.id === webllm.loadedModel)?.label || "no model") : provider === "ollama" ? "Ollama" : provider === "cloud" ? "Cloud API" : provider === "chrome-ai" ? "Chrome AI" : "no model"}</span>
+              <span>{provider === "browser" ? (WEBLLM_MODELS.find(m => m.id === webllm.loadedModel)?.label || "no model") : provider === "ollama" ? (ollama.loadedModel || "Ollama") : provider === "cloud" ? (cloudAI.loadedModel || "Cloud API") : provider === "chrome-ai" ? "Chrome AI" : "no model"}</span>
               <ChevronDown className={cn("w-3 h-3 opacity-40 transition-transform", headerModelOpen && "rotate-180")} />
             </button>
 
@@ -204,43 +211,92 @@ function ChatPageInner() {
               <>
                 <div className="fixed inset-0 z-40" onClick={() => setHeaderModelOpen(false)} />
                 <div className="absolute top-full left-0 mt-2 w-72 max-h-[70vh] overflow-y-auto bg-card border border-border shadow-xl rounded-xl z-50 no-scrollbar p-1">
-                  {Object.entries(MODEL_CATEGORIES).map(([key, cat]) => {
-                    const models = WEBLLM_MODELS.filter(m => m.category === key);
-                    if (models.length === 0) return null;
-                    return (
-                      <div key={key} className="p-1">
-                        <div className="px-2 py-1.5 flex items-center gap-2">
-                          {key === 'fast' && <Zap className="w-3 h-3 text-neon-amber" />}
-                          {key === 'balanced' && <Cpu className="w-3 h-3 text-neon-cyan" />}
-                          {key === 'powerful' && <Brain className="w-3 h-3 text-neon-magenta" />}
-                          {key === 'coding' && <Code className="w-3 h-3 text-phosphor" />}
-                          {key === 'uncensored' && <Shield className="w-3 h-3 text-neon-pink" />}
-                          <span className="text-[10px] font-mono text-txt-tertiary uppercase tracking-wider">
-                            {cat.label}
-                          </span>
-                        </div>
-                        {models.map((m) => (
-                          <button
-                            key={m.id}
-                            onClick={() => handleModelChange(m.id)}
-                            disabled={!webllm.isSupported}
-                            className={cn(
-                              "w-full flex items-center justify-between px-2 py-1.5 rounded text-xs text-left transition-all font-mono",
-                              webllm.loadedModel === m.id
-                                ? "bg-zinc-800 text-white border border-zinc-700 font-semibold"
-                                : "text-zinc-400 hover:bg-zinc-900 hover:text-white"
-                            )}
-                          >
-                            <div>
-                              <div>{m.label}</div>
-                              <div className="text-[10px] text-txt-tertiary">{m.desc}</div>
-                            </div>
-                            <span className="text-[10px] text-txt-tertiary">{m.size}</span>
-                          </button>
-                        ))}
+                  {provider === "cloud" ? (
+                    <div className="p-1">
+                      <div className="px-2 py-1.5 flex items-center gap-2">
+                        <Cloud className="w-3 h-3 text-blue-400" />
+                        <span className="text-[10px] font-mono text-txt-tertiary uppercase tracking-wider">Cloud Models</span>
+                        {cloudAI.fetchingModels && <Loader2 className="w-2.5 h-2.5 animate-spin text-blue-400" />}
                       </div>
-                    );
-                  })}
+                      {cloudAI.models.map((m) => (
+                        <button
+                          key={m}
+                          onClick={() => { cloudAI.loadModel(m); setHeaderModelOpen(false); }}
+                          className={cn(
+                            "w-full flex items-center px-2 py-1.5 rounded text-xs text-left transition-all font-mono",
+                            cloudAI.loadedModel === m
+                              ? "bg-zinc-800 text-white border border-zinc-700 font-semibold"
+                              : "text-zinc-400 hover:bg-zinc-900 hover:text-white"
+                          )}
+                        >
+                          {m}
+                        </button>
+                      ))}
+                    </div>
+                  ) : provider === "ollama" ? (
+                    <div className="p-1">
+                      <div className="px-2 py-1.5 flex items-center gap-2">
+                        <Server className="w-3 h-3 text-orange-400" />
+                        <span className="text-[10px] font-mono text-txt-tertiary uppercase tracking-wider">Ollama Models</span>
+                      </div>
+                      {ollama.models.map((m) => (
+                        <button
+                          key={m.name}
+                          onClick={() => { ollama.loadModel(m.name); setHeaderModelOpen(false); }}
+                          className={cn(
+                            "w-full flex items-center justify-between px-2 py-1.5 rounded text-xs text-left transition-all font-mono",
+                            ollama.loadedModel === m.name
+                              ? "bg-zinc-800 text-white border border-zinc-700 font-semibold"
+                              : "text-zinc-400 hover:bg-zinc-900 hover:text-white"
+                          )}
+                        >
+                          <span>{m.name}</span>
+                          <span className="text-[10px] text-txt-tertiary">{(m.size / 1e9).toFixed(1)}GB</span>
+                        </button>
+                      ))}
+                      {ollama.models.length === 0 && (
+                        <div className="px-2 py-3 text-[10px] text-zinc-500 text-center">No models found</div>
+                      )}
+                    </div>
+                  ) : (
+                    Object.entries(MODEL_CATEGORIES).map(([key, cat]) => {
+                      const models = WEBLLM_MODELS.filter(m => m.category === key);
+                      if (models.length === 0) return null;
+                      return (
+                        <div key={key} className="p-1">
+                          <div className="px-2 py-1.5 flex items-center gap-2">
+                            {key === 'fast' && <Zap className="w-3 h-3 text-neon-amber" />}
+                            {key === 'balanced' && <Cpu className="w-3 h-3 text-neon-cyan" />}
+                            {key === 'powerful' && <Brain className="w-3 h-3 text-neon-magenta" />}
+                            {key === 'coding' && <Code className="w-3 h-3 text-phosphor" />}
+                            {key === 'uncensored' && <Shield className="w-3 h-3 text-neon-pink" />}
+                            <span className="text-[10px] font-mono text-txt-tertiary uppercase tracking-wider">
+                              {cat.label}
+                            </span>
+                          </div>
+                          {models.map((m) => (
+                            <button
+                              key={m.id}
+                              onClick={() => handleModelChange(m.id)}
+                              disabled={!webllm.isSupported}
+                              className={cn(
+                                "w-full flex items-center justify-between px-2 py-1.5 rounded text-xs text-left transition-all font-mono",
+                                webllm.loadedModel === m.id
+                                  ? "bg-zinc-800 text-white border border-zinc-700 font-semibold"
+                                  : "text-zinc-400 hover:bg-zinc-900 hover:text-white"
+                              )}
+                            >
+                              <div>
+                                <div>{m.label}</div>
+                                <div className="text-[10px] text-txt-tertiary">{m.desc}</div>
+                              </div>
+                              <span className="text-[10px] text-txt-tertiary">{m.size}</span>
+                            </button>
+                          ))}
+                        </div>
+                      );
+                    })
+                  )}
                 </div>
               </>
             )}
@@ -363,6 +419,30 @@ function ChatPageInner() {
                           placeholder="https://api.groq.com/openai/v1"
                         />
                       </div>
+                      <div>
+                        <label className="text-[10px] text-zinc-500 font-mono px-1 flex items-center gap-1">
+                          Model
+                          {cloudAI.fetchingModels && <Loader2 className="w-2.5 h-2.5 animate-spin text-blue-400" />}
+                        </label>
+                        <select
+                          value={cloudAI.loadedModel || ""}
+                          onChange={(e) => cloudAI.loadModel(e.target.value)}
+                          className="w-full mt-1 px-2 py-1.5 rounded-md bg-zinc-900 border border-zinc-800 text-xs font-mono text-zinc-300 focus:border-blue-500/30 outline-none appearance-none cursor-pointer"
+                        >
+                          {cloudAI.models.map((m) => (
+                            <option key={m} value={m}>{m}</option>
+                          ))}
+                        </select>
+                      </div>
+                      {cloudAI.apiKey && (
+                        <button
+                          onClick={() => cloudAI.fetchModels()}
+                          disabled={cloudAI.fetchingModels}
+                          className="w-full mt-1 px-2 py-1.5 rounded-md bg-blue-500/10 border border-blue-500/20 text-[10px] font-mono text-blue-300 hover:bg-blue-500/20 transition-all disabled:opacity-50"
+                        >
+                          {cloudAI.fetchingModels ? "Fetching…" : "Refresh Models"}
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>
@@ -513,8 +593,10 @@ function ChatPageInner() {
                     ? `Connected to Ollama · ${ollama.models.length} model${ollama.models.length !== 1 ? "s" : ""} available. Ask me anything.`
                     : provider === "ollama" && !ollama.isSupported
                     ? "Can't reach Ollama — make sure it's installed and running on your machine."
+                    : provider === "cloud" && cloudAI.apiKey
+                    ? `Cloud API ready · ${cloudAI.loadedModel || "no model"}. Ask me anything — fast inference, unlimited context.`
                     : provider === "cloud"
-                    ? "Cloud API configured. Ask me anything — fast inference, unlimited context."
+                    ? "Set your API key to get started — click the Cloud button in the header to configure."
                     : provider === "chrome-ai"
                     ? "Chrome AI ready. Ask me anything — instant inference, zero download, fully private."
                     : "Ready to go. Ask me anything."}

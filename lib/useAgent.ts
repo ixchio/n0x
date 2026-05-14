@@ -45,6 +45,7 @@ interface AgentState {
         generate: (msgs: { role: string; content: string }[], onToken?: (t: string) => void) => Promise<string>,
         systemPrompt: string,
         onThoughtToken?: (token: string) => void,
+        contextBudget?: number,
     ) => Promise<string>;
 }
 
@@ -355,7 +356,7 @@ export const useAgent = create<AgentState>((set, get) => ({
         set({ status: "done" });
     },
 
-    runLoop: async (query, tools, generate, systemPrompt, onThoughtToken) => {
+    runLoop: async (query, tools, generate, systemPrompt, onThoughtToken, contextBudget) => {
         // Cancel any existing run
         if (activeAbort) activeAbort.abort();
         activeAbort = new AbortController();
@@ -407,7 +408,7 @@ export const useAgent = create<AgentState>((set, get) => ({
             updateElapsed();
 
             // Budget context before each LLM call using the model's actual context window
-            const budgeted = budgetContext(msgs, contextCharsLimit);
+            const budgeted = budgetContext(msgs, contextBudget || contextCharsLimit);
 
             // Generate LLM response — stream tokens live if callback provided
             let llmOutput = "";

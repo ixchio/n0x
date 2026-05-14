@@ -299,7 +299,7 @@ const TOKENS_KEY = "n0x_total_tokens";
 export function getTotalTokens(): number {
     try { return parseInt(localStorage.getItem(TOKENS_KEY) || "0", 10) || 0; } catch { return 0; }
 }
-function addTokens(n: number) {
+export function addTokens(n: number) {
     try { localStorage.setItem(TOKENS_KEY, String(getTotalTokens() + n)); } catch {}
 }
 

@@ -245,7 +245,7 @@ export function useChat(providerCtx?: {
         return { ragCtx, memCtx, searchCtx, hasDocuments };
     }, [rag, memoryEnabled, memory, deepSearchEnabled, deepSearch]);
 
-    // ── Helper: Build the message array for WebLLM with context + trimmed history ──
+    // ── Helper: Build the message array with context + trimmed history ──
     const buildMessages = useCallback((
         message: string,
         systemContent: string,
@@ -253,7 +253,10 @@ export function useChat(providerCtx?: {
         memCtx: string,
         searchCtx: string,
     ): { role: string; content: string }[] => {
-        const MAX_CONTEXT_TOKENS = 3500; // Leave ~500 for generation in a 4k window
+        // Cloud/Ollama models have massive context windows — don't strangle them
+        const MAX_CONTEXT_TOKENS = providerCtx?.provider === "cloud" ? 30000
+            : providerCtx?.provider === "ollama" ? 12000
+            : 3500; // WebGPU/Chrome AI: small models, leave room for generation
 
         const contextParts: string[] = [];
         if (ragCtx) {
@@ -339,8 +342,12 @@ export function useChat(providerCtx?: {
             try {
                 agent.reset();
                 setStreamingContent("🤖 Agent is working…");
+                // Cloud/Ollama have large context windows — give agent more room
+                const agentBudget = providerCtx?.provider === "cloud" ? 120_000
+                    : providerCtx?.provider === "ollama" ? 48_000
+                    : undefined; // use WebLLM's detected limit
                 const finalAnswer = await agent.runLoop(
-                    message, buildAgentToolkit(), getGenerateFn(), persona.systemPrompt, onThoughtToken,
+                    message, buildAgentToolkit(), getGenerateFn(), persona.systemPrompt, onThoughtToken, agentBudget,
                 );
                 chatStore.addMessage({ id: (Date.now() + 1).toString(), role: "assistant", content: finalAnswer });
                 setStreamingContent("");

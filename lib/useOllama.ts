@@ -1,6 +1,7 @@
 "use client";
 
 import { create } from "zustand";
+import { addTokens } from "@/lib/useWebLLM";
 
 export type OllamaStatus = "unloaded" | "ready" | "generating" | "error";
 
@@ -177,6 +178,7 @@ export const useOllama = create<OllamaState>((set, get) => ({
             const duration = (now - startTime) / 1000;
             const tps = duration > 0 ? Math.round(tokenCount / duration) : 0;
             set({ stats: { tps, totalTokens: tokenCount, lastTokenTime: now }, status: "ready" });
+            addTokens(tokenCount);
 
             return fullResponse;
         } catch (e: any) {

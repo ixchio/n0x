@@ -2,6 +2,7 @@
 
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { addTokens } from "@/lib/useWebLLM";
 
 export type CloudStatus = "ready" | "generating" | "error";
 
@@ -25,6 +26,7 @@ interface CloudState {
     stats: CloudStats;
     baseUrl: string;
     apiKey: string;
+    fetchingModels: boolean;
 
     // Actions
     init: () => void;
@@ -32,6 +34,7 @@ interface CloudState {
     generate: (messages: ChatMessage[], onToken?: (token: string) => void) => Promise<string>;
     stop: () => void;
     setCredentials: (baseUrl: string, apiKey: string) => void;
+    fetchModels: () => Promise<void>;
 }
 
 let abortController: AbortController | null = null;
@@ -75,14 +78,55 @@ export const useCloudAI = create<CloudState>()(
             stats: { tps: 0, totalTokens: 0, lastTokenTime: 0 },
             baseUrl: DEFAULT_BASE_URL,
             apiKey: "",
+            fetchingModels: false,
 
             setCredentials: (baseUrl: string, apiKey: string) => {
-                set({ baseUrl: baseUrl || DEFAULT_BASE_URL, apiKey });
-                // If it's groq, reset models to Groq models
-                if (baseUrl.includes("groq.com")) {
-                    set({ models: GROQ_MODELS });
-                } else if (baseUrl.includes("openrouter.ai")) {
-                     set({ models: ["liquid/lfm-40b", "google/gemini-2.5-flash", "meta-llama/llama-3.3-70b-instruct"] });
+                const url = baseUrl || DEFAULT_BASE_URL;
+                set({ baseUrl: url, apiKey });
+                if (url.includes("groq.com")) {
+                    set({ models: GROQ_MODELS, loadedModel: get().loadedModel || DEFAULT_MODEL });
+                } else if (url.includes("openrouter.ai")) {
+                    const orModels = ["liquid/lfm-40b", "google/gemini-2.5-flash", "meta-llama/llama-3.3-70b-instruct"];
+                    set({ models: orModels, loadedModel: get().loadedModel && orModels.includes(get().loadedModel!) ? get().loadedModel : orModels[0] });
+                }
+                // Auto-fetch models when both credentials are set
+                if (apiKey && url) {
+                    // Debounce — small delay to avoid fetching on every keystroke
+                    setTimeout(() => {
+                        const current = get();
+                        if (current.apiKey === apiKey && current.baseUrl === url) {
+                            current.fetchModels();
+                        }
+                    }, 500);
+                }
+            },
+
+            fetchModels: async () => {
+                const { baseUrl, apiKey } = get();
+                if (!apiKey || !baseUrl) return;
+                set({ fetchingModels: true });
+                try {
+                    const res = await fetch(`${baseUrl}/models`, {
+                        headers: { "Authorization": `Bearer ${apiKey}` },
+                    });
+                    if (!res.ok) {
+                        // Not all providers support /models — fall back silently
+                        set({ fetchingModels: false });
+                        return;
+                    }
+                    const data = await res.json();
+                    const fetched: string[] = (data.data || []).map((m: any) => m.id).filter(Boolean);
+                    if (fetched.length > 0) {
+                        const currentModel = get().loadedModel;
+                        set({
+                            models: fetched,
+                            loadedModel: currentModel && fetched.includes(currentModel) ? currentModel : fetched[0],
+                        });
+                    }
+                } catch {
+                    // Network error — keep existing model list
+                } finally {
+                    set({ fetchingModels: false });
                 }
             },
 
@@ -92,6 +136,7 @@ export const useCloudAI = create<CloudState>()(
                     set({ error: "API Key required for Cloud AI", isSupported: false });
                 } else {
                     set({ error: null, isSupported: true, status: "ready" });
+                    get().fetchModels();
                 }
             },
 
@@ -173,6 +218,7 @@ export const useCloudAI = create<CloudState>()(
                     const duration = (now - startTime) / 1000;
                     const tps = duration > 0 ? Math.round(tokenCount / duration) : 0;
                     set({ stats: { tps, totalTokens: tokenCount, lastTokenTime: now }, status: "ready" });
+                    addTokens(tokenCount);
 
                     return fullResponse;
                 } catch (e: any) {
@@ -195,7 +241,7 @@ export const useCloudAI = create<CloudState>()(
         {
             name: "n0x-cloud-storage",
             storage: sessionStorageAdapter as any,
-            partialize: (state) => ({ baseUrl: state.baseUrl, apiKey: state.apiKey }),
+            partialize: (state) => ({ baseUrl: state.baseUrl, apiKey: state.apiKey, loadedModel: state.loadedModel }),
         }
     )
 );
