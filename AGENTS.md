@@ -99,6 +99,25 @@ Full codebase audit. 9 bugs found and fixed across 4 files:
 **Conversation management**:
 - Switching conversations during generation → response lands in wrong conversation. Now stops generation first.
 
+### Fixed (2026-05-14 — Session 3: Daily-Driver UX)
+6 more bugs + GPU-aware UX overhaul:
+
+**Critical bugs fixed:**
+- Duplicate messages on Stop: handleSend catch was adding error message for AbortError even though handleStop already saved partial → skipped now
+- WebGPU loading screen showed for Chrome AI: missing `provider === 'browser'` check
+- Chrome AI garbled output (no spaces between words): Prompt API changed from cumulative to delta chunks in newer Chrome. Auto-detection now handles both.
+- RAG Worker crash `e.replace is not a function`: PDF text extraction could produce non-string/control chars. Added `sanitizeText()` throughout pipeline.
+- Deep search overwhelming small models: 3600+ chars into 3500-token window. Now caps per-source (500 chars for small, 1200 for large).
+- Chrome AI context budget: Reduced from 3500 to 2000 tokens (Gemini Nano has ~4k total).
+
+**GPU-aware UX:**
+- `init()` now probes WebGPU adapter for VRAM via maxBufferSize + deviceMemory → gpuTier (none/low/medium/high)
+- Low-VRAM: amber warning + Cloud API suggestion, recommended model auto-caps at SmolLM2 360M
+- Model load stall watchdog: detects 30s no progress, shows recovery buttons
+- Human-readable error messages (OOM, timeout, network translated to plain English)
+- Error screen: 3 recovery options (smaller model / Cloud API / force load)
+- Cloud API fast path: 'Get free key (Groq)' link, full setup guide on welcome screen
+
 ## Common Bug Patterns
 - **Stale closures in useCallback**: ALL reactive values used in body must be in deps. Watch `providerCtx`.
 - **State sync React ↔ Zustand**: Initialize React local state FROM Zustand, not independently.
