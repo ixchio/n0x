@@ -407,7 +407,13 @@ function ChatPageInner() {
                   {provider === "cloud" && (
                     <div className="pt-2 border-t border-zinc-800 mt-2 space-y-2">
                       <div>
-                        <label className="text-[10px] text-zinc-500 font-mono px-1">API Key</label>
+                        <div className="flex items-center justify-between">
+                          <label className="text-[10px] text-zinc-500 font-mono px-1">API Key</label>
+                          <a href="https://console.groq.com/keys" target="_blank" rel="noopener noreferrer"
+                            className="text-[9px] text-blue-400 hover:text-blue-300 font-mono px-1 underline underline-offset-2">
+                            Get free key (Groq) →
+                          </a>
+                        </div>
                         <input
                           type="password"
                           value={cloudApiKey}
@@ -517,28 +523,47 @@ function ChatPageInner() {
         <div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-6">
           {/* WebGPU unsupported hint is now integrated into the welcome screen */}
 
-          {/* WebLLM Error Banner (OOM Overrides) */}
-          {webllm.error && webllm.status === "error" && (
+          {/* WebLLM Error Banner — with actionable recovery options */}
+          {provider === "browser" && webllm.error && webllm.status === "error" && (
             <div className="max-w-lg mx-auto mt-12 mb-6">
-              <div className="bg-red-500/10 border border-red-500/30 rounded p-5 text-center space-y-3">
-                <AlertTriangle className="w-8 h-8 text-red-400 mx-auto" />
+              <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-5 text-center space-y-4">
+                <AlertTriangle className="w-7 h-7 text-red-400 mx-auto" />
                 <h3 className="text-sm font-mono text-red-400 font-bold">Model Load Failed</h3>
-                <p className="text-xs text-red-300/80 font-mono leading-relaxed">
+                <p className="text-xs text-red-300/80 font-mono leading-relaxed max-w-sm mx-auto">
                   {webllm.error}
                 </p>
 
-                {webllm.error.includes("Hardware Restricted") && (
+                {/* Recovery actions */}
+                <div className="flex flex-col gap-2 pt-2">
+                  {/* Try a smaller model */}
                   <button
-                    onClick={() => {
-                      // Use the last attempted payload from webllm's error state, or fallback if tracking isn't perfect
-                      const modelToForce = webllm.loadingModel || webllm.loadedModel || "Qwen2.5-1.5B-Instruct-q4f16_1-MLC";
-                      webllm.loadModel(modelToForce, true);
-                    }}
-                    className="mt-4 px-4 py-2 bg-red-500/20 hover:bg-red-500/30 border border-red-500/40 text-red-300 text-xs font-mono font-bold rounded transition-colors"
+                    onClick={() => handleModelChange("SmolLM2-360M-Instruct-q4f16_1-MLC")}
+                    className="w-full px-4 py-2.5 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-200 text-xs font-mono rounded-lg transition-colors flex items-center justify-center gap-2"
                   >
-                    Force Load (I know what I'm doing)
+                    <Zap className="w-3.5 h-3.5 text-neon-amber" /> Try SmolLM2 360M (tiny, works everywhere)
                   </button>
-                )}
+
+                  {/* Switch to Cloud API — the fast path */}
+                  <button
+                    onClick={() => setProvider("cloud")}
+                    className="w-full px-4 py-2.5 bg-blue-500/15 hover:bg-blue-500/25 border border-blue-500/30 text-blue-300 text-xs font-mono font-bold rounded-lg transition-colors flex items-center justify-center gap-2"
+                  >
+                    <Cloud className="w-3.5 h-3.5" /> Switch to Cloud API (instant, free via Groq)
+                  </button>
+
+                  {/* Force load (if hardware restricted) */}
+                  {webllm.error.includes("Hardware Restricted") && (
+                    <button
+                      onClick={() => {
+                        const modelToForce = webllm.loadingModel || webllm.loadedModel || "Qwen2.5-1.5B-Instruct-q4f16_1-MLC";
+                        webllm.loadModel(modelToForce, true);
+                      }}
+                      className="px-4 py-2 text-red-400/60 hover:text-red-300 text-[10px] font-mono transition-colors"
+                    >
+                      Force Load Anyway (may crash)
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           )}
@@ -567,18 +592,42 @@ function ChatPageInner() {
                   </div>
                 </div>
 
-                {/* First-time tips */}
+                {/* Tips + stall warning */}
                 <div className="space-y-2 pt-2">
-                  <p className="text-[11px] text-txt-secondary font-mono">
-                    first time? this downloads once, then it's instant forever.
-                  </p>
-                  <p className="text-[10px] text-txt-tertiary font-mono">
-                    the model weights are cached in your browser —<br />
-                    no server, no account, everything stays on your machine.
-                  </p>
-                  <p className="text-[10px] text-txt-tertiary font-mono opacity-60">
-                    don't refresh — download will restart
-                  </p>
+                  {webllm.error ? (
+                    <>
+                      <p className="text-[11px] text-amber-300/80 font-mono">
+                        ⚠ {webllm.error}
+                      </p>
+                      <div className="flex gap-2 justify-center pt-1">
+                        <button
+                          onClick={() => handleModelChange("SmolLM2-360M-Instruct-q4f16_1-MLC")}
+                          className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-[10px] text-zinc-300 font-mono rounded transition-colors"
+                        >
+                          Try smaller model
+                        </button>
+                        <button
+                          onClick={() => setProvider("cloud")}
+                          className="px-3 py-1.5 bg-blue-500/15 hover:bg-blue-500/25 border border-blue-500/25 text-[10px] text-blue-300 font-mono font-bold rounded transition-colors"
+                        >
+                          Switch to Cloud API
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-[11px] text-txt-secondary font-mono">
+                        first time? this downloads once, then it's instant forever.
+                      </p>
+                      <p className="text-[10px] text-txt-tertiary font-mono">
+                        the model weights are cached in your browser —<br />
+                        no server, no account, everything stays on your machine.
+                      </p>
+                      <p className="text-[10px] text-txt-tertiary font-mono opacity-60">
+                        don't refresh — download will restart
+                      </p>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
@@ -614,60 +663,116 @@ function ChatPageInner() {
                 </p>
 
                 {provider === "browser" && webllm.isSupported && webllm.status === "unloaded" && (
-                  <div className="grid grid-cols-3 gap-2 pt-4">
-                    <button
-                      onClick={() => handleModelChange("SmolLM2-360M-Instruct-q4f16_1-MLC")}
-                      className="p-3 rounded bg-crt-surface border border-crt-border hover:border-phosphor-dim transition-all text-left group"
-                    >
-                      <div className="flex items-center gap-1.5 mb-1">
-                        <Zap className="w-3 h-3 text-neon-amber" />
-                        <span className="text-[11px] text-txt-secondary group-hover:text-phosphor">SmolLM2 360M</span>
-                      </div>
-                      <div className="text-[10px] text-txt-tertiary">ultra-fast · 360MB</div>
-                    </button>
+                  <>
+                    <div className="grid grid-cols-3 gap-2 pt-4">
+                      <button
+                        onClick={() => handleModelChange("SmolLM2-360M-Instruct-q4f16_1-MLC")}
+                        className="p-3 rounded bg-crt-surface border border-crt-border hover:border-phosphor-dim transition-all text-left group"
+                      >
+                        <div className="flex items-center gap-1.5 mb-1">
+                          <Zap className="w-3 h-3 text-neon-amber" />
+                          <span className="text-[11px] text-txt-secondary group-hover:text-phosphor">SmolLM2 360M</span>
+                        </div>
+                        <div className="text-[10px] text-txt-tertiary">ultra-fast · 360MB</div>
+                      </button>
 
-                    <button
-                      onClick={() => handleModelChange("Qwen2.5-1.5B-Instruct-q4f16_1-MLC")}
-                      className="p-3 rounded bg-crt-surface border border-phosphor-dim hover:border-phosphor transition-all text-left group relative"
-                    >
-                      <div className="absolute -top-2 right-2 text-[8px] bg-phosphor text-crt-black px-1.5 py-0.5 rounded font-mono font-bold">recommended</div>
-                      <div className="flex items-center gap-1.5 mb-1">
-                        <Brain className="w-3 h-3 text-neon-cyan" />
-                        <span className="text-[11px] text-txt-secondary group-hover:text-phosphor">Qwen 1.5B</span>
-                      </div>
-                      <div className="text-[10px] text-txt-tertiary">balanced · 1GB</div>
-                    </button>
+                      <button
+                        onClick={() => handleModelChange(webllm.gpuTier === "low" ? "SmolLM2-360M-Instruct-q4f16_1-MLC" : "Qwen2.5-1.5B-Instruct-q4f16_1-MLC")}
+                        className="p-3 rounded bg-crt-surface border border-phosphor-dim hover:border-phosphor transition-all text-left group relative"
+                      >
+                        <div className="absolute -top-2 right-2 text-[8px] bg-phosphor text-crt-black px-1.5 py-0.5 rounded font-mono font-bold">recommended</div>
+                        <div className="flex items-center gap-1.5 mb-1">
+                          <Brain className="w-3 h-3 text-neon-cyan" />
+                          <span className="text-[11px] text-txt-secondary group-hover:text-phosphor">{webllm.gpuTier === "low" ? "SmolLM2 360M" : "Qwen 1.5B"}</span>
+                        </div>
+                        <div className="text-[10px] text-txt-tertiary">{webllm.gpuTier === "low" ? "safe for your GPU" : "balanced · 1GB"}</div>
+                      </button>
 
-                    <button
-                      onClick={() => handleModelChange("Qwen2.5-Coder-1.5B-Instruct-q4f16_1-MLC")}
-                      className="p-3 rounded bg-crt-surface border border-crt-border hover:border-phosphor-dim transition-all text-left group"
-                    >
-                      <div className="flex items-center gap-1.5 mb-1">
-                        <Code className="w-3 h-3 text-phosphor" />
-                        <span className="text-[11px] text-txt-secondary group-hover:text-phosphor">Coder 1.5B</span>
+                      <button
+                        onClick={() => handleModelChange("Qwen2.5-Coder-1.5B-Instruct-q4f16_1-MLC")}
+                        className="p-3 rounded bg-crt-surface border border-crt-border hover:border-phosphor-dim transition-all text-left group"
+                      >
+                        <div className="flex items-center gap-1.5 mb-1">
+                          <Code className="w-3 h-3 text-phosphor" />
+                          <span className="text-[11px] text-txt-secondary group-hover:text-phosphor">Coder 1.5B</span>
+                        </div>
+                        <div className="text-[10px] text-txt-tertiary">code · 1GB</div>
+                      </button>
+                    </div>
+
+                    {/* GPU tier hint + alternative provider suggestion */}
+                    {webllm.gpuTier === "low" && (
+                      <div className="mt-3 p-3 rounded-lg bg-amber-500/5 border border-amber-500/15 text-center">
+                        <p className="text-[10px] text-amber-300/80 font-mono mb-2">
+                          ⚡ Low GPU memory detected — browser models will be limited.
+                        </p>
+                        <button
+                          onClick={() => setProvider("cloud")}
+                          className="text-[10px] text-blue-400 hover:text-blue-300 font-mono font-bold underline underline-offset-2"
+                        >
+                          Try Cloud API instead → 70B quality, instant, free via Groq
+                        </button>
                       </div>
-                      <div className="text-[10px] text-txt-tertiary">code · 1GB</div>
-                    </button>
-                  </div>
+                    )}
+                    {(webllm.gpuTier === "unknown" || webllm.gpuTier === "medium") && (
+                      <p className="text-[10px] text-zinc-600 font-mono mt-2">
+                        Want faster responses? <button onClick={() => setProvider("cloud")} className="text-blue-400/80 hover:text-blue-300 underline underline-offset-2">Try Cloud API</button> — instant inference, free tier available.
+                      </p>
+                    )}
+                    {webllm.gpuLabel && (
+                      <p className="text-[9px] text-zinc-700 font-mono mt-1">
+                        Detected: {webllm.gpuLabel}
+                      </p>
+                    )}
+                  </>
                 )}
 
-                {/* Provider switch hint when WebGPU unavailable */}
+                {/* Provider switch when WebGPU unavailable */}
                 {provider === "browser" && !webllm.isSupported && (
                   <div className="flex flex-col items-center gap-3 pt-4">
                     <p className="text-xs text-zinc-500">WebGPU isn't available in this browser. Try another provider:</p>
                     <div className="flex gap-2">
                       <button
+                        onClick={() => setProvider("cloud")}
+                        className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-blue-500/15 border border-blue-500/25 text-xs text-blue-300 font-bold hover:bg-blue-500/25 transition-all"
+                      >
+                        <Cloud className="w-3.5 h-3.5" /> Cloud API (recommended)
+                      </button>
+                      <button
                         onClick={() => setProvider("ollama")}
                         className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-orange-500/10 border border-orange-500/20 text-xs text-orange-300 hover:bg-orange-500/20 transition-all"
                       >
-                        <Server className="w-3.5 h-3.5" /> Ollama (Local)
+                        <Server className="w-3.5 h-3.5" /> Ollama
                       </button>
-                      <button
-                        onClick={() => setProvider("cloud")}
-                        className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-blue-500/10 border border-blue-500/20 text-xs text-blue-300 hover:bg-blue-500/20 transition-all"
-                      >
-                        <Cloud className="w-3.5 h-3.5" /> Cloud API
-                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Cloud API quick setup on welcome screen */}
+                {provider === "cloud" && !cloudAI.apiKey && (
+                  <div className="flex flex-col items-center gap-3 pt-4 max-w-sm mx-auto">
+                    <div className="w-full rounded-xl bg-blue-500/5 border border-blue-500/15 p-4 space-y-3 text-left">
+                      <div className="flex items-center gap-2 text-blue-300 text-xs font-semibold">
+                        <Cloud className="w-3.5 h-3.5" />
+                        Quick setup — 30 seconds:
+                      </div>
+                      <ol className="text-[11px] text-zinc-400 space-y-2 list-decimal list-inside leading-relaxed">
+                        <li>
+                          Get a free API key from{" "}
+                          <a href="https://console.groq.com/keys" target="_blank" rel="noopener noreferrer"
+                            className="text-blue-300 underline underline-offset-2 hover:text-blue-200 font-bold">
+                            console.groq.com
+                          </a>
+                          {" "}(free tier, no credit card)
+                        </li>
+                        <li>Click the <span className="text-blue-300 font-bold">Cloud</span> button in the header ↑</li>
+                        <li>Paste your key → pick a model → start chatting</li>
+                      </ol>
+                      <div className="pt-2 border-t border-zinc-800/50 text-[10px] text-zinc-500 space-y-1">
+                        <p>🚀 <span className="text-zinc-400">Groq</span>: Llama 3.3 70B @ 330 tok/s — free</p>
+                        <p>🔥 <span className="text-zinc-400">OpenRouter</span>: 200+ models, pay-as-you-go</p>
+                        <p>Works with any OpenAI-compatible endpoint.</p>
+                      </div>
                     </div>
                   </div>
                 )}

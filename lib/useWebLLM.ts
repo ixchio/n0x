@@ -273,6 +273,9 @@ interface WebLLMStats {
     lastTokenTime: number;
 }
 
+// GPU capability tiers based on detected VRAM
+export type GpuTier = "none" | "low" | "medium" | "high" | "unknown";
+
 interface WebLLMState {
     status: WebLLMStatus;
     loadProgress: number;
@@ -280,6 +283,8 @@ interface WebLLMState {
     loadingModel: string | null;
     error: string | null;
     isSupported: boolean;
+    gpuTier: GpuTier;
+    gpuLabel: string; // human-readable GPU name
     stats: WebLLMStats;
 
     // Actions
@@ -317,25 +322,61 @@ export const useWebLLM = create<WebLLMState>((set, get) => ({
     loadingModel: null,
     error: null,
     isSupported: true,
+    gpuTier: "unknown",
+    gpuLabel: "",
     stats: { tps: 0, totalTokens: 0, lastTokenTime: 0 },
 
     init: async () => {
         if (typeof navigator === "undefined") return;
         const { status } = get();
-        if (status !== "unloaded") return; // Already initialized or loading
+        if (status !== "unloaded") return;
 
         if (!("gpu" in navigator)) {
-            set({ isSupported: false, error: "WebGPU not supported. Use Chrome 113+ or Edge 113+." });
+            set({ isSupported: false, gpuTier: "none", error: "WebGPU not supported. Use Chrome 113+ or Edge 113+." });
             return;
         }
 
         try {
             const adapter = await (navigator as any).gpu.requestAdapter();
             if (!adapter) {
-                set({ isSupported: false, error: "No WebGPU adapter found. Try updating your browser/drivers." });
+                set({ isSupported: false, gpuTier: "none", error: "No WebGPU adapter found. Try updating your browser/drivers." });
+                return;
             }
+
+            // Detect GPU capabilities from adapter
+            let gpuLabel = "";
+            let gpuTier: GpuTier = "unknown";
+            try {
+                const info = await adapter.requestAdapterInfo?.() || (adapter as any).info;
+                if (info) {
+                    const desc = info.description || info.device || "";
+                    const vendor = info.vendor || "";
+                    gpuLabel = desc || vendor || "Unknown GPU";
+                }
+            } catch { /* adapter info not available */ }
+
+            // Estimate tier from device memory + GPU heuristics
+            const deviceMem = (navigator as any).deviceMemory;
+            if (deviceMem) {
+                if (deviceMem <= 4) gpuTier = "low";
+                else if (deviceMem <= 8) gpuTier = "medium";
+                else gpuTier = "high";
+            }
+
+            // Try to get max buffer size as a VRAM proxy
+            try {
+                const device = await adapter.requestDevice();
+                const maxBuf = device.limits.maxBufferSize;
+                device.destroy();
+                // maxBufferSize: 256MB = low, 1GB+ = medium, 2GB+ = high
+                if (maxBuf >= 2 * 1024 * 1024 * 1024) gpuTier = "high";
+                else if (maxBuf >= 512 * 1024 * 1024) gpuTier = gpuTier === "low" ? "low" : "medium";
+                else gpuTier = "low";
+            } catch { /* fine, use deviceMemory estimate */ }
+
+            set({ gpuTier, gpuLabel });
         } catch (e) {
-            set({ isSupported: false, error: "WebGPU initialization failed." });
+            set({ isSupported: false, gpuTier: "none", error: "WebGPU initialization failed." });
         }
     },
 
@@ -374,6 +415,23 @@ export const useWebLLM = create<WebLLMState>((set, get) => ({
                 engine = null;
             }
 
+            // Progress stall watchdog — detect if download freezes
+            let lastProgress = 0;
+            let stallCount = 0;
+            const stallWatchdog = setInterval(() => {
+                const cur = get().loadProgress;
+                if (cur === lastProgress && cur < 1 && cur > 0) {
+                    stallCount++;
+                    if (stallCount >= 3) {
+                        // 30s with no progress — likely OOM or network issue
+                        set({ error: `Download stalled at ${Math.round(cur * 100)}%. Your device may not have enough memory for this model. Try a smaller model or use Cloud API for instant access.` });
+                    }
+                } else {
+                    stallCount = 0;
+                    lastProgress = cur;
+                }
+            }, 10000);
+
             // Try Web Worker engine first (keeps UI at 60fps during inference)
             // Falls back to main-thread engine if Worker isn't available
             const initOpts = {
@@ -404,6 +462,8 @@ export const useWebLLM = create<WebLLMState>((set, get) => ({
                 engine = await webllm.CreateMLCEngine(modelId, initOpts);
             }
 
+            clearInterval(stallWatchdog);
+
             // Extract context window size dynamically for agent budgeting
             const windowSize = (engine.chat as any).config?.context_window_size || 4096;
             // Update the exported module variable so useAgent can read it directly
@@ -413,7 +473,16 @@ export const useWebLLM = create<WebLLMState>((set, get) => ({
         } catch (e: any) {
             console.error("Model load error:", e);
             engine = null;
-            set({ error: e.message || "Failed to load model", loadingModel: null, status: "error" });
+            // Make error messages human-readable
+            const raw = e.message || "Failed to load model";
+            const friendly = raw.includes("memory") || raw.includes("OOM")
+                ? "Out of memory — this model is too large for your GPU. Try a smaller model or switch to Cloud API."
+                : raw.includes("timeout") || raw.includes("Worker")
+                ? "Model failed to initialize. Your browser may need a restart, or try a smaller model."
+                : raw.includes("network") || raw.includes("fetch")
+                ? "Download failed — check your internet connection and try again."
+                : raw;
+            set({ error: friendly, loadingModel: null, status: "error" });
         } finally {
             isLoadingModel = false;
         }
