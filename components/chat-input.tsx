@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useRef, useEffect, useState, useCallback } from "react";
-import { Send, Square, Globe, Brain, Code, Paperclip, Upload, X, FileText, Mic, MicOff, Lightbulb, Bot, ImageIcon } from "lucide-react";
+import { Send, Square, Globe, Brain, Code, Paperclip, Upload, X, FileText, Mic, MicOff, Lightbulb, Bot, ImageIcon, Shuffle } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface AttachedFile { id: string; name: string; size: number; type: string; }
@@ -19,6 +19,8 @@ interface ChatInputProps {
     agentEnabled?: boolean; toggleAgent?: () => void;
     sttSupported?: boolean; sttListening?: boolean; onSttToggle?: () => void;
     onImagePrefill?: () => void;
+    autoRouteEnabled?: boolean; toggleAutoRoute?: () => void;
+    lastRouteDecision?: string | null;
 }
 
 function formatSize(bytes: number): string {
@@ -34,6 +36,7 @@ export function ChatInput({
     agentEnabled, toggleAgent,
     sttSupported, sttListening, onSttToggle,
     onImagePrefill,
+    autoRouteEnabled, toggleAutoRoute, lastRouteDecision,
 }: ChatInputProps) {
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -80,6 +83,7 @@ export function ChatInput({
         }] : []),
         ...(toggleAgent ? [{ key: "agent", icon: Bot, label: "Agent", active: !!agentEnabled, action: toggleAgent }] : []),
         ...(onImagePrefill ? [{ key: "image", icon: ImageIcon, label: "Image", active: false, action: onImagePrefill }] : []),
+        ...(toggleAutoRoute ? [{ key: "autoroute", icon: Shuffle, label: autoRouteEnabled ? (lastRouteDecision === "cloud" ? "Auto ☁" : lastRouteDecision === "local" ? "Auto ⚡" : "Auto") : "Auto", active: !!autoRouteEnabled, action: toggleAutoRoute }] : []),
     ];
 
     return (

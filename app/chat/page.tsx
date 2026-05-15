@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useRef, useEffect, useCallback, useState, useMemo } from "react";
-import { ChevronDown, Loader2, Zap, Brain, Code, Shield, Volume2, VolumeX, Cpu, Menu, AlertTriangle, Download, Cloud, Server, Monitor, ImageIcon, Search, Bot, FileText, Sparkles } from "lucide-react";
+import { ChevronDown, Loader2, Zap, Brain, Code, Shield, Volume2, VolumeX, Cpu, Menu, AlertTriangle, Download, Cloud, Server, Monitor, ImageIcon, Search, Bot, FileText, Sparkles, Shuffle } from "lucide-react";
 import { MetricsOverlay } from "@/components/metrics-overlay";
 import { Sidebar } from "@/components/sidebar";
 import { MessageBubble } from "@/components/message-bubble";
@@ -50,6 +50,7 @@ function ChatPageInner() {
   const {
     input, setInput, streamingContent, isStreaming, generatingImage, imageProgress,
     deepSearchEnabled, setDeepSearchEnabled, memoryEnabled, setMemoryEnabled,
+    autoRouteEnabled, setAutoRouteEnabled, lastRouteDecision,
     webllm, deepSearch, memory, pyodide, tts, rag, chatStore, persona, agent,
     handleSend, handleNewChat, handleStop, handlePythonRun,
   } = chat;
@@ -704,7 +705,9 @@ function ChatPageInner() {
                     {webllm.gpuTier === "low" && (
                       <div className="mt-3 p-3 rounded-lg bg-amber-500/5 border border-amber-500/15 text-center">
                         <p className="text-[10px] text-amber-300/80 font-mono mb-2">
-                          ⚡ Low GPU memory detected — browser models will be limited.
+                          {webllm.isMobile
+                            ? "📱 Mobile device — only tiny models work in-browser. For full power, use Cloud API."
+                            : "⚡ Low GPU memory detected — browser models will be limited."}
                         </p>
                         <button
                           onClick={() => setProvider("cloud")}
@@ -959,6 +962,9 @@ function ChatPageInner() {
             onImagePrefill={() => {
               setInput("generate an image of ");
             }}
+            autoRouteEnabled={autoRouteEnabled}
+            toggleAutoRoute={() => setAutoRouteEnabled(!autoRouteEnabled)}
+            lastRouteDecision={lastRouteDecision}
           />
         </div>
       </main>

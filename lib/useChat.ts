@@ -11,6 +11,7 @@ import { useChatStore } from "@/lib/useChatStore";
 import { useSystemPrompt } from "@/lib/useSystemPrompt";
 import { tick as keySoundTick } from "@/lib/useKeySound";
 import { useAgent, AgentToolkit } from "@/lib/useAgent";
+import { routeMessage, classifyComplexity, type RouteDecision } from "@/lib/useAutoRouter";
 
 const CHARS_PER_TOKEN = 4;
 function estimateTokens(text: string): number {
@@ -42,6 +43,8 @@ export function useChat(providerCtx?: {
     const [memoryEnabled, setMemoryEnabled] = useState(false);
     const [generatingImage, setGeneratingImage] = useState(false);
     const [imageProgress, setImageProgress] = useState<ImageGenProgress>({ active: false });
+    const [autoRouteEnabled, setAutoRouteEnabled] = useState(false);
+    const [lastRouteDecision, setLastRouteDecision] = useState<RouteDecision | null>(null);
 
     const webllm = useWebLLM();
     const deepSearch = useDeepSearch();
@@ -72,6 +75,18 @@ export function useChat(providerCtx?: {
         if (providerCtx?.provider === "cloud") return providerCtx.cloudAI.generate;
         return webllm.generate;
     }, [providerCtx, webllm.generate]);
+
+    // Get generate function for a SPECIFIC provider (for hybrid routing)
+    const getGenerateFnFor = useCallback((target: "local" | "cloud") => {
+        if (target === "cloud" && providerCtx?.cloudAI.apiKey) {
+            return providerCtx.cloudAI.generate;
+        }
+        // "local" = whatever local provider is active
+        if (providerCtx?.provider === "chrome-ai") return providerCtx.chromeAI!.generate;
+        if (providerCtx?.provider === "ollama") return providerCtx.ollama.generate;
+        if (webllm.status === "ready") return webllm.generate;
+        return null;
+    }, [providerCtx, webllm.generate, webllm.status]);
 
     const handleImageGen = useCallback(async (prompt: string) => {
         setGeneratingImage(true);
@@ -381,7 +396,33 @@ export function useChat(providerCtx?: {
             setStreamingContent("");
             let full = "";
             let tokCount = 0;
-            const generate = getGenerateFn();
+
+            // Hybrid auto-routing: pick best provider per message
+            let generate = getGenerateFn();
+            let routeUsed: RouteDecision = "default";
+
+            if (autoRouteEnabled) {
+                const localReady = webllm.status === "ready" || providerCtx?.provider === "ollama" && providerCtx.ollama.isSupported || providerCtx?.chromeAI?.status === "ready";
+                const cloudReady = !!providerCtx?.cloudAI.apiKey;
+
+                const route = routeMessage({
+                    message,
+                    hasDocuments: !!hasDocuments,
+                    deepSearchEnabled: deepSearchEnabled,
+                    conversationLength: chatStore.messages.length,
+                    localModelLoaded: localReady,
+                    cloudConfigured: cloudReady,
+                });
+
+                routeUsed = route.decision;
+                setLastRouteDecision(routeUsed);
+
+                if (route.decision !== "default") {
+                    const routed = getGenerateFnFor(route.decision);
+                    if (routed) generate = routed;
+                }
+            }
+
             await generate(msgs, (tok: string) => {
                 full += tok;
                 setStreamingContent(full);
@@ -394,9 +435,16 @@ export function useChat(providerCtx?: {
             deepSearch.reset();
             if (hasDocuments) rag.clearPending();
 
-            // Auto-save to memory if enabled
-            if (memoryEnabled && full.length > 50 && !full.startsWith("failed")) {
-                memory.saveMemory(`Topic: ${message.slice(0, 80)}\nQ: ${message}\nA: ${full.slice(0, 400)}`, ["chat", "auto"]);
+            // Persistent semantic memory: auto-save every meaningful exchange
+            // Saves regardless of memory toggle — toggle controls retrieval, not storage
+            if (full.length > 50 && !full.startsWith("⚠️")) {
+                const summary = `Q: ${message.slice(0, 200)}\nA: ${full.slice(0, 500)}`;
+                const tags = ["chat", "auto"];
+                if (routeUsed === "cloud") tags.push("cloud");
+                if (routeUsed === "local") tags.push("local");
+                if (deepSearchEnabled) tags.push("search");
+                if (hasDocuments) tags.push("rag");
+                memory.saveMemory(summary, tags);
             }
 
             if (tts.isEnabled) tts.speak(full);
@@ -415,7 +463,7 @@ export function useChat(providerCtx?: {
             setStreamingContent("");
             deepSearch.reset();
         }
-    }, [input, isStreaming, activeProviderReady, chatStore, deepSearch, memory, memoryEnabled, handleImageGen, rag, tts, persona, agent, buildAgentToolkit, gatherContext, buildMessages, getGenerateFn]);
+    }, [input, isStreaming, activeProviderReady, chatStore, deepSearch, memory, memoryEnabled, handleImageGen, rag, tts, persona, agent, buildAgentToolkit, gatherContext, buildMessages, getGenerateFn, autoRouteEnabled, getGenerateFnFor, deepSearchEnabled, providerCtx]);
 
     const handleStop = useCallback(() => {
         if (providerCtx?.provider === "chrome-ai") providerCtx.chromeAI?.stop();
@@ -464,6 +512,8 @@ export function useChat(providerCtx?: {
         generatingImage, imageProgress,
         deepSearchEnabled, setDeepSearchEnabled,
         memoryEnabled, setMemoryEnabled,
+        autoRouteEnabled, setAutoRouteEnabled,
+        lastRouteDecision,
 
         webllm, deepSearch, memory, pyodide, tts, rag, chatStore, persona, agent,
 

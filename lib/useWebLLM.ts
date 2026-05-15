@@ -284,7 +284,8 @@ interface WebLLMState {
     error: string | null;
     isSupported: boolean;
     gpuTier: GpuTier;
-    gpuLabel: string; // human-readable GPU name
+    gpuLabel: string;
+    isMobile: boolean;
     stats: WebLLMStats;
 
     // Actions
@@ -324,12 +325,19 @@ export const useWebLLM = create<WebLLMState>((set, get) => ({
     isSupported: true,
     gpuTier: "unknown",
     gpuLabel: "",
+    isMobile: false,
     stats: { tps: 0, totalTokens: 0, lastTokenTime: 0 },
 
     init: async () => {
         if (typeof navigator === "undefined") return;
         const { status } = get();
         if (status !== "unloaded") return;
+
+        // Mobile detection — cap model selection and warn about memory
+        const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) ||
+            ((navigator as any).userAgentData?.mobile === true) ||
+            (typeof screen !== "undefined" && screen.width < 768);
+        set({ isMobile });
 
         if (!("gpu" in navigator)) {
             set({ isSupported: false, gpuTier: "none", error: "WebGPU not supported. Use Chrome 113+ or Edge 113+." });
@@ -363,13 +371,15 @@ export const useWebLLM = create<WebLLMState>((set, get) => ({
                 else gpuTier = "high";
             }
 
+            // Mobile always caps at low (Safari Metal has 256MB–993MB per-buffer limit)
+            if (isMobile) gpuTier = "low";
+
             // Try to get max buffer size as a VRAM proxy
             try {
                 const device = await adapter.requestDevice();
                 const maxBuf = device.limits.maxBufferSize;
                 device.destroy();
-                // maxBufferSize: 256MB = low, 1GB+ = medium, 2GB+ = high
-                if (maxBuf >= 2 * 1024 * 1024 * 1024) gpuTier = "high";
+                if (maxBuf >= 2 * 1024 * 1024 * 1024) gpuTier = isMobile ? "low" : "high";
                 else if (maxBuf >= 512 * 1024 * 1024) gpuTier = gpuTier === "low" ? "low" : "medium";
                 else gpuTier = "low";
             } catch { /* fine, use deviceMemory estimate */ }
