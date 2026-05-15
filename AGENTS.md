@@ -75,6 +75,35 @@ npm run start    # Start production server
 - **Welcome screen**: Was showing "Cloud API configured" even without API key set.
 - **Header model label**: Was showing "Ollama" / "Cloud API" instead of actual model name.
 
+### Fixed (2026-05-14 — Bug Sweep)
+Full codebase audit. 9 bugs found and fixed across 4 files:
+
+**Stale closure bugs (Critical)**:
+- `buildMessages` useCallback missing `providerCtx?.provider` in deps — context window stayed at 3500 (WebGPU value) even after switching to Cloud API.
+- `handleStop` useCallback missing `providerCtx` in deps — called wrong provider's stop() after switching providers.
+
+**Error handling**:
+- `handleSend` catch was showing generic 'failed to generate' — now shows actual error (wrong API key, unreachable endpoint, 401/403).
+- `setStreamingContent("")` missing in error path — stale partial text remained visible.
+
+**RAG file removal**:
+- `onRemoveFile` called `rag.clear()` wiping ALL docs when removing one file. Added `removeFile(id)` to useRAG.
+
+**Provider persistence**:
+- Ollama URL reset on reload. Now persisted in localStorage.
+
+**Chrome AI**:
+- `addTokens()` never called — tokens not tracked in cost savings. Fixed.
+- Welcome message always said 'ready' regardless of status. Now status-aware.
+
+**Conversation management**:
+- Switching conversations during generation → response lands in wrong conversation. Now stops generation first.
+
+## Common Bug Patterns
+- **Stale closures in useCallback**: ALL reactive values used in body must be in deps. Watch `providerCtx`.
+- **State sync React ↔ Zustand**: Initialize React local state FROM Zustand, not independently.
+- **Provider-aware behavior**: Code branching on `providerCtx?.provider` needs it in deps.
+
 ### Not Fixed (needs design/manual work)
 - **OG image**: No `og:image` exists. Critical for Product Hunt social shares. Needs a designed 1200×630 image.
 - **Year in footer**: Auto-generates from `new Date().getFullYear()` — currently shows 2026 (correct).
