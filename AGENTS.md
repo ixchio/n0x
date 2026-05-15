@@ -58,6 +58,7 @@ npm run start    # Start production server
 - **SEO**: Added `robots.txt`, `icons` metadata in layout, apple-touch-icon.
 
 ### Fixed (2026-05-14)
+- **Model loading stuck at 0%**: Worker URL was `new URL("@mlc-ai/web-llm", import.meta.url)` which pointed to the package entry (index.js), NOT a proper worker handler. Worker loaded but never set up `WebWorkerMLCEngineHandler`, so `CreateWebWorkerMLCEngine` hung forever. Created `lib/webllm.worker.ts` with proper handler setup. Added 5s timeout race for fallback to main-thread engine.
 - **Cloud API**: Was completely broken — no model selector, no model fetching, hardcoded model lists, state sync bug.
   - Added `fetchModels()` to auto-fetch from provider's `/models` endpoint
   - Added model selector dropdown in provider config panel
