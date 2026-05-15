@@ -88,14 +88,39 @@ export const useChromeAI = create<ChromeAIState>((set, get) => ({
             });
 
             let fullResponse = "";
-            // The Prompt API returns cumulative text, not deltas
+            // Chrome Prompt API: older versions return cumulative text,
+            // newer versions (138+) may return delta chunks.
+            // Auto-detect on the second chunk.
+            let isCumulative: boolean | null = null;
+
             for await (const chunk of stream) {
                 if (abortCtrl?.signal.aborted) break;
-                const newContent = typeof chunk === "string" ? chunk : chunk.toString();
-                // Prompt API returns full text so far — compute delta
-                const delta = newContent.slice(fullResponse.length);
-                fullResponse = newContent;
-                if (delta) onToken?.(delta);
+                const text = typeof chunk === "string" ? chunk : chunk.toString();
+                if (!text) continue;
+
+                if (fullResponse.length === 0) {
+                    // First chunk — both modes behave the same
+                    fullResponse = text;
+                    onToken?.(text);
+                } else if (isCumulative === null) {
+                    // Second chunk — detect: if it starts with existing text, it's cumulative
+                    isCumulative = text.length > fullResponse.length && text.startsWith(fullResponse);
+                    if (isCumulative) {
+                        const delta = text.slice(fullResponse.length);
+                        fullResponse = text;
+                        if (delta) onToken?.(delta);
+                    } else {
+                        fullResponse += text;
+                        onToken?.(text);
+                    }
+                } else if (isCumulative) {
+                    const delta = text.slice(fullResponse.length);
+                    fullResponse = text;
+                    if (delta) onToken?.(delta);
+                } else {
+                    fullResponse += text;
+                    onToken?.(text);
+                }
             }
 
             set({ status: "ready" });

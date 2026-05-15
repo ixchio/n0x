@@ -158,6 +158,15 @@ async function extractDocx(file: File): Promise<string> {
 
 // ── Text extraction ──
 
+// Sanitize text: strip null bytes, control chars, and ensure it's a valid string
+function sanitizeText(text: any): string {
+    if (typeof text !== "string") {
+        try { return String(text); } catch { return ""; }
+    }
+    // Remove null bytes and most control characters (keep newlines, tabs, spaces)
+    return text.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "");
+}
+
 async function extractText(file: File): Promise<string> {
     const name = file.name.toLowerCase();
 
@@ -175,7 +184,7 @@ async function extractText(file: File): Promise<string> {
             let line = "";
             for (let j = 0; j < items.length; j++) {
                 const item = items[j];
-                const str = item.str || "";
+                const str = typeof item.str === "string" ? item.str : String(item.str || "");
                 const hasEOL = item.hasEOL;
                 line += str;
                 if (hasEOL || j === items.length - 1) {
@@ -186,7 +195,7 @@ async function extractText(file: File): Promise<string> {
                 }
             }
         }
-        return text;
+        return sanitizeText(text);
     }
 
     // DOCX
@@ -466,7 +475,9 @@ self.addEventListener("message", async (e: MessageEvent) => {
             self.postMessage({ id, status: `Generating Embeddings for ${chunks.length} chunks...` });
 
             for (let i = 0; i < chunks.length; i++) {
-                const output = await embedder(chunks[i], { pooling: "mean", normalize: true });
+                const cleanChunk = sanitizeText(chunks[i]).trim();
+                if (!cleanChunk) continue;
+                const output = await embedder(cleanChunk, { pooling: "mean", normalize: true });
                 const embedding = Array.from(output.data) as number[];
 
                 voy.add({

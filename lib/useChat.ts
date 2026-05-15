@@ -225,11 +225,15 @@ export function useChat(providerCtx?: {
                 if (result) {
                     if (result.summary) searchCtx += result.summary + "\n\n";
                     if (result.content?.length > 0) {
+                        // Smaller budget for browser models to prevent context overflow
+                        const isSmall = providerCtx?.provider === "browser" || providerCtx?.provider === "chrome-ai";
+                        const maxPieces = isSmall ? 2 : 3;
+                        const maxChars = isSmall ? 500 : 1200;
                         const cleaned = result.content
                             .map((c: string) => c.replace(/^\[Source:[^\]]+\]\n?/gm, "").replace(/^\[Instant Answer\]\n?/gm, "").trim())
                             .filter((c: string) => c.length > 40)
-                            .slice(0, 3);
-                        const trimmed = cleaned.map((c: string) => c.length > 1200 ? c.slice(0, 1200) + "..." : c);
+                            .slice(0, maxPieces);
+                        const trimmed = cleaned.map((c: string) => c.length > maxChars ? c.slice(0, maxChars) + "..." : c);
                         if (trimmed.length > 0) searchCtx += trimmed.join("\n\n");
                     }
                     if (result.sources?.length > 0)
@@ -241,7 +245,7 @@ export function useChat(providerCtx?: {
         }
 
         return { ragCtx, memCtx, searchCtx, hasDocuments };
-    }, [rag, memoryEnabled, memory, deepSearchEnabled, deepSearch]);
+    }, [rag, memoryEnabled, memory, deepSearchEnabled, deepSearch, providerCtx?.provider]);
 
     // ── Helper: Build the message array with context + trimmed history ──
     const buildMessages = useCallback((
@@ -252,16 +256,26 @@ export function useChat(providerCtx?: {
         searchCtx: string,
     ): { role: string; content: string }[] => {
         // Cloud/Ollama models have massive context windows — don't strangle them
+        // Chrome AI (Gemini Nano) has very small context — be aggressive
         const MAX_CONTEXT_TOKENS = providerCtx?.provider === "cloud" ? 30000
             : providerCtx?.provider === "ollama" ? 12000
-            : 3500; // WebGPU/Chrome AI: small models, leave room for generation
+            : providerCtx?.provider === "chrome-ai" ? 2000
+            : 3500; // WebGPU: small models
+
+        // For small models, cap individual context sources to prevent one source from dominating
+        const isSmallModel = MAX_CONTEXT_TOKENS <= 3500;
+        const maxPerSource = isSmallModel ? 800 : 10000; // chars per context source
 
         const contextParts: string[] = [];
         if (ragCtx) {
             const fileNames = rag.documents.map(d => d.name).join(", ");
-            contextParts.push(`## Attached Files: ${fileNames}\nThe user has uploaded documents. Here is the content:\n${ragCtx}\nYou MUST use this document content to answer. Reference the file names when quoting.`);
+            const cappedRag = ragCtx.length > maxPerSource * 2 ? ragCtx.slice(0, maxPerSource * 2) + "\n...[document truncated]" : ragCtx;
+            contextParts.push(`## Attached Files: ${fileNames}\nThe user has uploaded documents. Here is the content:\n${cappedRag}\nYou MUST use this document content to answer. Reference the file names when quoting.`);
         }
-        if (searchCtx.trim()) contextParts.push(`## Web Search Results\n${searchCtx.trim()}\nUse these results for an accurate, up-to-date answer. Cite sources.`);
+        if (searchCtx.trim()) {
+            const cappedSearch = searchCtx.length > maxPerSource ? searchCtx.slice(0, maxPerSource) + "\n...[search results truncated]" : searchCtx;
+            contextParts.push(`## Web Search Results\n${cappedSearch.trim()}\nUse these results for an accurate, up-to-date answer. Cite sources.`);
+        }
         if (memCtx) contextParts.push(`## Memory\n${memCtx}`);
 
         let userContextBlock = contextParts.length > 0
@@ -387,9 +401,14 @@ export function useChat(providerCtx?: {
 
             if (tts.isEnabled) tts.speak(full);
         } catch (err: any) {
+            // AbortError means user clicked Stop — handleStop already saved the partial response
+            if (err?.name === "AbortError") {
+                setStreamingContent("");
+                deepSearch.reset();
+                return;
+            }
             console.error("gen error:", err);
-            const errMsg = err?.name === "AbortError" ? "Generation stopped."
-                : err?.message?.includes("API") || err?.message?.includes("401") || err?.message?.includes("403")
+            const errMsg = err?.message?.includes("API") || err?.message?.includes("401") || err?.message?.includes("403")
                 ? `API error: ${err.message}. Check your API key and endpoint.`
                 : err?.message || "Unknown error";
             chatStore.addMessage({ id: (Date.now() + 1).toString(), role: "assistant", content: `⚠️ ${errMsg}` });

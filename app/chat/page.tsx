@@ -543,8 +543,8 @@ function ChatPageInner() {
             </div>
           )}
 
-          {/* Loading screen */}
-          {webllm.isSupported && webllm.status === "loading" && chatStore.messages.length === 0 && (
+          {/* Loading screen — only show for WebGPU provider */}
+          {provider === "browser" && webllm.isSupported && webllm.status === "loading" && chatStore.messages.length === 0 && (
             <div className="h-full flex flex-col items-center justify-center">
               <div className="space-y-6 text-center max-w-sm">
                 <h2 className="text-xl text-white font-bold tracking-tight">N0X Engine</h2>
