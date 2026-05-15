@@ -11,7 +11,6 @@ import { useChatStore } from "@/lib/useChatStore";
 import { useSystemPrompt } from "@/lib/useSystemPrompt";
 import { tick as keySoundTick } from "@/lib/useKeySound";
 import { useAgent, AgentToolkit } from "@/lib/useAgent";
-import { useWebContainer } from "@/lib/useWebContainer";
 
 const CHARS_PER_TOKEN = 4;
 function estimateTokens(text: string): number {
@@ -48,7 +47,6 @@ export function useChat(providerCtx?: {
     const deepSearch = useDeepSearch();
     const memory = useMemory();
     const pyodide = usePyodide();
-    const webContainer = useWebContainer();
     const tts = useTTS();
     const rag = useRAG();
     const chatStore = useChatStore();
@@ -294,7 +292,7 @@ export function useChat(providerCtx?: {
         if (trimmedHistory.length > 0) msgs.push(...trimmedHistory);
         msgs.push({ role: "user", content: userContextBlock ? userContextBlock + message : message });
         return msgs;
-    }, [rag, chatStore]);
+    }, [rag, chatStore, providerCtx?.provider]);
 
     // ── Main send handler ──
     const handleSend = useCallback(async (autoMessage?: string) => {
@@ -388,9 +386,14 @@ export function useChat(providerCtx?: {
             }
 
             if (tts.isEnabled) tts.speak(full);
-        } catch (err) {
+        } catch (err: any) {
             console.error("gen error:", err);
-            chatStore.addMessage({ id: (Date.now() + 1).toString(), role: "assistant", content: "failed to generate response. try again." });
+            const errMsg = err?.name === "AbortError" ? "Generation stopped."
+                : err?.message?.includes("API") || err?.message?.includes("401") || err?.message?.includes("403")
+                ? `API error: ${err.message}. Check your API key and endpoint.`
+                : err?.message || "Unknown error";
+            chatStore.addMessage({ id: (Date.now() + 1).toString(), role: "assistant", content: `⚠️ ${errMsg}` });
+            setStreamingContent("");
             deepSearch.reset();
         }
     }, [input, isStreaming, activeProviderReady, chatStore, deepSearch, memory, memoryEnabled, handleImageGen, rag, tts, persona, agent, buildAgentToolkit, gatherContext, buildMessages, getGenerateFn]);
@@ -415,7 +418,7 @@ export function useChat(providerCtx?: {
             return "";
         });
         setGeneratingImage(false);
-    }, [webllm, deepSearch, chatStore, agent]);
+    }, [webllm, deepSearch, chatStore, agent, providerCtx]);
 
     const handleNewChat = useCallback(() => {
         chatStore.newConversation();

@@ -35,7 +35,10 @@ function ChatPageInner() {
     _setProvider(p);
     localStorage.setItem("n0x-provider", p);
   }, []);
-  const [ollamaUrl, setOllamaUrl] = useState("http://localhost:11434");
+  const [ollamaUrl, setOllamaUrl] = useState(() => {
+    if (typeof window === "undefined") return "http://localhost:11434";
+    return localStorage.getItem("n0x-ollama-url") || "http://localhost:11434";
+  });
   const [cloudApiKey, setCloudApiKey] = useState(() => useCloudAI.getState().apiKey || "");
   const [cloudBaseUrl, setCloudBaseUrl] = useState(() => useCloudAI.getState().baseUrl || "https://api.groq.com/openai/v1");
 
@@ -87,6 +90,7 @@ function ChatPageInner() {
   // Poll Ollama when selected — auto-detect when user starts the server
   useEffect(() => {
     if (provider === "ollama") {
+      ollama.setBaseUrl(ollamaUrl); // ensure persisted URL is used
       ollama.startPolling();
       return () => ollama.stopPolling();
     }
@@ -171,7 +175,10 @@ function ChatPageInner() {
         onNewChat={onNewChat}
         conversations={chatStore.conversations}
         activeId={chatStore.activeId}
-        onSwitch={chatStore.switchConversation}
+        onSwitch={(id) => {
+          if (isStreaming) handleStop();
+          chatStore.switchConversation(id);
+        }}
         onDelete={chatStore.deleteConversation}
       />
 
@@ -389,7 +396,7 @@ function ChatPageInner() {
                       <input
                         type="text"
                         value={ollamaUrl}
-                        onChange={(e) => { setOllamaUrl(e.target.value); ollama.setBaseUrl(e.target.value); }}
+                        onChange={(e) => { setOllamaUrl(e.target.value); ollama.setBaseUrl(e.target.value); try { localStorage.setItem("n0x-ollama-url", e.target.value); } catch {} }}
                         className="w-full mt-1 px-2 py-1.5 rounded-md bg-zinc-900 border border-zinc-800 text-xs font-mono text-zinc-300 focus:border-orange-500/30 outline-none"
                         placeholder="http://localhost:11434"
                       />
@@ -597,8 +604,12 @@ function ChatPageInner() {
                     ? `Cloud API ready · ${cloudAI.loadedModel || "no model"}. Ask me anything — fast inference, unlimited context.`
                     : provider === "cloud"
                     ? "Set your API key to get started — click the Cloud button in the header to configure."
-                    : provider === "chrome-ai"
+                    : provider === "chrome-ai" && chromeAI.status === "ready"
                     ? "Chrome AI ready. Ask me anything — instant inference, zero download, fully private."
+                    : provider === "chrome-ai" && chromeAI.status === "downloading"
+                    ? "Chrome AI is downloading the Gemini Nano model. This only happens once — please wait."
+                    : provider === "chrome-ai"
+                    ? "Chrome AI is initializing. Make sure you're on Chrome 138+ with Gemini Nano enabled."
                     : "Ready to go. Ask me anything."}
                 </p>
 
@@ -821,7 +832,7 @@ function ChatPageInner() {
             onFileDrop={rag.addFile}
             attachedFiles={rag.documents.map(d => ({ id: d.id, name: d.name, size: d.size, type: d.type }))}
             onRemoveFile={(id) => {
-              rag.clear();
+              rag.removeFile(id);
             }}
             agentEnabled={agent.enabled}
             toggleAgent={agent.toggle}

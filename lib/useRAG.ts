@@ -22,6 +22,7 @@ interface RAGState {
     addFile: (file: File) => Promise<void>;
     search: (query: string, limit?: number) => Promise<string[]>;
     getFileContext: (query: string) => Promise<string>;
+    removeFile: (id: string) => void;
     clear: () => void;
     clearPending: () => void;
     clearCache: () => Promise<void>;
@@ -178,6 +179,18 @@ export const useRAG = create<RAGState>((set, get) => ({
         }
 
         return parts.join("\n\n");
+    },
+
+    removeFile: (id: string) => {
+        set(state => {
+            const remaining = state.documents.filter(d => d.id !== id);
+            const remainingPending = state.pendingFiles.filter(d => d.id !== id);
+            // If no documents left, clear the worker index too
+            if (remaining.length === 0) {
+                postToWorker("CLEAR", {}).catch(() => { });
+            }
+            return { documents: remaining, pendingFiles: remainingPending };
+        });
     },
 
     clear: () => {
