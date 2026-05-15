@@ -118,6 +118,25 @@ Full codebase audit. 9 bugs found and fixed across 4 files:
 - Error screen: 3 recovery options (smaller model / Cloud API / force load)
 - Cloud API fast path: 'Get free key (Groq)' link, full setup guide on welcome screen
 
+### Implemented (2026-05-14 — Session 3: Novel Features)
+Three breakthrough features from research:
+
+**Hybrid Local-Cloud Auto-Routing** (lib/useAutoRouter.ts):
+- `classifyComplexity()`: Regex + heuristic classifier → simple/moderate/complex
+- `routeMessage()`: Routes based on complexity + context (deep search, docs, conversation length)
+- Auto toggle in ChatInput toolbar — shows ⚡ (local) or ☁ (cloud) per message
+- Simple → local (fast, private), Complex → cloud (70B quality), falls back if one provider unavailable
+
+**Persistent Semantic Memory**:
+- Every conversation auto-saved to IndexedDB (memory toggle controls retrieval, not storage)
+- Tags: chat, auto, cloud/local, search, rag — enables filtered recall later
+- Q (200 chars) + A (500 chars) summaries for each exchange
+
+**Mobile Detection + GPU Cap**:
+- userAgent + userAgentData.mobile + screen.width < 768
+- Mobile always caps gpuTier at 'low' (Safari Metal per-buffer: 256MB–993MB)
+- isMobile flag on useWebLLM for UI adaptation
+
 ## Common Bug Patterns
 - **Stale closures in useCallback**: ALL reactive values used in body must be in deps. Watch `providerCtx`.
 - **State sync React ↔ Zustand**: Initialize React local state FROM Zustand, not independently.
