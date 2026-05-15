@@ -382,11 +382,23 @@ export const useWebLLM = create<WebLLMState>((set, get) => ({
                 },
             };
             try {
-                engine = await webllm.CreateWebWorkerMLCEngine(
-                    new Worker(new URL("@mlc-ai/web-llm", import.meta.url), { type: "module" }),
-                    modelId,
-                    initOpts,
+                const worker = new Worker(
+                    new URL("./webllm.worker.ts", import.meta.url),
+                    { type: "module" },
                 );
+                // Race against a timeout — if the Worker hangs, fall back
+                engine = await Promise.race([
+                    webllm.CreateWebWorkerMLCEngine(worker, modelId, initOpts),
+                    new Promise<never>((_, reject) => {
+                        setTimeout(() => {
+                            // Only reject if still at 0% (Worker never responded)
+                            if (get().loadProgress === 0) {
+                                worker.terminate();
+                                reject(new Error("Worker init timeout"));
+                            }
+                        }, 5000);
+                    }),
+                ]);
             } catch {
                 // Worker failed — fall back to main thread engine
                 engine = await webllm.CreateMLCEngine(modelId, initOpts);
