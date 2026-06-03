@@ -7,6 +7,8 @@
     <a href="#how-it-works">How it works</a>&nbsp;&nbsp;
     <a href="#run-it-yourself">Run locally</a>
   </p>
+  <br />
+  <a href="https://www.producthunt.com/products/n0x?utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-n0x" target="_blank"><img src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1162703&theme=dark&t=1780509567546" alt="N0X on Product Hunt" width="250" height="54" /></a>
 </div>
 
 <br />

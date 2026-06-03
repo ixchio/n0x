@@ -95,6 +95,12 @@ export default function HomePage() {
               View on GitHub
             </Link>
           </motion.div>
+
+          <motion.div variants={fadeIn} className="pt-4">
+            <a href="https://www.producthunt.com/products/n0x?utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-n0x" target="_blank" rel="noopener noreferrer">
+              <img src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1162703&theme=dark&t=1780509567546" alt="N0X on Product Hunt" width="250" height="54" />
+            </a>
+          </motion.div>
         </motion.div>
 
         {/* Stats Strip */}
