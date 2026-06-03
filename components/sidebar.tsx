@@ -88,7 +88,7 @@ export function Sidebar({ isOpen, currentModel, provider = "browser", onClose, o
                         {onDelete && (
                             <button
                                 onClick={(e) => { e.stopPropagation(); onDelete(conv.id); }}
-                                className="opacity-0 group-hover:opacity-100 text-zinc-500 hover:text-red-400 transition-all shrink-0 p-1 rounded-md hover:bg-zinc-800"
+                                className="opacity-0 group-hover:opacity-100 focus:opacity-100 sm:opacity-0 max-sm:opacity-60 text-zinc-500 hover:text-red-400 transition-all shrink-0 p-1 rounded-md hover:bg-zinc-800"
                             >
                                 <Trash2 className="w-3.5 h-3.5" />
                             </button>

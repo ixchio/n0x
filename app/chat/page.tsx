@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useRef, useEffect, useCallback, useState, useMemo } from "react";
+import React, { useRef, useEffect, useCallback, useState } from "react";
 import { ChevronDown, Loader2, Zap, Brain, Code, Shield, Volume2, VolumeX, Cpu, Menu, AlertTriangle, Download, Cloud, Server, Monitor, ImageIcon, Search, Bot, FileText, Sparkles, Shuffle } from "lucide-react";
 import { MetricsOverlay } from "@/components/metrics-overlay";
 import { Sidebar } from "@/components/sidebar";
@@ -69,6 +69,15 @@ function ChatPageInner() {
     if (typeof window === "undefined") return true;
     return window.innerWidth >= 768;
   });
+
+  // Sync sidebar state with viewport resizes (desktop ↔ mobile)
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 768px)");
+    const handler = (e: MediaQueryListEvent) => setSidebarOpen(e.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
+
   const [showMemoryPanel, setShowMemoryPanel] = useState(false);
   const [showMetrics, setShowMetrics] = useState(false);
   const [isExploding, setIsExploding] = useState(false);
@@ -211,7 +220,7 @@ function ChatPageInner() {
               className="flex items-center gap-2 text-xs font-mono text-txt-secondary hover:text-phosphor transition-colors"
             >
               <Cpu className="w-3.5 h-3.5" />
-              <span>{provider === "browser" ? (WEBLLM_MODELS.find(m => m.id === webllm.loadedModel)?.label || "no model") : provider === "ollama" ? (ollama.loadedModel || "Ollama") : provider === "cloud" ? (cloudAI.loadedModel || "Cloud API") : provider === "chrome-ai" ? "Chrome AI" : "no model"}</span>
+              <span>{provider === "browser" ? (WEBLLM_MODELS.find(m => m.id === webllm.loadedModel)?.label || "Select model") : provider === "ollama" ? (ollama.loadedModel || "Ollama") : provider === "cloud" ? (cloudAI.loadedModel || "Cloud API") : provider === "chrome-ai" ? "Chrome AI" : "Select model"}</span>
               <ChevronDown className={cn("w-3 h-3 opacity-40 transition-transform", headerModelOpen && "rotate-180")} />
             </button>
 
@@ -484,7 +493,7 @@ function ChatPageInner() {
               {(() => {
                 const tps = provider === "ollama" ? ollama.stats?.tps
                   : provider === "cloud" ? cloudAI.stats?.tps
-                  : webllm.stats.tps;
+                  : webllm.stats?.tps;
                 return tps > 0 ? (
                   <div className={cn(
                     "ml-3 font-mono text-[11px] flex items-center gap-1",

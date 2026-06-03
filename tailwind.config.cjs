@@ -74,6 +74,7 @@ module.exports = {
       },
       boxShadow: {
         "glow-white": "0 0 10px rgba(255, 255, 255, 0.1), 0 0 20px rgba(255, 255, 255, 0.05)",
+        "glow-sm": "0 0 8px rgba(57, 255, 20, 0.3)",
         "glass": "inset 0 1px 0 0 rgba(255, 255, 255, 0.05)",
       },
       animation: {

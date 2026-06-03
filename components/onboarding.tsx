@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Monitor, Sparkles, Cloud, Server, Zap, Brain, FileText, ImageIcon, Code, ArrowRight, X } from "lucide-react";
+import { Monitor, Zap, Brain, FileText, ImageIcon, Code, ArrowRight, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const ONBOARDING_KEY = "n0x_onboarded";

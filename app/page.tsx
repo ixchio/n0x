@@ -3,7 +3,7 @@
 import React from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { Terminal, Shield, Cpu, Zap, Brain, Globe, Code, FileText, ImageIcon, Mic, ArrowRight, Lock, Database, Bot, GitBranch, Layers, FlaskConical } from "lucide-react";
+import { Shield, Cpu, Zap, Brain, Globe, Code, FileText, ImageIcon, Mic, ArrowRight, Lock, Database, Bot, GitBranch, Layers } from "lucide-react";
 
 const fadeIn = {
   hidden: { opacity: 0, y: 20 },
@@ -47,8 +47,8 @@ export default function HomePage() {
           n0x
         </div>
         <nav className="flex items-center gap-6 text-sm text-zinc-400 font-medium">
-          <Link href="https://github.com/ixchio/n0x" className="hover:text-white transition-colors">GitHub</Link>
-          <Link href="https://github.com/ixchio/n0x#readme" className="hover:text-white transition-colors hidden sm:block">Docs</Link>
+          <a href="https://github.com/ixchio/n0x" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">GitHub</a>
+          <a href="https://github.com/ixchio/n0x#readme" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors hidden sm:block">Docs</a>
           <Link
             href="/chat"
             className="text-black bg-white hover:bg-zinc-200 transition-colors flex items-center gap-1.5 px-4 py-2 rounded-lg font-semibold text-sm shadow-[0_0_20px_rgba(255,255,255,0.08)]"
@@ -96,7 +96,7 @@ export default function HomePage() {
             </Link>
           </motion.div>
 
-          <motion.div variants={fadeIn} className="pt-4">
+          <motion.div variants={fadeIn} className="pt-4 flex justify-center">
             <a href="https://www.producthunt.com/products/n0x?utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-n0x" target="_blank" rel="noopener noreferrer">
               <img src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1162703&theme=dark&t=1780509567546" alt="N0X on Product Hunt" width="250" height="54" />
             </a>

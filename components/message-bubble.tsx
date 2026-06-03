@@ -172,15 +172,6 @@ const CodeBlock = ({ children, className, onRunCode, codeResults, runningCode, h
                         </button>
                     )}
 
-                    {isWeb && !showPreview && (
-                        <button
-                            onClick={handlePreview}
-                            className="p-1.5 rounded-md text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors flex items-center gap-1.5 text-xs font-mono font-medium"
-                        >
-                            <Play className="w-3.5 h-3.5" /> Play
-                        </button>
-                    )}
-
                     <button onClick={handleCopy} className={cn("p-1.5 rounded-md transition-colors", copied ? "bg-[#1f1f1f] text-phosphor" : "text-zinc-400 hover:text-white hover:bg-zinc-800")}>
                         {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
                     </button>
@@ -264,7 +255,7 @@ export const MessageBubble = React.memo(function MessageBubble({ role, content, 
 
     if (role === "user") {
         return (
-            <div className="flex justify-end animate-in fade-in slide-in-from-bottom-2 duration-300 group">
+            <div className="flex justify-end animate-slide-up group">
                 <div className="relative max-w-[75%]">
                     <div className="bg-zinc-800 text-white px-5 py-3.5 rounded-2xl rounded-tr-sm text-[15px] shadow-sm leading-relaxed">
                         <div className="whitespace-pre-wrap">{content}</div>
@@ -284,7 +275,7 @@ export const MessageBubble = React.memo(function MessageBubble({ role, content, 
     }
 
     return (
-        <div className="flex gap-4 animate-in fade-in slide-in-from-bottom-2 duration-300 group">
+        <div className="flex gap-4 animate-slide-up group">
             <div className="shrink-0 w-8 h-8 rounded-full bg-white text-black flex items-center justify-center mt-1 shadow-sm">
                 <Bot className="w-5 h-5" />
             </div>

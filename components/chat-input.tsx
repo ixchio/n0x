@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useRef, useEffect, useState, useCallback } from "react";
-import { Send, Square, Globe, Brain, Code, Paperclip, Upload, X, FileText, Mic, MicOff, Lightbulb, Bot, ImageIcon, Shuffle } from "lucide-react";
+import { Send, Square, Globe, Brain, Code, Paperclip, Upload, X, FileText, Mic, MicOff, Bot, ImageIcon, Shuffle } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface AttachedFile { id: string; name: string; size: number; type: string; }
@@ -101,7 +101,7 @@ export function ChatInput({
                                 <span className="text-zinc-300 max-w-[120px] truncate">{file.name}</span>
                                 <span className="text-zinc-600 text-[10px]">{formatSize(file.size)}</span>
                                 {onRemoveFile && (
-                                    <button onClick={() => onRemoveFile(file.id)} className="ml-1 opacity-0 group-hover:opacity-100 text-zinc-500 hover:text-red-400">
+                                    <button onClick={() => onRemoveFile(file.id)} className="ml-1 opacity-0 group-hover:opacity-100 focus:opacity-100 max-sm:opacity-60 text-zinc-500 hover:text-red-400">
                                         <X className="w-3.5 h-3.5" />
                                     </button>
                                 )}
@@ -114,7 +114,7 @@ export function ChatInput({
                     <textarea
                         ref={textareaRef} value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={handleKeyDown}
                         placeholder={sttListening ? "Listening..." : "Message n0x..."} disabled={isStreaming} rows={1}
-                        className="w-full bg-transparent text-sm resize-none outline-none text-zinc-200 placeholder:text-zinc-500 leading-relaxed min-h-[40px] overflow-hidden"
+                        className="w-full bg-transparent text-sm resize-none outline-none text-zinc-200 placeholder:text-zinc-500 leading-relaxed min-h-[40px] overflow-y-auto"
                         style={{ height: 'auto' }}
                     />
                 </div>
