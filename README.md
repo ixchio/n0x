@@ -152,6 +152,7 @@ Turn both off and nothing leaves your machine. Not metadata, not telemetry, noth
 Next.js 14 · TypeScript · WebLLM (WebGPU) · Transformers.js · Voy · Pyodide · Zustand · Tailwind · IndexedDB
 
 ---
+<img width="1909" height="918" alt="image" src="https://github.com/user-attachments/assets/db3d0c98-f56b-4464-b8ab-fe0836fc2dfe" />
 <img width="1920" height="1074" alt="image" src="https://github.com/user-attachments/assets/bb812ae6-2f06-4e7b-b93a-0715c52699de" />
 <img width="1657" height="923" alt="Chat" src="https://github.com/user-attachments/assets/dad81977-dd49-4d48-84b4-fd655825e3c2" />
 <img width="1920" height="913" alt="Agent trace" src="https://github.com/user-attachments/assets/2fb8a22e-e96b-4497-8bd2-3cb5ea88a758" />
