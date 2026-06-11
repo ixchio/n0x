@@ -231,7 +231,7 @@ async function extractText(file: File): Promise<string> {
     }
 
     // Fallback: TXT, MD, JSON
-    return await file.text();
+    return sanitizeText(await file.text());
 }
 
 // ── Sentence-boundary-aware chunking with 50% overlap ──
@@ -489,8 +489,10 @@ self.addEventListener("message", async (e: MessageEvent) => {
                     }]
                 });
 
-                // Store text + embedding for MMR
-                chunkStore.set(`${fileHash}-${i}`, { text: chunks[i], embedding });
+                // Store SANITIZED text + embedding for MMR
+                // Critical: chunkStore.text is read by BM25 tokenize() which calls .replace()
+                // If chunks[i] is somehow non-string (PDF edge case), tokenize crashes.
+                chunkStore.set(`${fileHash}-${i}`, { text: cleanChunk, embedding });
 
                 if (i % 5 === 4) {
                     self.postMessage({ id, status: `Embedding chunk ${i + 1}/${chunks.length}...` });

@@ -238,21 +238,35 @@ export function useChat(providerCtx?: {
             try {
                 const result = await deepSearch.search(message);
                 if (result) {
-                    if (result.summary) searchCtx += result.summary + "\n\n";
-                    if (result.content?.length > 0) {
-                        // Smaller budget for browser models to prevent context overflow
-                        const isSmall = providerCtx?.provider === "browser" || providerCtx?.provider === "chrome-ai";
-                        const maxPieces = isSmall ? 2 : 3;
-                        const maxChars = isSmall ? 500 : 1200;
-                        const cleaned = result.content
-                            .map((c: string) => c.replace(/^\[Source:[^\]]+\]\n?/gm, "").replace(/^\[Instant Answer\]\n?/gm, "").trim())
-                            .filter((c: string) => c.length > 40)
-                            .slice(0, maxPieces);
-                        const trimmed = cleaned.map((c: string) => c.length > maxChars ? c.slice(0, maxChars) + "..." : c);
-                        if (trimmed.length > 0) searchCtx += trimmed.join("\n\n");
+                    const isSmall = providerCtx?.provider === "browser" || providerCtx?.provider === "chrome-ai";
+                    const maxPieces = isSmall ? 2 : 4;
+                    const maxChars = isSmall ? 400 : 900;
+
+                    // Build clean numbered citations — LLM synthesizes, doesn't regurgitate
+                    const pieces: string[] = [];
+
+                    if (result.summary) {
+                        pieces.push(`Quick Answer: ${result.summary.slice(0, maxChars)}`);
                     }
-                    if (result.sources?.length > 0)
-                        searchCtx += "\n\nSources: " + result.sources.slice(0, 4).join(", ");
+
+                    const contents = (result.content || [])
+                        .map((c: string) => c.replace(/^\[Source:[^\]]+\]\n?/gm, "").replace(/^\[Instant Answer\]\n?/gm, "").trim())
+                        .filter((c: string) => c.length > 40)
+                        .slice(0, maxPieces);
+
+                    contents.forEach((c: string, i: number) => {
+                        const src = result.sources?.[i] ? ` (${new URL(result.sources[i]).hostname})` : "";
+                        pieces.push(`[${i + 1}]${src}\n${c.slice(0, maxChars)}${c.length > maxChars ? "..." : ""}`);
+                    });
+
+                    if (pieces.length > 0) {
+                        searchCtx = `SEARCH RESULTS for "${message}":\n\n${pieces.join("\n\n")}\n\nSynthesize these results into a direct, concise answer. Cite sources as [1], [2] etc. Do not copy text verbatim.`;
+                    }
+
+                    // Append source list for reference
+                    if (result.sources?.length > 0) {
+                        searchCtx += "\n\nSources: " + result.sources.slice(0, maxPieces).join(", ");
+                    }
                 }
             } catch (e) {
                 console.error("Deep search error (non-fatal):", e);
