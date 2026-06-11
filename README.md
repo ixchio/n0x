@@ -57,6 +57,8 @@ Switch between them mid-conversation. Your chat history stays.
 
 **Memory.** The agent stores and recalls facts across sessions. Persistent in IndexedDB.
 
+**Storage Manager.** Browsers limit IndexedDB storage (usually 2GB). Built-in Storage Manager lets you clear your chat history, memory, vector cache, and model weights directly from the sidebar.
+
 **Voice.** Speech-to-text and text-to-speech via the Web Speech API. Works offline.
 
 **Branching.** Fork any message into an alternate conversation thread. Both branches persist in the sidebar.

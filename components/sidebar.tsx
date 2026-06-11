@@ -4,6 +4,7 @@ import React from "react";
 import { Plus, Trash2, MessageSquare, Box, TrendingDown } from "lucide-react";
 import { WEBLLM_MODELS, getTotalTokens } from "@/lib/useWebLLM";
 import { cn } from "@/lib/utils";
+import { StorageManager } from "./storage-manager";
 
 interface Conversation {
     id: string;
@@ -140,6 +141,10 @@ export function Sidebar({ isOpen, currentModel, provider = "browser", onClose, o
                         </div>
                     );
                 })()}
+                
+                <div className="pt-2 border-t border-zinc-900/50 mt-2">
+                    <StorageManager />
+                </div>
             </div>
         </aside>
         </>
