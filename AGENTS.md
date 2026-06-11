@@ -137,10 +137,30 @@ Three breakthrough features from research:
 - Mobile always caps gpuTier at 'low' (Safari Metal per-buffer: 256MB–993MB)
 - isMobile flag on useWebLLM for UI adaptation
 
+### Fixed (2026-06-11 — Hydration + RAG + Search UI + Agent)
+6 fixes across 6 files:
+
+**React Hydration Errors (#418/#425/#423)**:
+- `app/chat/page.tsx` useState initializers read localStorage/sessionStorage during SSR → server/client mismatch. Fixed: SSR-safe defaults + useEffect hydration after mount. Sidebar width check also moved to useEffect.
+
+**RAG Worker crash (e.replace is not a function)**:
+- `tokenize()` in BM25 received non-string `text` from corrupted IndexedDB cache entries. Fixed: `tokenize()` now accepts `unknown`, coerces safely. All cache-loading paths now run through `sanitizeText()`. BM25 scoring hardened with explicit type checks on `entry.text`.
+
+**Deep Search UI (Perplexity-style)**:
+- Replaced garbage text dump with Perplexity-style UI: source cards with favicons in 3-column grid, progress bar with phase labels, expandable sources, clean transitions. No more raw streaming text shown during search.
+
+**Agent Mode Improvements**:
+- Better system prompt with explicit workflow section, document search example, improved rules. Max iterations 8→12, tool timeout 30s→45s. More reliable tool JSON extraction.
+
+**Deep Search Streaming Cleanup**:
+- Removed all raw `streamingText` dumps from search phases. UI now shows only clean progress indicators, source cards, and reading URL indicators.
+
 ## Common Bug Patterns
 - **Stale closures in useCallback**: ALL reactive values used in body must be in deps. Watch `providerCtx`.
 - **State sync React ↔ Zustand**: Initialize React local state FROM Zustand, not independently.
 - **Provider-aware behavior**: Code branching on `providerCtx?.provider` needs it in deps.
+- **Hydration mismatch**: NEVER read localStorage/sessionStorage in useState initializers. Use SSR-safe defaults + useEffect hydration.
+- **RAG Worker type safety**: Always sanitize text from IndexedDB cache — old cache entries may have non-string values.
 
 ### Not Fixed (needs design/manual work)
 - **OG image**: No `og:image` exists. Critical for Product Hunt social shares. Needs a designed 1200×630 image.
