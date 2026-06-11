@@ -1,9 +1,9 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { Shield, Cpu, Zap, Brain, Globe, Code, FileText, ImageIcon, Mic, ArrowRight, Lock, Database, Bot, GitBranch, Layers } from "lucide-react";
+import { Cpu, Brain, Globe, Code, ImageIcon, Mic, ArrowRight, Lock, Database, Bot, GitBranch, Layers, Star, Check, X, ExternalLink, Zap, Shield } from "lucide-react";
 
 const fadeIn = {
   hidden: { opacity: 0, y: 20 },
@@ -16,11 +16,55 @@ const stagger = {
 };
 
 const STATS = [
-  { value: "40", label: "open-source models" },
+  { value: "40+", label: "open-source models" },
   { value: "360MB", label: "minimum VRAM" },
-  { value: "0", label: "API keys required" },
-  { value: "100%", label: "runs in-browser" },
+  { value: "$0", label: "API keys required" },
+  { value: "100%", label: "browser-native" },
 ];
+
+const COMPARE = [
+  { feature: "Data stays local",      n0x: true,  chatgpt: false, claude: false, ollama: true  },
+  { feature: "No account required",   n0x: true,  chatgpt: false, claude: false, ollama: true  },
+  { feature: "No API key",            n0x: true,  chatgpt: false, claude: false, ollama: true  },
+  { feature: "Works offline",         n0x: true,  chatgpt: false, claude: false, ollama: true  },
+  { feature: "Browser-native UI",     n0x: true,  chatgpt: true,  claude: true,  ollama: false },
+  { feature: "Autonomous agent",      n0x: true,  chatgpt: true,  claude: true,  ollama: false },
+  { feature: "Document RAG",          n0x: true,  chatgpt: false, claude: false, ollama: false },
+  { feature: "Python sandbox",        n0x: true,  chatgpt: true,  claude: false, ollama: false },
+  { feature: "Image generation",      n0x: true,  chatgpt: true,  claude: false, ollama: false },
+  { feature: "Free forever",          n0x: true,  chatgpt: false, claude: false, ollama: true  },
+];
+
+function GitHubStarBadge() {
+  const [stars, setStars] = useState<number | null>(null);
+  useEffect(() => {
+    fetch("https://api.github.com/repos/ixchio/n0x")
+      .then(r => r.json())
+      .then(d => { if (typeof d.stargazers_count === "number") setStars(d.stargazers_count); })
+      .catch(() => {});
+  }, []);
+  return (
+    <a
+      href="https://github.com/ixchio/n0x/stargazers"
+      target="_blank"
+      rel="noopener noreferrer"
+      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-zinc-900 border border-zinc-800 text-xs font-mono text-zinc-300 hover:border-zinc-600 hover:text-white transition-all group"
+    >
+      <Star className="w-3.5 h-3.5 text-amber-400 group-hover:fill-amber-400 transition-all" />
+      {stars !== null ? (
+        <span><span className="text-white font-bold">{stars}</span> stars on GitHub</span>
+      ) : (
+        <span>Star on GitHub</span>
+      )}
+    </a>
+  );
+}
+
+function Cell({ v }: { v: boolean }) {
+  return v
+    ? <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-emerald-500/15 text-emerald-400"><Check className="w-3 h-3" /></span>
+    : <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-zinc-900 text-zinc-700"><X className="w-3 h-3" /></span>;
+}
 
 export default function HomePage() {
   return (
@@ -34,10 +78,7 @@ export default function HomePage() {
       {/* Dot Grid */}
       <div
         className="absolute inset-0 opacity-[0.018] pointer-events-none"
-        style={{
-          backgroundImage: "radial-gradient(circle, #fff 1px, transparent 1px)",
-          backgroundSize: "40px 40px"
-        }}
+        style={{ backgroundImage: "radial-gradient(circle, #fff 1px, transparent 1px)", backgroundSize: "40px 40px" }}
       />
 
       {/* Header */}
@@ -47,7 +88,10 @@ export default function HomePage() {
           n0x
         </div>
         <nav className="flex items-center gap-6 text-sm text-zinc-400 font-medium">
-          <a href="https://github.com/ixchio/n0x" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">GitHub</a>
+          <a href="https://github.com/ixchio/n0x" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors flex items-center gap-1.5">
+            <Star className="w-3.5 h-3.5 text-amber-400" />
+            GitHub
+          </a>
           <a href="https://github.com/ixchio/n0x#readme" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors hidden sm:block">Docs</a>
           <Link
             href="/chat"
@@ -61,15 +105,14 @@ export default function HomePage() {
       <main className="flex-1 w-full max-w-6xl mx-auto px-6 py-16 lg:py-28 flex flex-col items-center relative z-10">
 
         {/* Hero */}
-        <motion.div
-          initial="hidden"
-          animate="visible"
-          variants={stagger}
-          className="text-center max-w-3xl space-y-8"
-        >
-          <motion.div variants={fadeIn} className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-zinc-900 border border-zinc-800 text-xs font-medium text-zinc-300 mb-4 shadow-glass">
-            <span className="flex h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            Zero backend · Zero API keys · 100% private
+        <motion.div initial="hidden" animate="visible" variants={stagger} className="text-center max-w-3xl space-y-8">
+
+          <motion.div variants={fadeIn} className="flex flex-col sm:flex-row items-center justify-center gap-3 mb-4">
+            <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-zinc-900 border border-zinc-800 text-xs font-medium text-zinc-300 shadow-glass">
+              <span className="flex h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              Zero backend · Zero API keys · 100% private
+            </span>
+            <GitHubStarBadge />
           </motion.div>
 
           <motion.h1 variants={fadeIn} className="text-5xl sm:text-7xl font-bold tracking-tight text-white leading-[1.08]">
@@ -88,12 +131,14 @@ export default function HomePage() {
             >
               Enter n0x <ArrowRight className="w-4 h-4" />
             </Link>
-            <Link
+            <a
               href="https://github.com/ixchio/n0x"
-              className="h-12 px-8 inline-flex items-center justify-center rounded-lg bg-zinc-900 border border-zinc-800 text-white font-medium hover:bg-zinc-800 transition-colors text-sm shadow-glass"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="h-12 px-8 inline-flex items-center justify-center rounded-lg bg-zinc-900 border border-zinc-800 text-white font-medium hover:bg-zinc-800 transition-colors text-sm shadow-glass gap-2"
             >
-              View on GitHub
-            </Link>
+              <Star className="w-4 h-4 text-amber-400" /> Star on GitHub
+            </a>
           </motion.div>
 
           <motion.div variants={fadeIn} className="pt-4 flex justify-center">
@@ -118,6 +163,50 @@ export default function HomePage() {
           ))}
         </motion.div>
 
+        {/* Comparison Table */}
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: "-60px" }}
+          transition={{ duration: 0.5 }}
+          className="w-full mt-20"
+        >
+          <div className="text-center mb-8">
+            <p className="text-xs font-mono text-zinc-500 uppercase tracking-widest mb-2">Why N0X over everything else</p>
+            <p className="text-zinc-400 text-sm">The only tool that gives you the full AI stack with zero cloud dependency.</p>
+          </div>
+          <div className="overflow-x-auto rounded-2xl border border-zinc-800/60 bg-zinc-950/60">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-zinc-800">
+                  <th className="text-left px-6 py-4 text-zinc-500 font-medium text-xs font-mono">Feature</th>
+                  <th className="px-6 py-4 text-center font-mono text-xs font-bold text-emerald-400 bg-emerald-500/5 border-x border-emerald-500/10">
+                    <span className="flex flex-col items-center gap-0.5">
+                      <span>N0X</span>
+                      <span className="text-[9px] text-emerald-500/60 font-normal">this project</span>
+                    </span>
+                  </th>
+                  <th className="px-6 py-4 text-center font-mono text-xs text-zinc-500">ChatGPT</th>
+                  <th className="px-6 py-4 text-center font-mono text-xs text-zinc-500">Claude</th>
+                  <th className="px-6 py-4 text-center font-mono text-xs text-zinc-500">Ollama</th>
+                </tr>
+              </thead>
+              <tbody>
+                {COMPARE.map((row, i) => (
+                  <tr key={row.feature} className={`border-b border-zinc-900/60 ${i % 2 === 0 ? "" : "bg-zinc-900/20"}`}>
+                    <td className="px-6 py-3 text-zinc-400 text-xs font-mono">{row.feature}</td>
+                    <td className="px-6 py-3 text-center bg-emerald-500/5 border-x border-emerald-500/10"><Cell v={row.n0x} /></td>
+                    <td className="px-6 py-3 text-center"><Cell v={row.chatgpt} /></td>
+                    <td className="px-6 py-3 text-center"><Cell v={row.claude} /></td>
+                    <td className="px-6 py-3 text-center"><Cell v={row.ollama} /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="text-[10px] text-zinc-700 font-mono text-center mt-2">as of June 2026 · free tiers compared</p>
+        </motion.div>
+
         {/* Bento Grid */}
         <motion.div
           initial="hidden"
@@ -126,7 +215,6 @@ export default function HomePage() {
           variants={stagger}
           className="w-full mt-16 grid grid-cols-1 md:grid-cols-3 gap-4"
         >
-
           {/* Hero Card — Agent */}
           <motion.div
             variants={fadeIn}
@@ -169,7 +257,7 @@ export default function HomePage() {
               </div>
               <div>
                 <h3 className="text-xl font-bold text-white tracking-tight">WebGPU Inference</h3>
-                <p className="text-zinc-400 mt-2 font-medium">Direct-to-metal execution via MLC WebLLM. 40 open-source models from <span className="text-white font-semibold">360MB to 70B</span> — downloaded once, cached in your browser forever.</p>
+                <p className="text-zinc-400 mt-2 font-medium">Direct-to-metal via MLC WebLLM. 40+ models from <span className="text-white font-semibold">360MB to 70B</span> — downloaded once, cached in your browser forever.</p>
               </div>
               <div className="flex flex-wrap gap-2 pt-1">
                 {["Llama 3.3 70B", "DeepSeek R1 70B", "Qwen 2.5 32B", "Mistral 7B", "Qwen 0.5B", "+35 more"].map(m => (
@@ -180,10 +268,7 @@ export default function HomePage() {
           </motion.div>
 
           {/* Privacy */}
-          <motion.div
-            variants={fadeIn}
-            className="md:col-span-1 bg-zinc-900/50 border border-zinc-800/50 rounded-2xl p-8 hover:bg-zinc-900/80 transition-colors shadow-glass"
-          >
+          <motion.div variants={fadeIn} className="md:col-span-1 bg-zinc-900/50 border border-zinc-800/50 rounded-2xl p-8 hover:bg-zinc-900/80 transition-colors shadow-glass">
             <div className="space-y-4">
               <div className="w-12 h-12 bg-zinc-800 rounded-xl flex items-center justify-center text-white border border-zinc-700">
                 <Lock className="w-6 h-6" />
@@ -195,11 +280,8 @@ export default function HomePage() {
             </div>
           </motion.div>
 
-          {/* Enhanced RAG */}
-          <motion.div
-            variants={fadeIn}
-            className="md:col-span-1 bg-zinc-900/50 border border-zinc-800/50 rounded-2xl p-8 hover:bg-zinc-900/80 transition-colors shadow-glass"
-          >
+          {/* Document RAG */}
+          <motion.div variants={fadeIn} className="md:col-span-1 bg-zinc-900/50 border border-zinc-800/50 rounded-2xl p-8 hover:bg-zinc-900/80 transition-colors shadow-glass">
             <div className="space-y-4">
               <div className="w-12 h-12 bg-zinc-800 rounded-xl flex items-center justify-center text-white border border-zinc-700">
                 <Database className="w-6 h-6" />
@@ -207,7 +289,7 @@ export default function HomePage() {
               <div>
                 <h3 className="text-xl font-bold text-white tracking-tight">Document RAG</h3>
                 <p className="text-zinc-400 mt-2 text-sm font-medium">
-                  Drop PDFs, DOCX, CSVs, or text files. Sentence-boundary chunking with 50% overlap, MiniLM embeddings, and <span className="text-white">MMR reranking</span> for diverse, accurate retrieval — all in a Web Worker.
+                  Drop PDFs, DOCX, CSVs, or text files. Sentence-boundary chunking, MiniLM embeddings, and <span className="text-white">MMR reranking</span> — all in a Web Worker.
                 </p>
               </div>
               <div className="flex flex-wrap gap-1.5 pt-1">
@@ -237,11 +319,8 @@ export default function HomePage() {
             </div>
           </motion.div>
 
-          {/* Capability grid */}
-          <motion.div
-            variants={fadeIn}
-            className="md:col-span-3 bg-zinc-900/40 border border-zinc-800/40 rounded-2xl p-8 shadow-glass"
-          >
+          {/* More capabilities */}
+          <motion.div variants={fadeIn} className="md:col-span-3 bg-zinc-900/40 border border-zinc-800/40 rounded-2xl p-8 shadow-glass">
             <p className="text-xs font-mono text-zinc-500 uppercase tracking-widest mb-6">More Capabilities</p>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-6 text-zinc-400">
               {[
@@ -260,7 +339,41 @@ export default function HomePage() {
               ))}
             </div>
           </motion.div>
+        </motion.div>
 
+        {/* Star CTA Banner */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.5 }}
+          className="mt-16 w-full rounded-2xl bg-gradient-to-br from-zinc-900 to-zinc-900/40 border border-zinc-800/60 p-8 flex flex-col sm:flex-row items-center justify-between gap-6 shadow-glass"
+        >
+          <div className="space-y-1.5 text-center sm:text-left">
+            <div className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest">open source · MIT · built in public</div>
+            <div className="text-xl font-bold text-white">If n0x saved you money, give it a ⭐</div>
+            <div className="text-sm text-zinc-400 max-w-sm">
+              Every star helps more developers find this. Takes 2 seconds, costs $0 — just like n0x.
+            </div>
+          </div>
+          <div className="flex flex-col sm:flex-row gap-3 shrink-0">
+            <a
+              href="https://github.com/ixchio/n0x"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-lg bg-white text-black font-bold hover:bg-zinc-200 transition-colors text-sm"
+            >
+              <Star className="w-4 h-4 fill-amber-500 text-amber-500" /> Star on GitHub
+            </a>
+            <a
+              href="https://github.com/ixchio/n0x/issues"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-lg bg-zinc-900 border border-zinc-800 text-white font-medium hover:bg-zinc-800 transition-colors text-sm"
+            >
+              <ExternalLink className="w-4 h-4" /> Contribute
+            </a>
+          </div>
         </motion.div>
 
         {/* Final CTA */}
@@ -269,7 +382,7 @@ export default function HomePage() {
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
           transition={{ duration: 0.5 }}
-          className="mt-24 text-center space-y-6 max-w-xl"
+          className="mt-20 text-center space-y-6 max-w-xl"
         >
           <h2 className="text-3xl font-bold text-white tracking-tight">Ready to run AI locally?</h2>
           <p className="text-zinc-400 font-medium">No sign-up. No API keys. Just open the app, pick a model, and start.</p>
@@ -287,8 +400,11 @@ export default function HomePage() {
       <footer className="w-full border-t border-zinc-800/50 py-8 relative z-10">
         <div className="max-w-6xl mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-zinc-500 font-mono">
           <span>© {new Date().getFullYear()} ixchio · MIT License</span>
-          <span>WebGPU for local models · Ollama & Cloud API also supported</span>
-          <Link href="https://github.com/ixchio/n0x" className="hover:text-zinc-300 transition-colors">github.com/ixchio/n0x</Link>
+          <span>WebGPU for local models · Ollama &amp; Cloud API also supported</span>
+          <a href="https://github.com/ixchio/n0x" target="_blank" rel="noopener noreferrer" className="hover:text-zinc-300 transition-colors flex items-center gap-1.5">
+            <Star className="w-3 h-3 text-amber-400" />
+            github.com/ixchio/n0x
+          </a>
         </div>
       </footer>
 

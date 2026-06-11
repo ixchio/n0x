@@ -209,7 +209,7 @@ const CodeBlock = ({ children, className, onRunCode, codeResults, runningCode, h
                 <div className="border-t border-zinc-800 p-3 bg-zinc-950">
                     <div className="text-[10px] text-zinc-500 mb-1.5 font-mono flex flex-wrap items-center gap-2">
                         <Terminal className="w-3 h-3" /> Execution output · {result.duration}ms
-                        {result.duration > 3000 && <span className="text-amber-500/80 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">WASM overhead (slower than native)</span>}
+                        {result.duration > 3000 && <span className="text-[10px] text-amber-500/80 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">WASM — expect 10–50× vs native</span>}
                     </div>
                     <div className="max-h-96 overflow-y-auto custom-scrollbar">
                         {result.output && <pre className="text-[13px] text-zinc-300 font-mono whitespace-pre-wrap leading-relaxed pb-2">{result.output}</pre>}
