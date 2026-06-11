@@ -3,7 +3,7 @@
   <h1>n0x</h1>
   <p><strong>Run the full AI stack in a browser tab.</strong></p>
   <p>
-    <a href="https://n0x.vercel.app"><strong>Try it →</strong></a>&nbsp;&nbsp;
+    <a href="https://n0xth.vercel.app"><strong>Try it →</strong></a>&nbsp;&nbsp;
     <a href="#how-it-works">How it works</a>&nbsp;&nbsp;
     <a href="#run-it-yourself">Run locally</a>
   </p>

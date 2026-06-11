@@ -16,7 +16,7 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://n0x.vercel.app"),
+  metadataBase: new URL("https://n0xth.vercel.app"),
   title: "N0X — The Full AI Stack in One Browser Tab",
   description: "LLM inference, web search, RAG, code execution, image generation, memory, and TTS — all running in your browser via WebGPU. No install, no server, no account.",
   manifest: "/manifest.json",
@@ -36,7 +36,7 @@ export const metadata: Metadata = {
     title: "N0X — The Full AI Stack in One Browser Tab",
     description: "Run LLMs, agents, RAG, code execution, and image generation entirely in your browser. No server. No API keys. 100% private.",
     type: "website",
-    url: "https://n0x.vercel.app",
+    url: "https://n0xth.vercel.app",
   },
   twitter: {
     card: "summary_large_image",

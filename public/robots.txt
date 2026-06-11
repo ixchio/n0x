@@ -2,4 +2,4 @@ User-agent: *
 Allow: /
 Disallow: /api/
 
-Sitemap: https://n0x.vercel.app/sitemap.xml
+Sitemap: https://n0xth.vercel.app/sitemap.xml
