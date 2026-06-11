@@ -52,7 +52,7 @@ export function useDeepSearch() {
             content: [],
             sources: [],
             currentUrl: "",
-            streamingText: "Analyzing query...",
+            streamingText: "",
             summary: "",
             error: null,
         });
@@ -63,7 +63,7 @@ export function useDeepSearch() {
             setState(prev => ({
                 ...prev,
                 phase: "searching",
-                streamingText: "Searching DuckDuckGo + Wikipedia..."
+                streamingText: "",
             }));
 
             // Make the search request
@@ -88,49 +88,42 @@ export function useDeepSearch() {
                 ...prev,
                 phase: "reading",
                 results: data.results || [],
-                streamingText: `Found ${data.results?.length || 0} results. Extracting content...`,
+                streamingText: "",
             }));
 
-            // Stream the content progressively
-            let streamText = "";
             const contents = data.content || [];
             const sources = data.sources || [];
 
-            // If we have a summary, show it first
+            // If we have a summary, show it
             if (data.summary) {
-                streamText = `📌 Quick Answer:\n${data.summary}\n\n---\n\n`;
                 setState(prev => ({
                     ...prev,
-                    streamingText: streamText,
+                    streamingText: "",
                     summary: data.summary,
                 }));
-                await new Promise(r => setTimeout(r, 300));
             }
 
-            // Stream each content piece
-            for (let i = 0; i < contents.length; i++) {
+            // Read each source progressively (animate the reading indicator)
+            for (let i = 0; i < Math.min(contents.length, 4); i++) {
                 if (abortRef.current?.signal.aborted) return null;
 
-                const contentText = contents[i];
                 setState(prev => ({
                     ...prev,
                     currentUrl: sources[i] || "",
                     phase: "reading",
+                    streamingText: "",
                 }));
 
-                // Direct update without simulated typing for speed
-                streamText += contentText + "\n\n";
-                setState(prev => ({ ...prev, streamingText: streamText }));
-
-                // Keep UI responsive
-                await new Promise(r => requestAnimationFrame(r));
+                // Brief pause for visual feedback — user sees which source is being read
+                await new Promise(r => setTimeout(r, 250));
             }
 
-            // Analysis phase
+            // Analysis phase — clean transition
             setState(prev => ({
                 ...prev,
                 phase: "analyzing",
-                streamingText: streamText + "✅ Analysis complete. Generating response...",
+                currentUrl: "",
+                streamingText: "",
             }));
 
             // Complete

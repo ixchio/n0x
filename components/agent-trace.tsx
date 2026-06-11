@@ -187,7 +187,7 @@ export function AgentTrace({ steps, status, iteration, isActive, elapsedMs = 0, 
 
                 <span className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider">
                     Agent
-                    {isRunning && ` · step ${iteration}/${8}`}
+                    {isRunning && ` · step ${iteration}/${12}`}
                     {status === "done" && ` · done`}
                     {status === "error" && ` · failed`}
                 </span>

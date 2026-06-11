@@ -64,8 +64,8 @@ export interface AgentToolkit {
 
 // ─── Config ─────────────────────────────────────────────────────────
 
-const MAX_ITERATIONS = 8;
-const TOOL_TIMEOUT_MS = 30_000;       // 30s max per tool execution
+const MAX_ITERATIONS = 12;
+const TOOL_TIMEOUT_MS = 45_000;       // 45s max per tool execution
 const MAX_LOOP_REPEATS = 3;           // same tool+args 3x = force stop
 
 // ─── System prompt for agent mode ────────────────────────────────────
@@ -91,20 +91,26 @@ function buildAgentPrompt(base: string, availableTools: string[]): string {
 
     return `${base}
 
-You are an autonomous AI agent. Solve problems step-by-step using tools.
+You are an autonomous AI agent. Solve problems step-by-step using the available tools.
 
 AVAILABLE TOOLS: ${toolList}
 
-TO USE A TOOL, output this JSON on its own line:
+TO USE A TOOL, output EXACTLY this JSON on its own line:
 {"tool": "TOOL_NAME", "args": {"key": "value"}}
 
 Tool reference:
 ${relevantDocs}
 
+WORKFLOW:
+1. Think briefly about what you need to do
+2. Call ONE tool by outputting the JSON on its own line
+3. Read the tool result
+4. Either call another tool OR give your FINAL answer as plain text (no JSON)
+
 EXAMPLES:
 
 User: "what is the population of France?"
-I need to find the current population.
+I need current data. Let me search for this.
 {"tool": "webSearch", "args": {"query": "population of France 2025"}}
 
 User: "calculate 17 * 23 + 5"
@@ -113,16 +119,20 @@ User: "calculate 17 * 23 + 5"
 User: "generate a picture of a sunset over mountains"
 {"tool": "imageGen", "args": {"prompt": "breathtaking sunset over mountain range, golden hour, dramatic clouds, photorealistic"}}
 
+User: "what does my document say about revenue?"
+{"tool": "ragSearch", "args": {"query": "revenue figures financial data"}}
+
 RULES:
-1. Think first, then call ONE tool per turn
-2. After a tool result, call another tool OR give your FINAL answer
-3. FINAL answer = plain text, NO JSON
-4. Use tools when available — don't skip them
-5. If a tool errors, try a different approach
-6. For math, ALWAYS use python
-7. For images, use imageGen with a detailed, descriptive prompt
-8. IMPORTANT: Output the JSON on its own line with no extra text around it
-9. Python runs in Pyodide WASM — use \`pyodide.http.pyfetch(url)\` for HTTP, not \`requests\``;
+1. ALWAYS use tools when available — never guess when you can look it up
+2. Output tool JSON on its own line with no markdown fences around it
+3. After getting tool results, synthesize a clear, well-structured answer
+4. For factual questions, use webSearch to get accurate, up-to-date info
+5. For math/data analysis, use python — don't calculate in your head
+6. For images, use imageGen with detailed, descriptive prompts
+7. If a tool errors, try different search terms or a different approach
+8. Your FINAL answer should be helpful and well-formatted with proper markdown
+9. When citing web results, mention the source
+10. Python runs in Pyodide WASM — use \`from pyodide.http import pyfetch\` for HTTP, not \`requests\``;
 }
 
 // ─── JSON Parser (multi-strategy) ───────────────────────────────────

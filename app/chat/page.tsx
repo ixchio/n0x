@@ -26,21 +26,28 @@ import { Onboarding } from "@/components/onboarding";
 type AIProvider = "browser" | "ollama" | "cloud" | "chrome-ai";
 
 function ChatPageInner() {
-  const [provider, _setProvider] = useState<AIProvider>(() => {
-    if (typeof window === "undefined") return "browser";
-    const saved = localStorage.getItem("n0x-provider") as AIProvider | null;
-    return saved && ["browser", "ollama", "cloud", "chrome-ai"].includes(saved) ? saved : "browser";
-  });
+  // SSR-safe defaults → hydrate real values in useEffect to prevent mismatch
+  const [provider, _setProvider] = useState<AIProvider>("browser");
   const setProvider = useCallback((p: AIProvider) => {
     _setProvider(p);
     localStorage.setItem("n0x-provider", p);
   }, []);
-  const [ollamaUrl, setOllamaUrl] = useState(() => {
-    if (typeof window === "undefined") return "http://localhost:11434";
-    return localStorage.getItem("n0x-ollama-url") || "http://localhost:11434";
-  });
-  const [cloudApiKey, setCloudApiKey] = useState(() => useCloudAI.getState().apiKey || "");
-  const [cloudBaseUrl, setCloudBaseUrl] = useState(() => useCloudAI.getState().baseUrl || "https://api.groq.com/openai/v1");
+  const [ollamaUrl, setOllamaUrl] = useState("http://localhost:11434");
+  const [cloudApiKey, setCloudApiKey] = useState("");
+  const [cloudBaseUrl, setCloudBaseUrl] = useState("https://api.groq.com/openai/v1");
+
+  // Hydrate client-only state after mount (fixes React #418/#425/#423)
+  const [hydrated, setHydrated] = useState(false);
+  useEffect(() => {
+    const savedProvider = localStorage.getItem("n0x-provider") as AIProvider | null;
+    if (savedProvider && ["browser", "ollama", "cloud", "chrome-ai"].includes(savedProvider)) {
+      _setProvider(savedProvider);
+    }
+    setOllamaUrl(localStorage.getItem("n0x-ollama-url") || "http://localhost:11434");
+    setCloudApiKey(useCloudAI.getState().apiKey || "");
+    setCloudBaseUrl(useCloudAI.getState().baseUrl || "https://api.groq.com/openai/v1");
+    setHydrated(true);
+  }, []);
 
   const ollama = useOllama();
   const cloudAI = useCloudAI();
@@ -64,11 +71,11 @@ function ChatPageInner() {
   }, []);
 
   const [headerModelOpen, setHeaderModelOpen] = useState(false);
-  // Default sidebar closed on mobile (<768px), open on desktop
-  const [sidebarOpen, setSidebarOpen] = useState(() => {
-    if (typeof window === "undefined") return true;
-    return window.innerWidth >= 768;
-  });
+  // SSR-safe default (true), hydrate actual value after mount
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  useEffect(() => {
+    setSidebarOpen(window.innerWidth >= 768);
+  }, []);
 
   // Sync sidebar state with viewport resizes (desktop ↔ mobile)
   useEffect(() => {

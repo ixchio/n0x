@@ -302,8 +302,10 @@ function cosine(a: number[], b: number[]): number {
 const BM25_K1 = 1.2;
 const BM25_B = 0.75;
 
-function tokenize(text: string): string[] {
-    return text.toLowerCase().replace(/[^\w\s]/g, " ").split(/\s+/).filter(t => t.length > 1);
+function tokenize(text: unknown): string[] {
+    const s = typeof text === "string" ? text : String(text ?? "");
+    if (!s) return [];
+    return s.toLowerCase().replace(/[^\w\s]/g, " ").split(/\s+/).filter(t => t.length > 1);
 }
 
 function bm25Score(query: string, candidateIds: string[]): Map<string, number> {
@@ -312,7 +314,10 @@ function bm25Score(query: string, candidateIds: string[]): Map<string, number> {
     const allValues = Array.from(chunkStore.values());
     const avgDl = (() => {
         let sum = 0;
-        for (let i = 0; i < allValues.length; i++) sum += tokenize(allValues[i].text).length;
+        for (let i = 0; i < allValues.length; i++) {
+            const t = typeof allValues[i].text === "string" ? allValues[i].text : String(allValues[i].text ?? "");
+            sum += tokenize(t).length;
+        }
         return sum / Math.max(N, 1);
     })();
 
@@ -320,7 +325,8 @@ function bm25Score(query: string, candidateIds: string[]): Map<string, number> {
     for (const term of queryTerms) {
         let count = 0;
         for (let i = 0; i < allValues.length; i++) {
-            if (allValues[i].text.toLowerCase().includes(term)) count++;
+            const t = typeof allValues[i].text === "string" ? allValues[i].text : String(allValues[i].text ?? "");
+            if (t.toLowerCase().includes(term)) count++;
         }
         df.set(term, count);
     }
@@ -440,10 +446,14 @@ self.addEventListener("message", async (e: MessageEvent) => {
                 // Additive merge — don't overwrite chunks from previously loaded files
                 for (const [k, v] of cached.chunks) {
                     // v may be the old string format (from pre-upgrade cache) or the new {text, embedding} shape
+                    // Always sanitize text to prevent tokenize() crashes (e.replace not a function)
                     if (typeof v === "string") {
-                        chunkStore.set(k, { text: v, embedding: [] });
-                    } else {
-                        chunkStore.set(k, v as { text: string; embedding: number[] });
+                        chunkStore.set(k, { text: sanitizeText(v), embedding: [] });
+                    } else if (v && typeof v === "object") {
+                        chunkStore.set(k, {
+                            text: sanitizeText((v as any).text),
+                            embedding: Array.isArray((v as any).embedding) ? (v as any).embedding : [],
+                        });
                     }
                 }
 
@@ -556,7 +566,13 @@ self.addEventListener("message", async (e: MessageEvent) => {
 
             // 4) MMR reranking for diversity
             const rerankedIds = mmrRerank(queryEmbedding, fusedIds, limit);
-            const chunks = rerankedIds.map(cid => chunkStore.get(cid)?.text || "").filter(Boolean);
+            const chunks = rerankedIds
+                .map(cid => {
+                    const entry = chunkStore.get(cid);
+                    if (!entry) return "";
+                    return typeof entry.text === "string" ? entry.text : sanitizeText(entry.text);
+                })
+                .filter(Boolean);
             self.postMessage({ id, result: chunks, done: true });
         }
         else if (action === "CLEAR") {
