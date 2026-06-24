@@ -11,7 +11,9 @@ interface Persona {
 
 const PRESETS: Persona[] = [
     {
-        id: "default", name: "Default", builtin: true,
+        id: "default",
+        name: "Default",
+        builtin: true,
         prompt: `You are N0X, a powerful AI assistant running entirely in the user's browser via WebGPU. You are private, fast, and capable.
 
 RESPONSE GUIDELINES:
@@ -25,7 +27,9 @@ RESPONSE GUIDELINES:
 - End with a brief summary or next steps when appropriate`,
     },
     {
-        id: "coder", name: "Senior Engineer", builtin: true,
+        id: "coder",
+        name: "Senior Engineer",
+        builtin: true,
         prompt: `You are a senior software engineer with 10+ years of experience across systems programming, web development, and distributed systems.
 
 CODING GUIDELINES:
@@ -39,7 +43,9 @@ CODING GUIDELINES:
 - Prefer simple, readable solutions over clever one-liners`,
     },
     {
-        id: "writer", name: "Writer", builtin: true,
+        id: "writer",
+        name: "Writer",
+        builtin: true,
         prompt: `You are a professional writer and editor with expertise in technical writing, creative prose, and content strategy.
 
 WRITING GUIDELINES:
@@ -52,7 +58,9 @@ WRITING GUIDELINES:
 - Avoid clichés, filler words, and corporate jargon unless specifically requested`,
     },
     {
-        id: "tutor", name: "Tutor", builtin: true,
+        id: "tutor",
+        name: "Tutor",
+        builtin: true,
         prompt: `You are an expert tutor who makes complex topics accessible and engaging.
 
 TEACHING GUIDELINES:
@@ -66,7 +74,9 @@ TEACHING GUIDELINES:
 - Never condescend — treat the learner as intelligent but unfamiliar with this specific topic`,
     },
     {
-        id: "analyst", name: "Analyst", builtin: true,
+        id: "analyst",
+        name: "Analyst",
+        builtin: true,
         prompt: `You are a sharp analytical thinker with expertise in data analysis, strategy, and decision-making.
 
 ANALYSIS GUIDELINES:
@@ -130,27 +140,36 @@ export function useSystemPrompt() {
 
     const updatePersona = useCallback((id: string, name: string, prompt: string) => {
         setPersonas(prev => {
-            const next = prev.map(p => p.id === id ? { ...p, name, prompt } : p);
+            const next = prev.map(p => (p.id === id ? { ...p, name, prompt } : p));
             saveCustom(next);
             return next;
         });
     }, []);
 
-    const deletePersona = useCallback((id: string) => {
-        setPersonas(prev => {
-            const next = prev.filter(p => p.id !== id);
-            saveCustom(next);
-            return next;
-        });
-        if (activeId === id) {
-            setActiveId("default");
-            localStorage.setItem(ACTIVE_KEY, "default");
-        }
-    }, [activeId]);
+    const deletePersona = useCallback(
+        (id: string) => {
+            setPersonas(prev => {
+                const next = prev.filter(p => p.id !== id);
+                saveCustom(next);
+                return next;
+            });
+            if (activeId === id) {
+                setActiveId("default");
+                localStorage.setItem(ACTIVE_KEY, "default");
+            }
+        },
+        [activeId]
+    );
 
     return {
-        personas, activePersona, activeId, isLoaded,
+        personas,
+        activePersona,
+        activeId,
+        isLoaded,
         systemPrompt: activePersona.prompt,
-        selectPersona, addPersona, updatePersona, deletePersona,
+        selectPersona,
+        addPersona,
+        updatePersona,
+        deletePersona,
     };
 }

@@ -1,413 +1,370 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import { useEffect } from "react";
+import Image from "next/image";
 import Link from "next/link";
-import { motion } from "framer-motion";
-import { Cpu, Brain, Globe, Code, ImageIcon, Mic, ArrowRight, Lock, Database, Bot, GitBranch, Layers, Star, Check, X, ExternalLink, Zap, Shield } from "lucide-react";
+import {
+    ArrowRight,
+    CheckCircle2,
+    FileText,
+    Github,
+    Globe2,
+    Lock,
+    MessageSquare,
+    Search,
+    ShieldCheck,
+    Sparkles,
+} from "lucide-react";
+import { trackFunnelEvent } from "@/lib/analytics";
 
-const fadeIn = {
-  hidden: { opacity: 0, y: 20 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.5, ease: "easeOut" } }
-};
-
-const stagger = {
-  hidden: { opacity: 0 },
-  visible: { opacity: 1, transition: { staggerChildren: 0.08 } }
-};
-
-const STATS = [
-  { value: "40+", label: "open-source models" },
-  { value: "360MB", label: "minimum VRAM" },
-  { value: "$0", label: "API keys required" },
-  { value: "100%", label: "browser-native" },
+const proof = [
+    "Production build passes",
+    "Typecheck and lint are clean",
+    "0 production audit vulnerabilities",
+    "Analytics are opt-in",
 ];
 
-const COMPARE = [
-  { feature: "Data stays local",      n0x: true,  chatgpt: false, claude: false, ollama: true  },
-  { feature: "No account required",   n0x: true,  chatgpt: false, claude: false, ollama: true  },
-  { feature: "No API key",            n0x: true,  chatgpt: false, claude: false, ollama: true  },
-  { feature: "Works offline",         n0x: true,  chatgpt: false, claude: false, ollama: true  },
-  { feature: "Browser-native UI",     n0x: true,  chatgpt: true,  claude: true,  ollama: false },
-  { feature: "Autonomous agent",      n0x: true,  chatgpt: true,  claude: true,  ollama: false },
-  { feature: "Document RAG",          n0x: true,  chatgpt: false, claude: false, ollama: false },
-  { feature: "Python sandbox",        n0x: true,  chatgpt: true,  claude: false, ollama: false },
-  { feature: "Image generation",      n0x: true,  chatgpt: true,  claude: false, ollama: false },
-  { feature: "Free forever",          n0x: true,  chatgpt: false, claude: false, ollama: true  },
+const workflows = [
+    {
+        icon: FileText,
+        title: "Ask your files",
+        body: "Upload a PDF, CSV, DOCX, or Markdown file. n0x chunks it locally, builds a hybrid index, and keeps the cache in your browser.",
+    },
+    {
+        icon: Search,
+        title: "Search without polluting the answer",
+        body: "Deep Search filters weak matches before they reach the model, then passes compact source context with citations.",
+    },
+    {
+        icon: Sparkles,
+        title: "Use the right runtime",
+        body: "Start local with WebGPU, switch to Ollama, Chrome AI, or an OpenAI-compatible cloud endpoint when the task needs it.",
+    },
 ];
 
-function GitHubStarBadge() {
-  const [stars, setStars] = useState<number | null>(null);
-  useEffect(() => {
-    fetch("https://api.github.com/repos/ixchio/n0x")
-      .then(r => r.json())
-      .then(d => { if (typeof d.stargazers_count === "number") setStars(d.stargazers_count); })
-      .catch(() => {});
-  }, []);
-  return (
-    <a
-      href="https://github.com/ixchio/n0x/stargazers"
-      target="_blank"
-      rel="noopener noreferrer"
-      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-zinc-900 border border-zinc-800 text-xs font-mono text-zinc-300 hover:border-zinc-600 hover:text-white transition-all group"
-    >
-      <Star className="w-3.5 h-3.5 text-amber-400 group-hover:fill-amber-400 transition-all" />
-      {stars !== null ? (
-        <span><span className="text-white font-bold">{stars}</span> stars on GitHub</span>
-      ) : (
-        <span>Star on GitHub</span>
-      )}
-    </a>
-  );
-}
+const limits = [
+    "Local models need a WebGPU-capable browser and enough GPU memory.",
+    "Large model downloads are big; first run can take time on slow networks.",
+    "Free search providers can be rate-limited or unavailable.",
+    "Cloud mode is optional and uses your own provider key.",
+];
 
-function Cell({ v }: { v: boolean }) {
-  return v
-    ? <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-emerald-500/15 text-emerald-400"><Check className="w-3 h-3" /></span>
-    : <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-zinc-900 text-zinc-700"><X className="w-3 h-3" /></span>;
+function ProductPreview() {
+    return (
+        <div className="mx-auto w-full max-w-5xl overflow-hidden rounded-lg border border-zinc-300 bg-white shadow-[0_24px_80px_rgba(20,20,20,0.12)]">
+            <div className="flex h-11 items-center justify-between border-b border-zinc-200 bg-zinc-50 px-4">
+                <div className="flex items-center gap-3">
+                    <div className="h-4 w-4 rounded-sm border border-zinc-950 bg-zinc-950" />
+                    <span className="text-sm font-semibold text-zinc-950">n0x workspace</span>
+                </div>
+                <div className="hidden items-center gap-2 text-xs text-zinc-500 sm:flex">
+                    <span className="rounded-full border border-zinc-300 bg-white px-2.5 py-1">Local model ready</span>
+                    <span className="rounded-full border border-zinc-300 bg-white px-2.5 py-1">Docs indexed</span>
+                </div>
+            </div>
+
+            <div className="grid min-h-[430px] grid-cols-1 md:grid-cols-[220px_1fr]">
+                <aside className="border-b border-zinc-200 bg-zinc-50 p-4 md:border-b-0 md:border-r">
+                    <button className="mb-5 flex h-9 w-full items-center justify-center rounded-md border border-zinc-300 bg-white text-sm font-medium text-zinc-950">
+                        New session
+                    </button>
+                    <div className="space-y-4">
+                        <div>
+                            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-zinc-500">
+                                Recent
+                            </p>
+                            <div className="rounded-md border border-zinc-200 bg-white p-3">
+                                <p className="line-clamp-1 text-sm font-medium text-zinc-950">PDF research notes</p>
+                                <p className="mt-1 text-xs text-zinc-500">2 minutes ago</p>
+                            </div>
+                        </div>
+                        <div>
+                            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-zinc-500">
+                                Provider
+                            </p>
+                            <div className="space-y-2 text-sm text-zinc-700">
+                                <div className="flex items-center justify-between rounded-md border border-zinc-200 bg-white px-3 py-2">
+                                    <span>Browser</span>
+                                    <span className="h-2 w-2 rounded-full bg-emerald-600" />
+                                </div>
+                                <div className="flex items-center justify-between rounded-md border border-zinc-200 bg-white px-3 py-2">
+                                    <span>Cloud</span>
+                                    <span className="text-xs text-zinc-400">optional</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </aside>
+
+                <section className="bg-white p-5 sm:p-7">
+                    <div className="mb-5 flex flex-wrap items-center gap-2">
+                        {["Search", "Docs", "Memory", "Python"].map(item => (
+                            <span
+                                key={item}
+                                className="rounded-md border border-zinc-200 bg-zinc-50 px-3 py-1.5 text-xs font-medium text-zinc-700"
+                            >
+                                {item}
+                            </span>
+                        ))}
+                    </div>
+
+                    <div className="space-y-4">
+                        <div className="ml-auto max-w-[78%] rounded-lg bg-zinc-950 px-4 py-3 text-sm leading-relaxed text-white">
+                            Summarize this PDF, then check whether the claim still holds against current model
+                            benchmarks.
+                        </div>
+
+                        <div className="max-w-[86%] rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-4">
+                            <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-zinc-950">
+                                <MessageSquare className="h-4 w-4" />
+                                Answer draft
+                            </div>
+                            <p className="text-sm leading-6 text-zinc-700">
+                                The document claim is directionally right, but it needs a narrower benchmark. For coding
+                                tasks, the latest leaderboard sources disagree with general reasoning rankings.
+                            </p>
+                            <div className="mt-4 grid gap-2 text-xs text-zinc-600 sm:grid-cols-3">
+                                <div className="rounded-md border border-zinc-200 bg-white p-3">
+                                    <p className="font-semibold text-zinc-950">8 doc matches</p>
+                                    <p className="mt-1">hybrid RAG</p>
+                                </div>
+                                <div className="rounded-md border border-zinc-200 bg-white p-3">
+                                    <p className="font-semibold text-zinc-950">4 web sources</p>
+                                    <p className="mt-1">filtered search</p>
+                                </div>
+                                <div className="rounded-md border border-zinc-200 bg-white p-3">
+                                    <p className="font-semibold text-zinc-950">local first</p>
+                                    <p className="mt-1">cloud optional</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="rounded-lg border border-zinc-200 bg-white p-4">
+                            <div className="mb-3 flex items-center justify-between gap-3">
+                                <div>
+                                    <p className="text-sm font-semibold text-zinc-950">Attached files</p>
+                                    <p className="text-xs text-zinc-500">Stored in IndexedDB on this device</p>
+                                </div>
+                                <Lock className="h-4 w-4 text-zinc-500" />
+                            </div>
+                            <div className="grid gap-2 sm:grid-cols-2">
+                                <div className="rounded-md bg-zinc-50 px-3 py-2 text-sm text-zinc-700">
+                                    benchmark-notes.pdf
+                                </div>
+                                <div className="rounded-md bg-zinc-50 px-3 py-2 text-sm text-zinc-700">
+                                    release-data.csv
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </div>
+    );
 }
 
 export default function HomePage() {
-  return (
-    <div className="min-h-screen bg-background text-foreground flex flex-col items-center selection:bg-white/20 relative overflow-hidden font-sans">
+    useEffect(() => {
+        trackFunnelEvent("visit", { page: "home" });
+    }, []);
 
-      {/* Background Glows */}
-      <div className="absolute top-[-15%] left-[-10%] w-[50%] h-[50%] bg-emerald-950/10 blur-[160px] rounded-full pointer-events-none" />
-      <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-zinc-800/20 blur-[120px] rounded-full pointer-events-none" />
-      <div className="absolute top-[40%] right-[5%] w-[25%] h-[25%] bg-blue-950/10 blur-[100px] rounded-full pointer-events-none" />
+    return (
+        <div className="min-h-screen bg-[#f7f7f5] text-zinc-950 selection:bg-zinc-950 selection:text-white">
+            <header className="mx-auto flex w-full max-w-6xl items-center justify-between px-5 py-5 sm:px-6">
+                <Link href="/" className="flex items-center gap-2 text-base font-semibold tracking-tight">
+                    <Image
+                        src="/icon.png"
+                        alt="n0x"
+                        width={40}
+                        height={40}
+                        className="h-9 w-9 rounded-md object-cover"
+                        priority
+                    />
+                </Link>
+                <nav className="flex items-center gap-2 text-sm">
+                    <a
+                        href="https://github.com/ixchio/n0x"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="hidden rounded-md px-3 py-2 text-zinc-600 transition hover:bg-white hover:text-zinc-950 sm:inline-flex"
+                    >
+                        GitHub
+                    </a>
+                    <Link
+                        href="/privacy"
+                        className="hidden rounded-md px-3 py-2 text-zinc-600 transition hover:bg-white hover:text-zinc-950 sm:inline-flex"
+                    >
+                        Privacy
+                    </Link>
+                    <Link
+                        href="/chat"
+                        className="inline-flex h-10 items-center gap-2 rounded-md bg-zinc-950 px-4 font-medium text-white transition hover:bg-zinc-800"
+                    >
+                        Open app
+                        <ArrowRight className="h-4 w-4" />
+                    </Link>
+                </nav>
+            </header>
 
-      {/* Dot Grid */}
-      <div
-        className="absolute inset-0 opacity-[0.018] pointer-events-none"
-        style={{ backgroundImage: "radial-gradient(circle, #fff 1px, transparent 1px)", backgroundSize: "40px 40px" }}
-      />
+            <main>
+                <section className="mx-auto max-w-6xl px-5 pb-12 pt-10 sm:px-6 sm:pb-16 sm:pt-16">
+                    <div className="mx-auto max-w-3xl text-center">
+                        <div className="mb-7 flex justify-center">
+                            <Image
+                                src="/favicon.png"
+                                alt="n0x logo"
+                                width={128}
+                                height={128}
+                                className="h-24 w-24 rounded-2xl object-cover sm:h-28 sm:w-28"
+                                priority
+                            />
+                        </div>
+                        <p className="mb-5 text-sm font-medium text-zinc-500">Local-first AI workspace</p>
+                        <h1 className="text-4xl font-semibold tracking-tight text-zinc-950 sm:text-6xl">
+                            Private AI work,
+                            <span className="block text-zinc-500">without the platform drama.</span>
+                        </h1>
+                        <p className="mx-auto mt-6 max-w-2xl text-base leading-7 text-zinc-600 sm:text-lg">
+                            n0x is a browser workspace for local models, documents, search, Python, and optional cloud
+                            routing. It is built for people who want control before polish theatre.
+                        </p>
+                        <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
+                            <Link
+                                href="/chat"
+                                className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-md bg-zinc-950 px-6 text-sm font-semibold text-white transition hover:bg-zinc-800 sm:w-auto"
+                            >
+                                Start in the workspace
+                                <ArrowRight className="h-4 w-4" />
+                            </Link>
+                            <a
+                                href="https://github.com/ixchio/n0x"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-md border border-zinc-300 bg-white px-6 text-sm font-semibold text-zinc-950 transition hover:border-zinc-400 sm:w-auto"
+                            >
+                                <Github className="h-4 w-4" />
+                                Read the source
+                            </a>
+                        </div>
+                    </div>
 
-      {/* Header */}
-      <header className="w-full max-w-6xl mx-auto px-6 py-6 flex items-center justify-between relative z-10">
-        <div className="font-mono text-xl font-bold tracking-tighter flex items-center gap-2">
-          <div className="w-4 h-4 bg-white rounded-[2px]" />
-          n0x
-        </div>
-        <nav className="flex items-center gap-6 text-sm text-zinc-400 font-medium">
-          <a href="https://github.com/ixchio/n0x" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors flex items-center gap-1.5">
-            <Star className="w-3.5 h-3.5 text-amber-400" />
-            GitHub
-          </a>
-          <a href="https://github.com/ixchio/n0x#readme" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors hidden sm:block">Docs</a>
-          <Link
-            href="/chat"
-            className="text-black bg-white hover:bg-zinc-200 transition-colors flex items-center gap-1.5 px-4 py-2 rounded-lg font-semibold text-sm shadow-[0_0_20px_rgba(255,255,255,0.08)]"
-          >
-            Launch App <ArrowRight className="w-3.5 h-3.5" />
-          </Link>
-        </nav>
-      </header>
+                    <div className="mt-12">
+                        <ProductPreview />
+                    </div>
 
-      <main className="flex-1 w-full max-w-6xl mx-auto px-6 py-16 lg:py-28 flex flex-col items-center relative z-10">
+                    <div className="mx-auto mt-8 grid max-w-5xl grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                        {proof.map(item => (
+                            <div
+                                key={item}
+                                className="flex items-center gap-2 rounded-md border border-zinc-200 bg-white px-3 py-2.5 text-sm text-zinc-700"
+                            >
+                                <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-700" />
+                                <span>{item}</span>
+                            </div>
+                        ))}
+                    </div>
+                </section>
 
-        {/* Hero */}
-        <motion.div initial="hidden" animate="visible" variants={stagger} className="text-center max-w-3xl space-y-8">
+                <section className="border-y border-zinc-200 bg-white">
+                    <div className="mx-auto grid max-w-6xl gap-8 px-5 py-14 sm:px-6 lg:grid-cols-[0.8fr_1.2fr] lg:py-20">
+                        <div>
+                            <p className="text-sm font-medium text-zinc-500">What it actually does</p>
+                            <h2 className="mt-3 text-3xl font-semibold tracking-tight text-zinc-950">
+                                A practical workbench, not another chatbot skin.
+                            </h2>
+                        </div>
+                        <div className="grid gap-4 sm:grid-cols-3">
+                            {workflows.map(({ icon: Icon, title, body }) => (
+                                <div key={title} className="rounded-lg border border-zinc-200 bg-[#fbfbfa] p-5">
+                                    <Icon className="h-5 w-5 text-zinc-950" />
+                                    <h3 className="mt-4 text-base font-semibold text-zinc-950">{title}</h3>
+                                    <p className="mt-2 text-sm leading-6 text-zinc-600">{body}</p>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </section>
 
-          <motion.div variants={fadeIn} className="flex flex-col sm:flex-row items-center justify-center gap-3 mb-4">
-            <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-zinc-900 border border-zinc-800 text-xs font-medium text-zinc-300 shadow-glass">
-              <span className="flex h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              Zero backend · Zero API keys · 100% private
-            </span>
-            <GitHubStarBadge />
-          </motion.div>
+                <section className="mx-auto grid max-w-6xl gap-6 px-5 py-14 sm:px-6 lg:grid-cols-3 lg:py-20">
+                    <div className="rounded-lg border border-zinc-200 bg-white p-6">
+                        <ShieldCheck className="h-5 w-5 text-zinc-950" />
+                        <h2 className="mt-5 text-2xl font-semibold tracking-tight text-zinc-950">
+                            Deliberately plain.
+                        </h2>
+                        <p className="mt-3 text-sm leading-6 text-zinc-600">
+                            No fake enterprise language, no forced account, no prompt/file telemetry by default. The
+                            product should earn trust by being legible.
+                        </p>
+                    </div>
 
-          <motion.h1 variants={fadeIn} className="text-5xl sm:text-7xl font-bold tracking-tight text-white leading-[1.08]">
-            The full AI stack.<br />
-            <span className="text-zinc-500">In your browser.</span>
-          </motion.h1>
+                    <div className="rounded-lg border border-zinc-200 bg-white p-6">
+                        <Globe2 className="h-5 w-5 text-zinc-950" />
+                        <h2 className="mt-5 text-2xl font-semibold tracking-tight text-zinc-950">
+                            Useful online, usable local.
+                        </h2>
+                        <p className="mt-3 text-sm leading-6 text-zinc-600">
+                            Web search and image generation use API routes. Chat, memory, documents, and browser model
+                            execution can stay on-device.
+                        </p>
+                    </div>
 
-          <motion.p variants={fadeIn} className="text-lg sm:text-xl text-zinc-400 leading-relaxed max-w-2xl mx-auto font-medium">
-            LLM inference, autonomous agents, document RAG, code execution, image generation — running entirely on your GPU. No server. No account. Your data never leaves your machine.
-          </motion.p>
+                    <div className="rounded-lg border border-zinc-200 bg-white p-6">
+                        <Lock className="h-5 w-5 text-zinc-950" />
+                        <h2 className="mt-5 text-2xl font-semibold tracking-tight text-zinc-950">Honest limits.</h2>
+                        <ul className="mt-3 space-y-2 text-sm leading-6 text-zinc-600">
+                            {limits.map(limit => (
+                                <li key={limit} className="flex gap-2">
+                                    <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-zinc-400" />
+                                    <span>{limit}</span>
+                                </li>
+                            ))}
+                        </ul>
+                    </div>
+                </section>
 
-          <motion.div variants={fadeIn} className="flex items-center justify-center gap-3 pt-2 flex-wrap">
-            <Link
-              href="/chat"
-              className="h-12 px-8 inline-flex items-center justify-center rounded-lg bg-white text-black font-semibold hover:bg-zinc-200 transition-colors gap-2 text-sm shadow-[0_0_30px_rgba(255,255,255,0.12)]"
-            >
-              Enter n0x <ArrowRight className="w-4 h-4" />
-            </Link>
-            <a
-              href="https://github.com/ixchio/n0x"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="h-12 px-8 inline-flex items-center justify-center rounded-lg bg-zinc-900 border border-zinc-800 text-white font-medium hover:bg-zinc-800 transition-colors text-sm shadow-glass gap-2"
-            >
-              <Star className="w-4 h-4 text-amber-400" /> Star on GitHub
-            </a>
-          </motion.div>
+                <section className="mx-auto max-w-6xl px-5 pb-16 sm:px-6">
+                    <div className="rounded-lg bg-zinc-950 px-6 py-8 text-white sm:px-8 lg:flex lg:items-center lg:justify-between">
+                        <div>
+                            <p className="text-sm text-zinc-400">Try the 30-second path first.</p>
+                            <h2 className="mt-2 text-2xl font-semibold tracking-tight">
+                                Open the workspace, load the tiny model, ask the sample doc.
+                            </h2>
+                        </div>
+                        <Link
+                            href="/chat"
+                            className="mt-6 inline-flex h-11 items-center justify-center gap-2 rounded-md bg-white px-5 text-sm font-semibold text-zinc-950 transition hover:bg-zinc-200 lg:mt-0"
+                        >
+                            Launch n0x
+                            <ArrowRight className="h-4 w-4" />
+                        </Link>
+                    </div>
+                </section>
+            </main>
 
-          <motion.div variants={fadeIn} className="pt-4 flex justify-center">
-            <a href="https://www.producthunt.com/products/n0x?utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-n0x" target="_blank" rel="noopener noreferrer">
-              <img src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1162703&theme=dark&t=1780509567546" alt="N0X on Product Hunt" width="250" height="54" />
-            </a>
-          </motion.div>
-        </motion.div>
-
-        {/* Stats Strip */}
-        <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.6, duration: 0.5 }}
-          className="w-full mt-16 grid grid-cols-2 md:grid-cols-4 gap-px bg-zinc-800/50 rounded-2xl overflow-hidden border border-zinc-800/50"
-        >
-          {STATS.map((s) => (
-            <div key={s.label} className="bg-zinc-950/60 px-6 py-5 text-center">
-              <div className="text-2xl font-bold text-white font-mono">{s.value}</div>
-              <div className="text-xs text-zinc-500 mt-1 font-medium">{s.label}</div>
-            </div>
-          ))}
-        </motion.div>
-
-        {/* Comparison Table */}
-        <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: "-60px" }}
-          transition={{ duration: 0.5 }}
-          className="w-full mt-20"
-        >
-          <div className="text-center mb-8">
-            <p className="text-xs font-mono text-zinc-500 uppercase tracking-widest mb-2">Why N0X over everything else</p>
-            <p className="text-zinc-400 text-sm">The only tool that gives you the full AI stack with zero cloud dependency.</p>
-          </div>
-          <div className="overflow-x-auto rounded-2xl border border-zinc-800/60 bg-zinc-950/60">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-zinc-800">
-                  <th className="text-left px-6 py-4 text-zinc-500 font-medium text-xs font-mono">Feature</th>
-                  <th className="px-6 py-4 text-center font-mono text-xs font-bold text-emerald-400 bg-emerald-500/5 border-x border-emerald-500/10">
-                    <span className="flex flex-col items-center gap-0.5">
-                      <span>N0X</span>
-                      <span className="text-[9px] text-emerald-500/60 font-normal">this project</span>
-                    </span>
-                  </th>
-                  <th className="px-6 py-4 text-center font-mono text-xs text-zinc-500">ChatGPT</th>
-                  <th className="px-6 py-4 text-center font-mono text-xs text-zinc-500">Claude</th>
-                  <th className="px-6 py-4 text-center font-mono text-xs text-zinc-500">Ollama</th>
-                </tr>
-              </thead>
-              <tbody>
-                {COMPARE.map((row, i) => (
-                  <tr key={row.feature} className={`border-b border-zinc-900/60 ${i % 2 === 0 ? "" : "bg-zinc-900/20"}`}>
-                    <td className="px-6 py-3 text-zinc-400 text-xs font-mono">{row.feature}</td>
-                    <td className="px-6 py-3 text-center bg-emerald-500/5 border-x border-emerald-500/10"><Cell v={row.n0x} /></td>
-                    <td className="px-6 py-3 text-center"><Cell v={row.chatgpt} /></td>
-                    <td className="px-6 py-3 text-center"><Cell v={row.claude} /></td>
-                    <td className="px-6 py-3 text-center"><Cell v={row.ollama} /></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <p className="text-[10px] text-zinc-700 font-mono text-center mt-2">as of June 2026 · free tiers compared</p>
-        </motion.div>
-
-        {/* Bento Grid */}
-        <motion.div
-          initial="hidden"
-          whileInView="visible"
-          viewport={{ once: true, margin: "-80px" }}
-          variants={stagger}
-          className="w-full mt-16 grid grid-cols-1 md:grid-cols-3 gap-4"
-        >
-          {/* Hero Card — Agent */}
-          <motion.div
-            variants={fadeIn}
-            className="md:col-span-3 bg-gradient-to-br from-zinc-900 via-zinc-900/80 to-emerald-950/25 border border-emerald-500/20 rounded-2xl p-8 hover:border-emerald-500/40 transition-all group overflow-hidden relative shadow-glass"
-          >
-            <div className="absolute top-0 right-0 p-8 opacity-[0.06] group-hover:opacity-[0.12] transition-opacity">
-              <Bot className="w-64 h-64" />
-            </div>
-            <div className="absolute -top-px left-8 text-[10px] bg-emerald-500 text-black px-3 py-1 rounded-b font-mono font-bold tracking-wider">STREAMING AGENT THOUGHTS</div>
-            <div className="relative z-10 space-y-4 pt-4">
-              <div className="w-12 h-12 bg-emerald-500/10 rounded-xl flex items-center justify-center text-emerald-400 border border-emerald-500/20">
-                <Bot className="w-6 h-6" />
-              </div>
-              <div>
-                <h3 className="text-2xl font-bold text-white tracking-tight">Autonomous ReAct Agent</h3>
-                <p className="text-zinc-400 mt-2 font-medium max-w-2xl leading-relaxed">
-                  A full reasoning loop running entirely in your browser. The LLM thinks, picks tools, executes them, reads results, and iterates — with every thought streaming live token-by-token. Watch the model reason in real time. No server. No API. Pure WebGPU autonomy.
-                </p>
-              </div>
-              <div className="flex flex-wrap items-center gap-3 pt-2 text-xs font-mono text-zinc-500">
-                <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400" /> Live thought streaming</span>
-                <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-blue-400" /> Multi-tool orchestration</span>
-                <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-amber-400" /> Per-step trace UI</span>
-                <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-purple-400" /> Loop detection + OOM protection</span>
-              </div>
-            </div>
-          </motion.div>
-
-          {/* WebGPU Inference */}
-          <motion.div
-            variants={fadeIn}
-            className="md:col-span-2 bg-zinc-900/50 border border-zinc-800/50 rounded-2xl p-8 hover:bg-zinc-900/80 transition-colors group overflow-hidden relative shadow-glass"
-          >
-            <div className="absolute top-0 right-0 p-8 opacity-[0.07] group-hover:opacity-[0.15] transition-opacity">
-              <Cpu className="w-52 h-52" />
-            </div>
-            <div className="relative z-10 space-y-4">
-              <div className="w-12 h-12 bg-zinc-800 rounded-xl flex items-center justify-center text-white border border-zinc-700">
-                <Cpu className="w-6 h-6" />
-              </div>
-              <div>
-                <h3 className="text-xl font-bold text-white tracking-tight">WebGPU Inference</h3>
-                <p className="text-zinc-400 mt-2 font-medium">Direct-to-metal via MLC WebLLM. 40+ models from <span className="text-white font-semibold">360MB to 70B</span> — downloaded once, cached in your browser forever.</p>
-              </div>
-              <div className="flex flex-wrap gap-2 pt-1">
-                {["Llama 3.3 70B", "DeepSeek R1 70B", "Qwen 2.5 32B", "Mistral 7B", "Qwen 0.5B", "+35 more"].map(m => (
-                  <span key={m} className="text-[11px] font-mono text-zinc-400 border border-zinc-800 px-2 py-0.5 rounded-md bg-zinc-900">{m}</span>
-                ))}
-              </div>
-            </div>
-          </motion.div>
-
-          {/* Privacy */}
-          <motion.div variants={fadeIn} className="md:col-span-1 bg-zinc-900/50 border border-zinc-800/50 rounded-2xl p-8 hover:bg-zinc-900/80 transition-colors shadow-glass">
-            <div className="space-y-4">
-              <div className="w-12 h-12 bg-zinc-800 rounded-xl flex items-center justify-center text-white border border-zinc-700">
-                <Lock className="w-6 h-6" />
-              </div>
-              <div>
-                <h3 className="text-xl font-bold text-white tracking-tight">Zero Tracking</h3>
-                <p className="text-zinc-400 mt-2 text-sm font-medium">No server processes your data. Prompts, documents, and memory live in IndexedDB on your device. Disable optional search/image hooks for a fully air-gapped runtime.</p>
-              </div>
-            </div>
-          </motion.div>
-
-          {/* Document RAG */}
-          <motion.div variants={fadeIn} className="md:col-span-1 bg-zinc-900/50 border border-zinc-800/50 rounded-2xl p-8 hover:bg-zinc-900/80 transition-colors shadow-glass">
-            <div className="space-y-4">
-              <div className="w-12 h-12 bg-zinc-800 rounded-xl flex items-center justify-center text-white border border-zinc-700">
-                <Database className="w-6 h-6" />
-              </div>
-              <div>
-                <h3 className="text-xl font-bold text-white tracking-tight">Document RAG</h3>
-                <p className="text-zinc-400 mt-2 text-sm font-medium">
-                  Drop PDFs, DOCX, CSVs, or text files. Sentence-boundary chunking, MiniLM embeddings, and <span className="text-white">MMR reranking</span> — all in a Web Worker.
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-1.5 pt-1">
-                {["PDF", "DOCX", "TXT", "MD", "CSV", "JSON"].map(f => (
-                  <span key={f} className="text-[10px] font-mono text-zinc-500 border border-zinc-800 px-2 py-0.5 rounded bg-zinc-950">{f}</span>
-                ))}
-              </div>
-            </div>
-          </motion.div>
-
-          {/* Conversation Branching */}
-          <motion.div
-            variants={fadeIn}
-            className="md:col-span-2 bg-gradient-to-br from-zinc-900/50 to-blue-950/10 border border-blue-500/10 rounded-2xl p-8 hover:border-blue-500/20 hover:bg-zinc-900/80 transition-all shadow-glass group"
-          >
-            <div className="space-y-4">
-              <div className="w-12 h-12 bg-blue-500/10 rounded-xl flex items-center justify-center text-blue-400 border border-blue-500/20">
-                <GitBranch className="w-6 h-6" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <h3 className="text-xl font-bold text-white tracking-tight">Conversation Branching</h3>
-                  <span className="text-[10px] font-mono text-blue-400 border border-blue-500/30 px-2 py-0.5 rounded-full bg-blue-500/10">NEW</span>
+            <footer className="border-t border-zinc-200 bg-white">
+                <div className="mx-auto flex max-w-6xl flex-col gap-4 px-5 py-7 text-sm text-zinc-500 sm:px-6 md:flex-row md:items-center md:justify-between">
+                    <span>© {new Date().getFullYear()} ixchio. MIT licensed.</span>
+                    <div className="flex flex-wrap gap-4">
+                        <Link href="/security" className="hover:text-zinc-950">
+                            Security
+                        </Link>
+                        <Link href="/compatibility" className="hover:text-zinc-950">
+                            Compatibility
+                        </Link>
+                        <Link href="/known-limitations" className="hover:text-zinc-950">
+                            Limitations
+                        </Link>
+                        <a
+                            href="https://github.com/ixchio/n0x"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="hover:text-zinc-950"
+                        >
+                            GitHub
+                        </a>
+                    </div>
                 </div>
-                <p className="text-zinc-400 mt-1 font-medium">Hover any message and click the branch icon to fork the conversation from that exact point. Explore alternative directions without losing your original thread. Branches are saved automatically.</p>
-              </div>
-            </div>
-          </motion.div>
-
-          {/* More capabilities */}
-          <motion.div variants={fadeIn} className="md:col-span-3 bg-zinc-900/40 border border-zinc-800/40 rounded-2xl p-8 shadow-glass">
-            <p className="text-xs font-mono text-zinc-500 uppercase tracking-widest mb-6">More Capabilities</p>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-6 text-zinc-400">
-              {[
-                { icon: Code, label: "Python Sandbox", sub: "Pyodide WASM runtime" },
-                { icon: Globe, label: "Deep Search", sub: "DDG + SearXNG + Wikipedia" },
-                { icon: ImageIcon, label: "Image Gen", sub: "Flux / Stable Horde" },
-                { icon: Mic, label: "Voice I/O", sub: "STT + TTS native" },
-                { icon: Brain, label: "Persistent Memory", sub: "IndexedDB long-term" },
-                { icon: Layers, label: "5 Personas", sub: "Engineer · Writer · Tutor…" },
-              ].map(({ icon: Icon, label, sub }) => (
-                <div key={label} className="flex flex-col gap-2">
-                  <Icon className="w-5 h-5 text-zinc-300" />
-                  <span className="font-semibold text-white text-sm">{label}</span>
-                  <span className="text-xs text-zinc-500 leading-tight">{sub}</span>
-                </div>
-              ))}
-            </div>
-          </motion.div>
-        </motion.div>
-
-        {/* Star CTA Banner */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.5 }}
-          className="mt-16 w-full rounded-2xl bg-gradient-to-br from-zinc-900 to-zinc-900/40 border border-zinc-800/60 p-8 flex flex-col sm:flex-row items-center justify-between gap-6 shadow-glass"
-        >
-          <div className="space-y-1.5 text-center sm:text-left">
-            <div className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest">open source · MIT · built in public</div>
-            <div className="text-xl font-bold text-white">If n0x saved you money, give it a ⭐</div>
-            <div className="text-sm text-zinc-400 max-w-sm">
-              Every star helps more developers find this. Takes 2 seconds, costs $0 — just like n0x.
-            </div>
-          </div>
-          <div className="flex flex-col sm:flex-row gap-3 shrink-0">
-            <a
-              href="https://github.com/ixchio/n0x"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-lg bg-white text-black font-bold hover:bg-zinc-200 transition-colors text-sm"
-            >
-              <Star className="w-4 h-4 fill-amber-500 text-amber-500" /> Star on GitHub
-            </a>
-            <a
-              href="https://github.com/ixchio/n0x/issues"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-lg bg-zinc-900 border border-zinc-800 text-white font-medium hover:bg-zinc-800 transition-colors text-sm"
-            >
-              <ExternalLink className="w-4 h-4" /> Contribute
-            </a>
-          </div>
-        </motion.div>
-
-        {/* Final CTA */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.5 }}
-          className="mt-20 text-center space-y-6 max-w-xl"
-        >
-          <h2 className="text-3xl font-bold text-white tracking-tight">Ready to run AI locally?</h2>
-          <p className="text-zinc-400 font-medium">No sign-up. No API keys. Just open the app, pick a model, and start.</p>
-          <Link
-            href="/chat"
-            className="inline-flex items-center gap-2 h-12 px-10 rounded-lg bg-white text-black font-bold hover:bg-zinc-200 transition-colors text-sm shadow-[0_0_40px_rgba(255,255,255,0.1)]"
-          >
-            Launch n0x <ArrowRight className="w-4 h-4" />
-          </Link>
-        </motion.div>
-
-      </main>
-
-      {/* Footer */}
-      <footer className="w-full border-t border-zinc-800/50 py-8 relative z-10">
-        <div className="max-w-6xl mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-zinc-500 font-mono">
-          <span>© {new Date().getFullYear()} ixchio · MIT License</span>
-          <span>WebGPU for local models · Ollama &amp; Cloud API also supported</span>
-          <a href="https://github.com/ixchio/n0x" target="_blank" rel="noopener noreferrer" className="hover:text-zinc-300 transition-colors flex items-center gap-1.5">
-            <Star className="w-3 h-3 text-amber-400" />
-            github.com/ixchio/n0x
-          </a>
+            </footer>
         </div>
-      </footer>
-
-    </div>
-  );
+    );
 }

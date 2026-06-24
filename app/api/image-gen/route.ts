@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { checkRateLimit } from "@/lib/server/rate-limit";
 
 // N0X Image Generation
 // Strategy:
@@ -11,7 +12,7 @@ import { NextRequest, NextResponse } from "next/server";
 //   flux, flux-schnell, z-image-turbo, klein, wan-image, qwen-image, kontext
 
 interface GenResult {
-    image: string;   // URL or data:image/... base64
+    image: string; // URL or data:image/... base64
     provider: string;
 }
 
@@ -21,16 +22,15 @@ const FREE_MODELS = ["flux", "z-image-turbo", "klein", "flux-schnell", "wan-imag
 // ── Authenticated Pollinations (gen.pollinations.ai) ──
 // Returns base64 data URL so the API key never touches the client
 
-async function tryPollinationsAuth(
-    prompt: string, model: string, apiKey: string
-): Promise<GenResult | null> {
+async function tryPollinationsAuth(prompt: string, model: string, apiKey: string): Promise<GenResult | null> {
     try {
         const seed = Math.floor(Math.random() * 999999);
-        const url = `https://gen.pollinations.ai/image/${encodeURIComponent(prompt)}` +
+        const url =
+            `https://gen.pollinations.ai/image/${encodeURIComponent(prompt)}` +
             `?width=768&height=768&model=${model}&seed=${seed}&nologo=true&enhance=true`;
 
         const res = await fetch(url, {
-            headers: { "Authorization": `Bearer ${apiKey}` },
+            headers: { Authorization: `Bearer ${apiKey}` },
             signal: AbortSignal.timeout(45000),
         });
 
@@ -54,12 +54,15 @@ async function tryPollinationsAuth(
 }
 
 async function tryPollinationsWithKey(
-    prompt: string, apiKey: string, preferredModel?: string
+    prompt: string,
+    apiKey: string,
+    preferredModel?: string
 ): Promise<GenResult | null> {
     // Build model list: user preference first, then free fallbacks
-    const models = preferredModel && FREE_MODELS.includes(preferredModel)
-        ? [preferredModel, ...FREE_MODELS.filter(m => m !== preferredModel)]
-        : [...FREE_MODELS];
+    const models =
+        preferredModel && FREE_MODELS.includes(preferredModel)
+            ? [preferredModel, ...FREE_MODELS.filter(m => m !== preferredModel)]
+            : [...FREE_MODELS];
 
     for (const model of models) {
         const result = await tryPollinationsAuth(prompt, model, apiKey);
@@ -74,7 +77,8 @@ async function tryPollinationsWithKey(
 
 function pollinationsFreeUrl(prompt: string, model: string = "turbo"): GenResult {
     const seed = Math.floor(Math.random() * 999999);
-    const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}` +
+    const url =
+        `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}` +
         `?width=768&height=768&model=${model}&seed=${seed}&nologo=true&enhance=true`;
     return { image: url, provider: `pollinations-free-${model}` };
 }
@@ -89,13 +93,25 @@ async function tryAIHorde(prompt: string): Promise<GenResult | null> {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
-                "apikey": "0000000000",
+                apikey: "0000000000",
                 "Client-Agent": "n0x:2.0:github.com/ixchio/n0x",
             },
             body: JSON.stringify({
                 prompt: `${prompt} ### highly detailed, sharp focus, professional quality`,
-                params: { width: 512, height: 512, steps: 20, cfg_scale: 7.0, sampler_name: "k_euler_a", karras: true, n: 1 },
-                nsfw: true, censor_nsfw: false, trusted_workers: false, slow_workers: true, r2: true,
+                params: {
+                    width: 512,
+                    height: 512,
+                    steps: 20,
+                    cfg_scale: 7.0,
+                    sampler_name: "k_euler_a",
+                    karras: true,
+                    n: 1,
+                },
+                nsfw: false,
+                censor_nsfw: true,
+                trusted_workers: false,
+                slow_workers: true,
+                r2: true,
             }),
             signal: AbortSignal.timeout(10000),
         });
@@ -116,7 +132,9 @@ async function tryAIHorde(prompt: string): Promise<GenResult | null> {
                 const check = await checkRes.json();
                 if (check.faulted) return null;
                 if (check.done) break;
-            } catch { continue; }
+            } catch {
+                continue;
+            }
         }
 
         const statusRes = await fetch(`${HORDE_API}/generate/status/${jobId}`, {
@@ -139,14 +157,22 @@ async function tryAIHorde(prompt: string): Promise<GenResult | null> {
 
 export async function POST(request: NextRequest) {
     try {
+        const limit = checkRateLimit(request, {
+            key: "image-gen",
+            limit: 12,
+            windowMs: 10 * 60 * 1000,
+        });
+        if (!limit.allowed) return limit.response;
+
         const { prompt, model: preferredModel } = await request.json();
         if (!prompt) return NextResponse.json({ error: "Prompt required" }, { status: 400 });
 
-        const cleanPrompt = prompt
-            .replace(/^(generate|create|make|draw|paint|render)\s+(an?\s+)?(image|picture|photo)\s+(of\s+)?/i, "")
-            .replace(/^image:\s*/i, "")
-            .replace(/^\/image\s+/i, "")
-            .trim() || prompt;
+        const cleanPrompt =
+            prompt
+                .replace(/^(generate|create|make|draw|paint|render)\s+(an?\s+)?(image|picture|photo)\s+(of\s+)?/i, "")
+                .replace(/^image:\s*/i, "")
+                .replace(/^\/image\s+/i, "")
+                .trim() || prompt;
 
         const apiKey = process.env.POLLINATIONS_API_KEY;
         let result: GenResult | null = null;

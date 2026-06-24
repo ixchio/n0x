@@ -29,43 +29,47 @@ export const useWebContainer = create<WebContainerState>((set, get) => ({
 
         try {
             // Check if we're in a cross-origin isolated environment
-            if (typeof window !== 'undefined' && !window.crossOriginIsolated) {
+            if (typeof window !== "undefined" && !window.crossOriginIsolated) {
                 console.warn("WebContainers require Cross-Origin Isolation (COOP/COEP headers).");
                 set({ error: "Missing COOP/COEP headers for WebContainers", status: "error" });
                 return;
             }
 
             const instance = await WebContainer.boot();
-            
-            instance.on('server-ready', (port, url) => {
+
+            instance.on("server-ready", (port, url) => {
                 console.log(`WebContainer Server ready at ${url}`);
                 set({ previewUrl: url });
             });
 
             // Mount a basic package.json for React/Vite to speed things up if needed
             await instance.mount({
-                'package.json': {
+                "package.json": {
                     file: {
-                        contents: JSON.stringify({
-                            name: "n0x-artifact",
-                            type: "module",
-                            scripts: {
-                                dev: "vite",
-                                build: "vite build"
+                        contents: JSON.stringify(
+                            {
+                                name: "n0x-artifact",
+                                type: "module",
+                                scripts: {
+                                    dev: "vite",
+                                    build: "vite build",
+                                },
+                                dependencies: {
+                                    react: "^18.2.0",
+                                    "react-dom": "^18.2.0",
+                                    "lucide-react": "^0.323.0",
+                                },
+                                devDependencies: {
+                                    "@vitejs/plugin-react": "^4.2.1",
+                                    vite: "^5.0.12",
+                                },
                             },
-                            dependencies: {
-                                "react": "^18.2.0",
-                                "react-dom": "^18.2.0",
-                                "lucide-react": "^0.323.0"
-                            },
-                            devDependencies: {
-                                "@vitejs/plugin-react": "^4.2.1",
-                                "vite": "^5.0.12"
-                            }
-                        }, null, 2)
-                    }
+                            null,
+                            2
+                        ),
+                    },
                 },
-                'index.html': {
+                "index.html": {
                     file: {
                         contents: `
 <!DOCTYPE html>
@@ -81,12 +85,12 @@ export const useWebContainer = create<WebContainerState>((set, get) => ({
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
-`
-                    }
+`,
+                    },
                 },
-                'src': {
+                src: {
                     directory: {
-                        'main.jsx': {
+                        "main.jsx": {
                             file: {
                                 contents: `
 import React from 'react'
@@ -98,21 +102,21 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     <App />
   </React.StrictMode>,
 )
-`
-                            }
+`,
+                            },
                         },
-                        'App.jsx': {
+                        "App.jsx": {
                             file: {
                                 contents: `
 import React from 'react';
 export default function App() {
   return <div className="p-4 text-white">App is running! Edit src/App.jsx to change this.</div>;
 }
-`
-                            }
-                        }
-                    }
-                }
+`,
+                            },
+                        },
+                    },
+                },
             });
 
             set({ status: "ready", instance, error: null });
@@ -125,13 +129,13 @@ export default function App() {
     writeFile: async (path: string, contents: string) => {
         const { instance } = get();
         if (!instance) throw new Error("WebContainer not ready");
-        
-        const pathParts = path.split('/');
+
+        const pathParts = path.split("/");
         const fileName = pathParts.pop();
-        
+
         // Ensure directories exist
         if (pathParts.length > 0) {
-            // Recursive directory creation is a bit complex in basic API, 
+            // Recursive directory creation is a bit complex in basic API,
             // for now assume writing mostly to root or src/
         }
 
@@ -143,37 +147,41 @@ export default function App() {
         if (!instance) throw new Error("WebContainer not ready");
 
         const process = await instance.spawn(command, args);
-        
+
         let output = "";
-        process.output.pipeTo(new WritableStream({
-            write(data) {
-                output += data;
-                console.log(data); // Also log to console
-            }
-        }));
+        process.output.pipeTo(
+            new WritableStream({
+                write(data) {
+                    output += data;
+                    console.log(data); // Also log to console
+                },
+            })
+        );
 
         const exitCode = await process.exit;
         if (exitCode !== 0) {
             throw new Error(`Command failed with exit code ${exitCode}:\n${output}`);
         }
-        
+
         return output;
     },
 
     startDevServer: async () => {
         const { instance, runCommand } = get();
         if (!instance) throw new Error("WebContainer not ready");
-        
+
         // Install dependencies
         await runCommand("npm", ["install"]);
-        
+
         // Start dev server (non-blocking)
         const process = await instance.spawn("npm", ["run", "dev"]);
-        
-        process.output.pipeTo(new WritableStream({
-            write(data) {
-                console.log("[Vite]", data);
-            }
-        }));
-    }
+
+        process.output.pipeTo(
+            new WritableStream({
+                write(data) {
+                    console.log("[Vite]", data);
+                },
+            })
+        );
+    },
 }));

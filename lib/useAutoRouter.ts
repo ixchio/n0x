@@ -11,11 +11,11 @@ export type TaskComplexity = "simple" | "moderate" | "complex";
 
 interface RouteContext {
     message: string;
-    hasDocuments: boolean;       // RAG documents attached
-    deepSearchEnabled: boolean;  // Web search will run
-    conversationLength: number;  // messages in current thread
-    localModelLoaded: boolean;   // WebGPU/ChromeAI model available
-    cloudConfigured: boolean;    // Cloud API key + model set
+    hasDocuments: boolean; // RAG documents attached
+    deepSearchEnabled: boolean; // Web search will run
+    conversationLength: number; // messages in current thread
+    localModelLoaded: boolean; // WebGPU/ChromeAI model available
+    cloudConfigured: boolean; // Cloud API key + model set
 }
 
 // Keyword patterns that indicate complexity
@@ -27,15 +27,15 @@ const COMPLEX_PATTERNS = [
     /\b(translate|convert|transform|migrate)\b.{15,}/i,
     /\b(essay|article|report|documentation|readme|paper)\b/i,
     /\b(pros?\s+and\s+cons?|advantages?\s+and\s+disadvantages?|trade[- ]?offs?)\b/i,
-    /```[\s\S]{20,}/,  // code blocks in the message
+    /```[\s\S]{20,}/, // code blocks in the message
 ];
 
 const SIMPLE_PATTERNS = [
     /^(hi|hey|hello|yo|sup|thanks|thank you|ok|okay|yes|no|sure|cool|got it|bye)\b/i,
-    /^(what|who|when|where)\s+(is|are|was|were)\s+\w+\??$/i,  // Simple factual questions
+    /^(what|who|when|where)\s+(is|are|was|were)\s+\w+\??$/i, // Simple factual questions
     /^(define|meaning of|what does)\s+\w+/i,
-    /^(summarize|tldr|sum up)\b/i,  // Summarization of existing content = local
-    /^.{0,60}\?$/,  // Short questions under 60 chars
+    /^(summarize|tldr|sum up)\b/i, // Summarization of existing content = local
+    /^.{0,60}\?$/, // Short questions under 60 chars
 ];
 
 export function classifyComplexity(message: string): TaskComplexity {

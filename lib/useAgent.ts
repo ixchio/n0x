@@ -23,7 +23,7 @@ export interface AgentStep {
     tool?: string;
     args?: Record<string, any>;
     timestamp: number;
-    durationMs?: number;     // how long this step took (for actions)
+    durationMs?: number; // how long this step took (for actions)
 }
 
 export type AgentStatus = "idle" | "thinking" | "acting" | "done" | "error";
@@ -33,7 +33,7 @@ interface AgentState {
     status: AgentStatus;
     enabled: boolean;
     currentIteration: number;
-    elapsedMs: number;       // total wall-clock time since loop start
+    elapsedMs: number; // total wall-clock time since loop start
 
     // Actions
     toggle: () => void;
@@ -45,7 +45,7 @@ interface AgentState {
         generate: (msgs: { role: string; content: string }[], onToken?: (t: string) => void) => Promise<string>,
         systemPrompt: string,
         onThoughtToken?: (token: string) => void,
-        contextBudget?: number,
+        contextBudget?: number
     ) => Promise<string>;
 }
 
@@ -65,15 +65,13 @@ export interface AgentToolkit {
 // ─── Config ─────────────────────────────────────────────────────────
 
 const MAX_ITERATIONS = 8;
-const TOOL_TIMEOUT_MS = 30_000;       // 30s max per tool execution
-const MAX_LOOP_REPEATS = 3;           // same tool+args 3x = force stop
+const TOOL_TIMEOUT_MS = 30_000; // 30s max per tool execution
+const MAX_LOOP_REPEATS = 3; // same tool+args 3x = force stop
 
 // ─── System prompt for agent mode ────────────────────────────────────
 
 function buildAgentPrompt(base: string, availableTools: string[]): string {
-    const toolList = availableTools.length > 0
-        ? availableTools.join(", ")
-        : "none (answer from your own knowledge)";
+    const toolList = availableTools.length > 0 ? availableTools.join(", ") : "none (answer from your own knowledge)";
 
     // Build tool reference only for available tools (shorter prompt = better for small models)
     const toolDocs: Record<string, string> = {
@@ -152,8 +150,10 @@ function parseToolCall(text: string): ParsedToolCall | null {
         if (trimmed === "```json" || trimmed === "```") continue;
 
         // Check for JSON-shaped content
-        if ((trimmed.startsWith("{") && trimmed.includes("tool")) ||
-            (trimmed.startsWith("{'") && trimmed.includes("tool"))) {
+        if (
+            (trimmed.startsWith("{") && trimmed.includes("tool")) ||
+            (trimmed.startsWith("{'") && trimmed.includes("tool"))
+        ) {
             jsonCandidate = trimmed;
             break;
         }
@@ -192,7 +192,7 @@ function parseToolCall(text: string): ParsedToolCall | null {
         jsonCandidate,
         jsonCandidate.replace(/'/g, '"'),
         jsonCandidate.replace(/'/g, '"').replace(/(\w)"(\w)/g, "$1'$2"),
-        jsonCandidate.replace(/,\s*}/g, "}"),  // trailing comma
+        jsonCandidate.replace(/,\s*}/g, "}"), // trailing comma
     ]) {
         try {
             const parsed = JSON.parse(attempt);
@@ -203,7 +203,9 @@ function parseToolCall(text: string): ParsedToolCall | null {
                     args: parsed.args || {},
                 };
             }
-        } catch { /* try next */ }
+        } catch {
+            /* try next */
+        }
     }
 
     // Strategy 5: Regex extraction as last resort
@@ -242,20 +244,44 @@ async function executeTool(
 
     const toolFn = (() => {
         switch (toolName) {
-            case "webSearch": return toolkit.webSearch ? () => toolkit.webSearch!(args.query || args.q || "") : null;
-            case "ragSearch": return toolkit.ragSearch ? () => toolkit.ragSearch!(args.query || args.q || "") : null;
-            case "python": return toolkit.python ? () => toolkit.python!(args.code || args.script || "") : null;
-            case "memorySave": return toolkit.memorySave ? () => toolkit.memorySave!(args.content || args.text || "") : null;
-            case "memoryRecall": return toolkit.memoryRecall ? () => Promise.resolve(toolkit.memoryRecall!(args.query || args.q || "")) : null;
-            case "imageGen": return toolkit.imageGen ? () => toolkit.imageGen!(args.prompt || args.description || "") : null;
-            case "webContainerWrite": return toolkit.webContainerWrite ? () => toolkit.webContainerWrite!(args.path || "", args.contents || "") : null;
-            case "webContainerExec": return toolkit.webContainerExec ? () => toolkit.webContainerExec!(args.command || "", args.args || []) : null;
-            default: return null;
+            case "webSearch":
+                return toolkit.webSearch ? () => toolkit.webSearch!(args.query || args.q || "") : null;
+            case "ragSearch":
+                return toolkit.ragSearch ? () => toolkit.ragSearch!(args.query || args.q || "") : null;
+            case "python":
+                return toolkit.python ? () => toolkit.python!(args.code || args.script || "") : null;
+            case "memorySave":
+                return toolkit.memorySave ? () => toolkit.memorySave!(args.content || args.text || "") : null;
+            case "memoryRecall":
+                return toolkit.memoryRecall
+                    ? () => Promise.resolve(toolkit.memoryRecall!(args.query || args.q || ""))
+                    : null;
+            case "imageGen":
+                return toolkit.imageGen ? () => toolkit.imageGen!(args.prompt || args.description || "") : null;
+            case "webContainerWrite":
+                return toolkit.webContainerWrite
+                    ? () => toolkit.webContainerWrite!(args.path || "", args.contents || "")
+                    : null;
+            case "webContainerExec":
+                return toolkit.webContainerExec
+                    ? () => toolkit.webContainerExec!(args.command || "", args.args || [])
+                    : null;
+            default:
+                return null;
         }
     })();
 
     if (!toolFn) {
-        const valid = ["webSearch", "ragSearch", "python", "memorySave", "memoryRecall", "imageGen", "webContainerWrite", "webContainerExec"];
+        const valid = [
+            "webSearch",
+            "ragSearch",
+            "python",
+            "memorySave",
+            "memoryRecall",
+            "imageGen",
+            "webContainerWrite",
+            "webContainerExec",
+        ];
         if (!valid.includes(toolName)) {
             return `[Error] Unknown tool "${toolName}". Available: ${valid.join(", ")}`;
         }
@@ -267,8 +293,14 @@ async function executeTool(
         const result = await Promise.race([
             toolFn(),
             new Promise<string>((_, reject) => {
-                const timer = setTimeout(() => reject(new Error(`Tool "${toolName}" timed out after ${TOOL_TIMEOUT_MS / 1000}s`)), TOOL_TIMEOUT_MS);
-                signal.addEventListener("abort", () => { clearTimeout(timer); reject(new Error("Cancelled")); });
+                const timer = setTimeout(
+                    () => reject(new Error(`Tool "${toolName}" timed out after ${TOOL_TIMEOUT_MS / 1000}s`)),
+                    TOOL_TIMEOUT_MS
+                );
+                signal.addEventListener("abort", () => {
+                    clearTimeout(timer);
+                    reject(new Error("Cancelled"));
+                });
             }),
         ]);
         return result || "Tool returned empty result.";
@@ -283,7 +315,10 @@ async function executeTool(
 // If we shove all observations in verbatim, we OOM the window.
 // Strategy: summarize old observations, keep recent ones full.
 
-function budgetContext(msgs: { role: string; content: string }[], maxContextChars: number): { role: string; content: string }[] {
+function budgetContext(
+    msgs: { role: string; content: string }[],
+    maxContextChars: number
+): { role: string; content: string }[] {
     let totalChars = 0;
     for (const m of msgs) totalChars += m.content.length;
 
@@ -300,14 +335,14 @@ function budgetContext(msgs: { role: string; content: string }[], maxContextChar
 
     // Compress old messages
     if (old.length > 0) {
-        const summary = old.map(m => {
-            const role = m.role === "assistant" ? "Agent" : "Tool";
-            // Aggressively truncate old content
-            const content = m.content.length > 200
-                ? m.content.slice(0, 200) + "..."
-                : m.content;
-            return `[${role}] ${content}`;
-        }).join("\n");
+        const summary = old
+            .map(m => {
+                const role = m.role === "assistant" ? "Agent" : "Tool";
+                // Aggressively truncate old content
+                const content = m.content.length > 200 ? m.content.slice(0, 200) + "..." : m.content;
+                return `[${role}] ${content}`;
+            })
+            .join("\n");
 
         result.push({
             role: "user",
@@ -347,12 +382,18 @@ export const useAgent = create<AgentState>((set, get) => ({
     toggle: () => set(s => ({ enabled: !s.enabled })),
 
     reset: () => {
-        if (activeAbort) { activeAbort.abort(); activeAbort = null; }
+        if (activeAbort) {
+            activeAbort.abort();
+            activeAbort = null;
+        }
         set({ steps: [], status: "idle", currentIteration: 0, elapsedMs: 0 });
     },
 
     abort: () => {
-        if (activeAbort) { activeAbort.abort(); activeAbort = null; }
+        if (activeAbort) {
+            activeAbort.abort();
+            activeAbort = null;
+        }
         set({ status: "done" });
     },
 
@@ -415,9 +456,14 @@ export const useAgent = create<AgentState>((set, get) => ({
             // Signal the start of a new thought iteration by emitting empty string
             onThoughtToken?.("");
             try {
-                llmOutput = await generate(budgeted, onThoughtToken ? (tok) => {
-                    onThoughtToken(tok);
-                } : undefined);
+                llmOutput = await generate(
+                    budgeted,
+                    onThoughtToken
+                        ? tok => {
+                              onThoughtToken(tok);
+                          }
+                        : undefined
+                );
             } catch (e: any) {
                 if (signal.aborted) break;
                 addStep({ type: "error", content: `LLM generation failed: ${e.message}` });
@@ -428,9 +474,7 @@ export const useAgent = create<AgentState>((set, get) => ({
             if (signal.aborted) break;
 
             // Clean LLM output (strip thinking tags some models emit)
-            llmOutput = llmOutput
-                .replace(/<think>[\s\S]*?<\/think>/g, "")
-                .trim();
+            llmOutput = llmOutput.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
 
             // Try to parse a tool call
             const toolCall = parseToolCall(llmOutput);
@@ -446,15 +490,29 @@ export const useAgent = create<AgentState>((set, get) => ({
 
             // Check for loop detection BEFORE executing
             const pendingSteps = get().steps;
-            const testSteps = [...pendingSteps, {
-                id: -1, type: "action" as const, content: "", timestamp: 0,
-                tool: toolCall.tool, args: toolCall.args,
-            }];
+            const testSteps = [
+                ...pendingSteps,
+                {
+                    id: -1,
+                    type: "action" as const,
+                    content: "",
+                    timestamp: 0,
+                    tool: toolCall.tool,
+                    args: toolCall.args,
+                },
+            ];
             if (detectLoop(testSteps)) {
-                addStep({ type: "error", content: `Loop detected: calling ${toolCall.tool} with same args ${MAX_LOOP_REPEATS}x. Breaking to give answer.` });
+                addStep({
+                    type: "error",
+                    content: `Loop detected: calling ${toolCall.tool} with same args ${MAX_LOOP_REPEATS}x. Breaking to give answer.`,
+                });
                 // Force the LLM to answer by removing tools
                 msgs.push({ role: "assistant", content: llmOutput });
-                msgs.push({ role: "user", content: "You're repeating the same tool call. Please give your FINAL ANSWER now based on what you already know." });
+                msgs.push({
+                    role: "user",
+                    content:
+                        "You're repeating the same tool call. Please give your FINAL ANSWER now based on what you already know.",
+                });
                 continue;
             }
 
@@ -495,9 +553,8 @@ export const useAgent = create<AgentState>((set, get) => ({
             }
 
             // Record observation with execution time
-            const obsContent = observation.length > 2000
-                ? observation.slice(0, 2000) + "\n··· [truncated]"
-                : observation;
+            const obsContent =
+                observation.length > 2000 ? observation.slice(0, 2000) + "\n··· [truncated]" : observation;
             addStep({
                 type: "observation",
                 content: obsContent,
@@ -522,10 +579,10 @@ export const useAgent = create<AgentState>((set, get) => ({
 
         // Handle abort
         if (signal.aborted) {
-            const lastObs = get().steps.filter(s => s.type === "observation").pop();
-            finalAnswer = lastObs
-                ? `Stopped by user. Partial result:\n\n${lastObs.content}`
-                : "Agent was stopped.";
+            const lastObs = get()
+                .steps.filter(s => s.type === "observation")
+                .pop();
+            finalAnswer = lastObs ? `Stopped by user. Partial result:\n\n${lastObs.content}` : "Agent was stopped.";
             addStep({ type: "final", content: finalAnswer });
             set({ status: "done" });
         }
@@ -537,7 +594,8 @@ export const useAgent = create<AgentState>((set, get) => ({
                 const lastObs = observations[observations.length - 1];
                 finalAnswer = `Reached step limit (${MAX_ITERATIONS}). Here's what I found:\n\n${lastObs.content}`;
             } else {
-                finalAnswer = "Reached the step limit without finding an answer. Try rephrasing or breaking into smaller questions.";
+                finalAnswer =
+                    "Reached the step limit without finding an answer. Try rephrasing or breaking into smaller questions.";
             }
             addStep({ type: "final", content: finalAnswer });
             set({ status: "done" });

@@ -2,9 +2,7 @@
     "buildCommand": "npm run build",
     "outputDirectory": ".next",
     "framework": "nextjs",
-    "regions": [
-        "iad1"
-    ],
+    "regions": ["iad1"],
     "headers": [
         {
             "source": "/(.*)",
@@ -16,6 +14,18 @@
                 {
                     "key": "Cross-Origin-Embedder-Policy",
                     "value": "credentialless"
+                },
+                {
+                    "key": "X-Content-Type-Options",
+                    "value": "nosniff"
+                },
+                {
+                    "key": "Referrer-Policy",
+                    "value": "strict-origin-when-cross-origin"
+                },
+                {
+                    "key": "Permissions-Policy",
+                    "value": "camera=(), geolocation=(), payment=(), usb=(), serial=()"
                 }
             ]
         }

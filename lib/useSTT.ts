@@ -29,7 +29,9 @@ export const useSTT = create<STTState>((set, get) => ({
         if (get().isListening) return;
 
         const SpeechRecognition =
-            (typeof window !== "undefined" && ((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition)) || null;
+            (typeof window !== "undefined" &&
+                ((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition)) ||
+            null;
 
         if (!SpeechRecognition) {
             set({ error: "Speech recognition not supported", isSupported: false });

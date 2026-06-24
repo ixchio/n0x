@@ -4,7 +4,22 @@ import React, { useState, useRef, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
-import { Copy, Check, Play, Loader2, Eye, EyeOff, ZoomIn, Download, Bot, Terminal, Brain, ChevronDown, ChevronRight, GitBranch } from "lucide-react";
+import {
+    Copy,
+    Check,
+    Play,
+    Loader2,
+    Eye,
+    EyeOff,
+    ZoomIn,
+    Download,
+    Bot,
+    Terminal,
+    Brain,
+    ChevronDown,
+    ChevronRight,
+    GitBranch,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface MessageBubbleProps {
@@ -16,16 +31,53 @@ interface MessageBubbleProps {
 }
 
 const PY_BLOCKLIST = [
-    "pygame", "tkinter", "PyQt5", "PyQt6", "PySide2", "PySide6",
-    "cv2", "opencv", "tensorflow", "torch", "torchvision", "torchaudio",
-    "flask", "django", "fastapi", "uvicorn", "gunicorn",
-    "selenium", "playwright", "pyautogui", "pynput",
-    "psutil", "subprocess", "multiprocessing", "threading",
-    "socket", "asyncio", "aiohttp", "requests", "httpx", "urllib3",
-    "serial", "usb", "bluetooth", "gpio",
-    "wx", "kivy", "pyglet", "arcade", "turtle",
-    "sounddevice", "pyaudio", "playsound",
-    "docker", "kubernetes", "boto3", "paramiko",
+    "pygame",
+    "tkinter",
+    "PyQt5",
+    "PyQt6",
+    "PySide2",
+    "PySide6",
+    "cv2",
+    "opencv",
+    "tensorflow",
+    "torch",
+    "torchvision",
+    "torchaudio",
+    "flask",
+    "django",
+    "fastapi",
+    "uvicorn",
+    "gunicorn",
+    "selenium",
+    "playwright",
+    "pyautogui",
+    "pynput",
+    "psutil",
+    "subprocess",
+    "multiprocessing",
+    "threading",
+    "socket",
+    "asyncio",
+    "aiohttp",
+    "requests",
+    "httpx",
+    "urllib3",
+    "serial",
+    "usb",
+    "bluetooth",
+    "gpio",
+    "wx",
+    "kivy",
+    "pyglet",
+    "arcade",
+    "turtle",
+    "sounddevice",
+    "pyaudio",
+    "playsound",
+    "docker",
+    "kubernetes",
+    "boto3",
+    "paramiko",
 ];
 
 function canRunPython(code: string): boolean {
@@ -83,17 +135,40 @@ const CodeBlock = ({ children, className, onRunCode, codeResults, runningCode, h
     const [copied, setCopied] = useState(false);
     const [showPreview, setShowPreview] = useState(false);
     const iframeRef = useRef<HTMLIFrameElement>(null);
+    const autoPreviewRef = useRef(false);
 
     const lang = match?.[1]?.toLowerCase() || "";
     const isPython = lang === "python" || lang === "py";
     const isWeb = ["html", "htm", "javascript", "js", "css"].includes(lang);
     const pyRunnable = isPython && canRunPython(code);
     // Auto-detect "artifact" — a full HTML document with <html or <!doctype
-    const isArtifact = isWeb && lang === "html" && (code.toLowerCase().includes("<!doctype") || code.toLowerCase().includes("<html"));
+    const isArtifact =
+        isWeb && lang === "html" && (code.toLowerCase().includes("<!doctype") || code.toLowerCase().includes("<html"));
+
+    // Auto-open preview for artifacts (full HTML documents)
+    useEffect(() => {
+        if (isArtifact && !autoPreviewRef.current) {
+            autoPreviewRef.current = true;
+            setShowPreview(true);
+            setTimeout(() => {
+                if (iframeRef.current) {
+                    const doc = iframeRef.current.contentDocument;
+                    if (doc) {
+                        doc.open();
+                        doc.write(buildSandboxHtml(code, lang));
+                        doc.close();
+                    }
+                }
+            }, 100);
+        }
+    }, [isArtifact, code, lang]);
 
     if (!match) {
         return (
-            <code className="bg-zinc-800 text-zinc-200 px-1.5 py-0.5 rounded-md text-[0.85em] font-mono border border-zinc-700" {...props}>
+            <code
+                className="bg-zinc-800 text-zinc-200 px-1.5 py-0.5 rounded-md text-[0.85em] font-mono border border-zinc-700"
+                {...props}
+            >
                 {children}
             </code>
         );
@@ -127,34 +202,31 @@ const CodeBlock = ({ children, className, onRunCode, codeResults, runningCode, h
     const result = codeResults?.[codeId];
     const isRunning = runningCode === codeId;
 
-    // Auto-open preview for artifacts (full HTML documents)
-    const autoPreviewRef = useRef(false);
-    useEffect(() => {
-        if (isArtifact && !autoPreviewRef.current) {
-            autoPreviewRef.current = true;
-            setShowPreview(true);
-            setTimeout(() => {
-                if (iframeRef.current) {
-                    const doc = iframeRef.current.contentDocument;
-                    if (doc) { doc.open(); doc.write(buildSandboxHtml(code, lang)); doc.close(); }
-                }
-            }, 100);
-        }
-    }, [isArtifact, code, lang]);
-
     return (
-        <div className={cn("my-4 border rounded-xl overflow-hidden shadow-sm bg-[#0a0a0a]", isArtifact && showPreview ? "border-purple-500/30" : "border-zinc-800")}>
+        <div
+            className={cn(
+                "my-4 border rounded-xl overflow-hidden shadow-sm bg-[#0a0a0a]",
+                isArtifact && showPreview ? "border-purple-500/30" : "border-zinc-800"
+            )}
+        >
             {/* Header */}
             <div className="flex items-center justify-between px-4 py-2 bg-zinc-900/50 border-b border-zinc-800">
                 <div className="flex items-center gap-2">
                     <span className="text-[11px] text-zinc-400 font-mono font-medium">{lang}</span>
-                    {isArtifact && <span className="text-[9px] text-purple-400 bg-purple-500/10 px-1.5 py-0.5 rounded font-mono font-semibold">ARTIFACT</span>}
+                    {isArtifact && (
+                        <span className="text-[9px] text-purple-400 bg-purple-500/10 px-1.5 py-0.5 rounded font-mono font-semibold">
+                            ARTIFACT
+                        </span>
+                    )}
                 </div>
                 <div className="flex items-center gap-1.5">
                     {isWeb && (
                         <button
                             onClick={handlePreview}
-                            className={cn("p-1.5 rounded-md transition-colors flex items-center gap-1.5 text-xs font-mono font-medium", showPreview ? "bg-white text-black" : "text-zinc-400 hover:text-white hover:bg-zinc-800")}
+                            className={cn(
+                                "p-1.5 rounded-md transition-colors flex items-center gap-1.5 text-xs font-mono font-medium",
+                                showPreview ? "bg-white text-black" : "text-zinc-400 hover:text-white hover:bg-zinc-800"
+                            )}
                         >
                             {showPreview ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                             {showPreview ? "Code" : "Preview"}
@@ -167,12 +239,22 @@ const CodeBlock = ({ children, className, onRunCode, codeResults, runningCode, h
                             disabled={isRunning}
                             className="p-1.5 rounded-md text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors flex items-center gap-1.5 text-xs font-mono font-medium"
                         >
-                            {isRunning ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
+                            {isRunning ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                                <Play className="w-3.5 h-3.5" />
+                            )}
                             Run
                         </button>
                     )}
 
-                    <button onClick={handleCopy} className={cn("p-1.5 rounded-md transition-colors", copied ? "bg-[#1f1f1f] text-phosphor" : "text-zinc-400 hover:text-white hover:bg-zinc-800")}>
+                    <button
+                        onClick={handleCopy}
+                        className={cn(
+                            "p-1.5 rounded-md transition-colors",
+                            copied ? "bg-[#1f1f1f] text-phosphor" : "text-zinc-400 hover:text-white hover:bg-zinc-800"
+                        )}
+                    >
                         {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
                     </button>
                 </div>
@@ -209,11 +291,23 @@ const CodeBlock = ({ children, className, onRunCode, codeResults, runningCode, h
                 <div className="border-t border-zinc-800 p-3 bg-zinc-950">
                     <div className="text-[10px] text-zinc-500 mb-1.5 font-mono flex flex-wrap items-center gap-2">
                         <Terminal className="w-3 h-3" /> Execution output · {result.duration}ms
-                        {result.duration > 3000 && <span className="text-[10px] text-amber-500/80 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">WASM — expect 10–50× vs native</span>}
+                        {result.duration > 3000 && (
+                            <span className="text-[10px] text-amber-500/80 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">
+                                WASM — expect 10–50× vs native
+                            </span>
+                        )}
                     </div>
                     <div className="max-h-96 overflow-y-auto custom-scrollbar">
-                        {result.output && <pre className="text-[13px] text-zinc-300 font-mono whitespace-pre-wrap leading-relaxed pb-2">{result.output}</pre>}
-                        {result.error && <pre className="text-[13px] text-red-400 font-mono whitespace-pre-wrap leading-relaxed pb-2">{result.error}</pre>}
+                        {result.output && (
+                            <pre className="text-[13px] text-zinc-300 font-mono whitespace-pre-wrap leading-relaxed pb-2">
+                                {result.output}
+                            </pre>
+                        )}
+                        {result.error && (
+                            <pre className="text-[13px] text-red-400 font-mono whitespace-pre-wrap leading-relaxed pb-2">
+                                {result.error}
+                            </pre>
+                        )}
                     </div>
                 </div>
             )}
@@ -221,9 +315,17 @@ const CodeBlock = ({ children, className, onRunCode, codeResults, runningCode, h
     );
 };
 
-export const MessageBubble = React.memo(function MessageBubble({ role, content, image, onRunCode, onBranch }: MessageBubbleProps) {
+export const MessageBubble = React.memo(function MessageBubble({
+    role,
+    content,
+    image,
+    onRunCode,
+    onBranch,
+}: MessageBubbleProps) {
     const [runningCode, setRunningCode] = useState<string | null>(null);
-    const [codeResults, setCodeResults] = useState<Record<string, { output: string; error: string | null; duration: number }>>({});
+    const [codeResults, setCodeResults] = useState<
+        Record<string, { output: string; error: string | null; duration: number }>
+    >({});
     const [imageZoomed, setImageZoomed] = useState(false);
     const [imageLoading, setImageLoading] = useState(true);
     const [imageError, setImageError] = useState(false);
@@ -305,7 +407,10 @@ export const MessageBubble = React.memo(function MessageBubble({ role, content, 
                             <div className="max-w-md w-[300px] rounded-xl bg-zinc-900 border border-red-500/20 p-6 flex flex-col items-center gap-3">
                                 <span className="text-sm text-zinc-400">Image failed to load</span>
                                 <button
-                                    onClick={() => { setImageError(false); setImageLoading(true); }}
+                                    onClick={() => {
+                                        setImageError(false);
+                                        setImageLoading(true);
+                                    }}
                                     className="px-4 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-xs text-zinc-300 transition-colors"
                                 >
                                     Retry
@@ -316,7 +421,9 @@ export const MessageBubble = React.memo(function MessageBubble({ role, content, 
                         <div
                             className={cn(
                                 "rounded-xl overflow-hidden border border-zinc-800 cursor-pointer transition-all shadow-sm",
-                                imageZoomed ? "fixed inset-4 z-50 flex items-center justify-center bg-black/95 border-none" : "max-w-md bg-zinc-900",
+                                imageZoomed
+                                    ? "fixed inset-4 z-50 flex items-center justify-center bg-black/95 border-none"
+                                    : "max-w-md bg-zinc-900",
                                 (imageLoading || imageError) && !imageZoomed && "hidden"
                             )}
                             onClick={() => setImageZoomed(!imageZoomed)}
@@ -326,17 +433,37 @@ export const MessageBubble = React.memo(function MessageBubble({ role, content, 
                                 src={image}
                                 alt="Generated"
                                 crossOrigin="anonymous"
-                                onLoad={() => { setImageLoading(false); setImageError(false); }}
-                                onError={() => { setImageLoading(false); setImageError(true); }}
-                                className={cn("w-full h-auto", imageZoomed && "max-w-full max-h-full object-contain rounded-xl")}
+                                onLoad={() => {
+                                    setImageLoading(false);
+                                    setImageError(false);
+                                }}
+                                onError={() => {
+                                    setImageLoading(false);
+                                    setImageError(true);
+                                }}
+                                className={cn(
+                                    "w-full h-auto",
+                                    imageZoomed && "max-w-full max-h-full object-contain rounded-xl"
+                                )}
                             />
                         </div>
                         {!imageZoomed && !imageLoading && !imageError && (
                             <div className="absolute bottom-3 right-3 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <button onClick={(e) => { e.stopPropagation(); setImageZoomed(true); }} className="p-2 bg-black/60 hover:bg-black/80 backdrop-blur text-white rounded-lg transition-colors">
+                                <button
+                                    onClick={e => {
+                                        e.stopPropagation();
+                                        setImageZoomed(true);
+                                    }}
+                                    className="p-2 bg-black/60 hover:bg-black/80 backdrop-blur text-white rounded-lg transition-colors"
+                                >
                                     <ZoomIn className="w-4 h-4" />
                                 </button>
-                                <a href={image} download={`n0x-${Date.now()}.png`} onClick={(e) => e.stopPropagation()} className="p-2 bg-black/60 hover:bg-black/80 backdrop-blur text-white rounded-lg transition-colors">
+                                <a
+                                    href={image}
+                                    download={`n0x-${Date.now()}.png`}
+                                    onClick={e => e.stopPropagation()}
+                                    className="p-2 bg-black/60 hover:bg-black/80 backdrop-blur text-white rounded-lg transition-colors"
+                                >
                                     <Download className="w-4 h-4" />
                                 </a>
                             </div>
@@ -344,7 +471,12 @@ export const MessageBubble = React.memo(function MessageBubble({ role, content, 
                     </div>
                 )}
 
-                {imageZoomed && <div className="fixed inset-0 z-40 bg-black/90 backdrop-blur-sm" onClick={() => setImageZoomed(false)} />}
+                {imageZoomed && (
+                    <div
+                        className="fixed inset-0 z-40 bg-black/90 backdrop-blur-sm"
+                        onClick={() => setImageZoomed(false)}
+                    />
+                )}
 
                 {thinking && (
                     <div className="mb-2 text-sm border border-zinc-800 rounded-xl overflow-hidden bg-zinc-900/40">
@@ -353,8 +485,14 @@ export const MessageBubble = React.memo(function MessageBubble({ role, content, 
                             className="flex items-center gap-2 w-full px-4 py-2.5 hover:bg-zinc-800/50 transition-colors"
                         >
                             <Brain className="w-3.5 h-3.5 text-phosphor-dim" />
-                            <span className="font-mono text-[11px] font-medium tracking-wider uppercase text-zinc-400 group-hover:text-zinc-200">Reasoning Process</span>
-                            {showThinking ? <ChevronDown className="w-3.5 h-3.5 ml-auto text-zinc-500" /> : <ChevronRight className="w-3.5 h-3.5 ml-auto text-zinc-500" />}
+                            <span className="font-mono text-[11px] font-medium tracking-wider uppercase text-zinc-400 group-hover:text-zinc-200">
+                                Reasoning Process
+                            </span>
+                            {showThinking ? (
+                                <ChevronDown className="w-3.5 h-3.5 ml-auto text-zinc-500" />
+                            ) : (
+                                <ChevronRight className="w-3.5 h-3.5 ml-auto text-zinc-500" />
+                            )}
                         </button>
                         {showThinking && (
                             <div className="px-4 pb-4 pt-2 border-t border-zinc-800/80 bg-[#0a0a0a]/50">
@@ -370,7 +508,7 @@ export const MessageBubble = React.memo(function MessageBubble({ role, content, 
                     <div className="prose-crt select-text w-full max-w-none">
                         <ReactMarkdown
                             components={{
-                                code: (props) => (
+                                code: props => (
                                     <CodeBlock
                                         {...props}
                                         onRunCode={onRunCode}
@@ -378,7 +516,7 @@ export const MessageBubble = React.memo(function MessageBubble({ role, content, 
                                         runningCode={runningCode}
                                         handleRunCode={handleRunCode}
                                     />
-                                )
+                                ),
                             }}
                         >
                             {finalContent}

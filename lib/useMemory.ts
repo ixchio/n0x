@@ -15,21 +15,103 @@ const DB_NAME = "voidchat_memory";
 const STORE_NAME = "memories";
 
 const STOP_WORDS = new Set([
-    "the", "is", "at", "which", "on", "a", "an", "and", "or", "but",
-    "in", "with", "to", "for", "of", "not", "no", "can", "had", "has",
-    "have", "was", "were", "will", "would", "could", "should", "been",
-    "from", "are", "this", "that", "these", "those", "it", "its",
-    "they", "them", "their", "what", "how", "when", "where", "who",
-    "why", "all", "each", "every", "both", "few", "more", "most",
-    "other", "some", "such", "than", "too", "very", "just", "about",
-    "into", "over", "after", "before", "between", "under", "above",
-    "out", "off", "up", "down", "then", "once", "here", "there",
-    "also", "did", "do", "does", "done", "got", "get", "gets",
-    "you", "your", "our", "we", "my", "me", "him", "her", "his",
+    "the",
+    "is",
+    "at",
+    "which",
+    "on",
+    "a",
+    "an",
+    "and",
+    "or",
+    "but",
+    "in",
+    "with",
+    "to",
+    "for",
+    "of",
+    "not",
+    "no",
+    "can",
+    "had",
+    "has",
+    "have",
+    "was",
+    "were",
+    "will",
+    "would",
+    "could",
+    "should",
+    "been",
+    "from",
+    "are",
+    "this",
+    "that",
+    "these",
+    "those",
+    "it",
+    "its",
+    "they",
+    "them",
+    "their",
+    "what",
+    "how",
+    "when",
+    "where",
+    "who",
+    "why",
+    "all",
+    "each",
+    "every",
+    "both",
+    "few",
+    "more",
+    "most",
+    "other",
+    "some",
+    "such",
+    "than",
+    "too",
+    "very",
+    "just",
+    "about",
+    "into",
+    "over",
+    "after",
+    "before",
+    "between",
+    "under",
+    "above",
+    "out",
+    "off",
+    "up",
+    "down",
+    "then",
+    "once",
+    "here",
+    "there",
+    "also",
+    "did",
+    "do",
+    "does",
+    "done",
+    "got",
+    "get",
+    "gets",
+    "you",
+    "your",
+    "our",
+    "we",
+    "my",
+    "me",
+    "him",
+    "her",
+    "his",
 ]);
 
 function tokenize(text: string): string[] {
-    return text.toLowerCase()
+    return text
+        .toLowerCase()
         .replace(/[^a-z0-9\s]/g, " ")
         .split(/\s+/)
         .filter(w => w.length > 2 && !STOP_WORDS.has(w));
@@ -81,7 +163,7 @@ function embed(text: string): number[] {
             // TF-IDF-like weight: log(1 + count) * ngram_type_weight
             const isNgram = ngram.includes("_");
             const weight = isNgram ? 1.5 : 1.0; // Boost n-grams
-            const sign = (hash & 1) ? 1 : -1; // Random sign for better distribution
+            const sign = hash & 1 ? 1 : -1; // Random sign for better distribution
             vector[idx] += sign * count * Math.log(1 + count) * weight;
         }
     }
@@ -114,7 +196,7 @@ function openDB(): Promise<IDBDatabase> {
         const req = indexedDB.open(DB_NAME, 2); // Bump version for schema update
         req.onerror = () => reject(req.error);
         req.onsuccess = () => resolve(req.result);
-        req.onupgradeneeded = (e) => {
+        req.onupgradeneeded = e => {
             const db = (e.target as IDBOpenDBRequest).result;
             if (!db.objectStoreNames.contains(STORE_NAME)) {
                 db.createObjectStore(STORE_NAME, { keyPath: "id" });
@@ -143,12 +225,15 @@ export function useMemory() {
                     }));
                     setMemories(mems);
                     setIsLoaded(true);
-                    db?.close();
+                    if (db) db.close();
                 };
-                tx.onerror = () => { setIsLoaded(true); db?.close(); };
-            } catch {
+                req.onerror = tx.onerror = () => {
+                    setIsLoaded(true);
+                    if (db) db.close();
+                };
+            } catch (e) {
                 setIsLoaded(true);
-                db?.close();
+                if (db) db.close();
             }
         })();
     }, []);
@@ -192,43 +277,51 @@ export function useMemory() {
         }
     }, []);
 
-    const searchMemories = useCallback((query: string, limit = 5): Memory[] => {
-        if (memories.length === 0) return [];
+    const searchMemories = useCallback(
+        (query: string, limit = 5): Memory[] => {
+            if (memories.length === 0) return [];
 
-        const queryEmb = embed(query);
-        const queryKeywords = extractKeywords(query);
+            const queryEmb = embed(query);
+            const queryKeywords = extractKeywords(query);
 
-        // Precompute threshold to avoid creating thousands of objects if unneeded
-        // Score using BOTH vector similarity AND keyword matching
-        const scored: { m: Memory, score: number }[] = [];
+            // Precompute threshold to avoid creating thousands of objects if unneeded
+            // Score using BOTH vector similarity AND keyword matching
+            const scored: { m: Memory; score: number }[] = [];
 
-        for (let i = 0; i < memories.length; i++) {
-            const m = memories[i];
-            const vecScore = similarity(queryEmb, m.embedding);
+            for (let i = 0; i < memories.length; i++) {
+                const m = memories[i];
+                const vecScore = similarity(queryEmb, m.embedding);
 
-            // Fast exit: if vector is terrible, skip keyword calc
-            if (vecScore < 0.01) continue;
+                // Fast exit: if vector is terrible, skip keyword calc
+                if (vecScore < 0.01) continue;
 
-            const kwScore = keywordSimilarity(queryKeywords, m.keywords || []);
-            const combined = vecScore * 0.6 + kwScore * 0.4;
+                const kwScore = keywordSimilarity(queryKeywords, m.keywords || []);
+                const combined = vecScore * 0.6 + kwScore * 0.4;
 
-            if (combined > 0.03) {
-                scored.push({ m, score: combined });
+                if (combined > 0.03) {
+                    scored.push({ m, score: combined });
+                }
             }
-        }
 
-        return scored
-            .sort((a, b) => b.score - a.score)
-            .slice(0, limit)
-            .map(x => x.m);
-    }, [memories]);
+            return scored
+                .sort((a, b) => b.score - a.score)
+                .slice(0, limit)
+                .map(x => x.m);
+        },
+        [memories]
+    );
 
-    const getContext = useCallback((query: string): string => {
-        const relevant = searchMemories(query, 5);
-        if (relevant.length === 0) return "";
-        return "Relevant memories from past conversations:\n" +
-            relevant.map(m => `- [${new Date(m.timestamp).toLocaleDateString()}] ${m.content}`).join("\n");
-    }, [searchMemories]);
+    const getContext = useCallback(
+        (query: string): string => {
+            const relevant = searchMemories(query, 5);
+            if (relevant.length === 0) return "";
+            return (
+                "Relevant memories from past conversations:\n" +
+                relevant.map(m => `- [${new Date(m.timestamp).toLocaleDateString()}] ${m.content}`).join("\n")
+            );
+        },
+        [searchMemories]
+    );
 
     return {
         memories,

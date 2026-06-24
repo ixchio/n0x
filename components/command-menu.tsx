@@ -15,7 +15,14 @@ interface CommandMenuProps {
     onToggleRAG: () => void;
 }
 
-export function CommandMenu({ onLoadModel, onNewChat, ttsEnabled, onToggleTTS, ragEnabled, onToggleRAG }: CommandMenuProps) {
+export function CommandMenu({
+    onLoadModel,
+    onNewChat,
+    ttsEnabled,
+    onToggleTTS,
+    ragEnabled,
+    onToggleRAG,
+}: CommandMenuProps) {
     const [open, setOpen] = useState(false);
     const [keySounds, setKeySounds] = useState(false);
 
@@ -50,7 +57,9 @@ export function CommandMenu({ onLoadModel, onNewChat, ttsEnabled, onToggleTTS, r
                         placeholder="type a command..."
                         className="flex-1 bg-transparent text-txt-primary text-xs outline-none placeholder:text-txt-tertiary font-mono"
                     />
-                    <kbd className="text-[9px] text-txt-tertiary border border-crt-border px-1.5 py-0.5 rounded">esc</kbd>
+                    <kbd className="text-[9px] text-txt-tertiary border border-crt-border px-1.5 py-0.5 rounded">
+                        esc
+                    </kbd>
                 </div>
 
                 {/* List */}
@@ -58,30 +67,48 @@ export function CommandMenu({ onLoadModel, onNewChat, ttsEnabled, onToggleTTS, r
                     <Command.Empty className="py-4 text-center text-txt-tertiary text-xs">no results</Command.Empty>
 
                     {/* Actions */}
-                    <Command.Group heading={<span className="text-[10px] text-txt-tertiary uppercase tracking-wider px-1">actions</span>}>
+                    <Command.Group
+                        heading={
+                            <span className="text-[10px] text-txt-tertiary uppercase tracking-wider px-1">actions</span>
+                        }
+                    >
                         <Command.Item
-                            onSelect={() => { onNewChat(); setOpen(false); }}
+                            onSelect={() => {
+                                onNewChat();
+                                setOpen(false);
+                            }}
                             className="flex items-center gap-2 px-2 py-1.5 text-xs text-txt-secondary rounded cursor-pointer hover:bg-crt-hover hover:text-phosphor data-[selected=true]:bg-crt-hover data-[selected=true]:text-phosphor"
                         >
                             <Terminal className="w-3 h-3" />
                             new session
                         </Command.Item>
                         <Command.Item
-                            onSelect={() => { onToggleTTS(); setOpen(false); }}
+                            onSelect={() => {
+                                onToggleTTS();
+                                setOpen(false);
+                            }}
                             className="flex items-center gap-2 px-2 py-1.5 text-xs text-txt-secondary rounded cursor-pointer hover:bg-crt-hover hover:text-phosphor data-[selected=true]:bg-crt-hover data-[selected=true]:text-phosphor"
                         >
                             {ttsEnabled ? <VolumeX className="w-3 h-3" /> : <Volume2 className="w-3 h-3" />}
                             {ttsEnabled ? "disable tts" : "enable tts"}
                         </Command.Item>
                         <Command.Item
-                            onSelect={() => { onToggleRAG(); setOpen(false); }}
+                            onSelect={() => {
+                                onToggleRAG();
+                                setOpen(false);
+                            }}
                             className="flex items-center gap-2 px-2 py-1.5 text-xs text-txt-secondary rounded cursor-pointer hover:bg-crt-hover hover:text-phosphor data-[selected=true]:bg-crt-hover data-[selected=true]:text-phosphor"
                         >
                             <Database className="w-3 h-3" />
                             {ragEnabled ? "close knowledge base" : "open knowledge base"}
                         </Command.Item>
                         <Command.Item
-                            onSelect={() => { const next = !keySounds; setKeySoundEnabled(next); setKeySounds(next); setOpen(false); }}
+                            onSelect={() => {
+                                const next = !keySounds;
+                                setKeySoundEnabled(next);
+                                setKeySounds(next);
+                                setOpen(false);
+                            }}
                             className="flex items-center gap-2 px-2 py-1.5 text-xs text-txt-secondary rounded cursor-pointer hover:bg-crt-hover hover:text-phosphor data-[selected=true]:bg-crt-hover data-[selected=true]:text-phosphor"
                         >
                             <Keyboard className="w-3 h-3" />
@@ -90,11 +117,20 @@ export function CommandMenu({ onLoadModel, onNewChat, ttsEnabled, onToggleTTS, r
                     </Command.Group>
 
                     {/* Models */}
-                    <Command.Group heading={<span className="text-[10px] text-txt-tertiary uppercase tracking-wider px-1 mt-2">models</span>}>
-                        {WEBLLM_MODELS.map((model) => (
+                    <Command.Group
+                        heading={
+                            <span className="text-[10px] text-txt-tertiary uppercase tracking-wider px-1 mt-2">
+                                models
+                            </span>
+                        }
+                    >
+                        {WEBLLM_MODELS.map(model => (
                             <Command.Item
                                 key={model.id}
-                                onSelect={() => { onLoadModel(model.id); setOpen(false); }}
+                                onSelect={() => {
+                                    onLoadModel(model.id);
+                                    setOpen(false);
+                                }}
                                 className="flex items-center gap-2 px-2 py-1.5 text-xs text-txt-secondary rounded cursor-pointer hover:bg-crt-hover hover:text-phosphor data-[selected=true]:bg-crt-hover data-[selected=true]:text-phosphor"
                             >
                                 <Cpu className="w-3 h-3" />

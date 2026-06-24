@@ -23,12 +23,55 @@ const DB_VER = 1;
 const STORE = "conversations";
 const ACTIVE_KEY = "n0x_activeConv";
 
+let messageIdCounter = 0;
+
+export function createChatMessageId(): string {
+    if (globalThis.crypto?.randomUUID) {
+        return `msg_${globalThis.crypto.randomUUID()}`;
+    }
+
+    messageIdCounter += 1;
+    return `msg_${Date.now()}_${messageIdCounter}_${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function createConversationId(): string {
+    return `conv_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function ensureUniqueMessageIds(messages: ChatMessage[]): { messages: ChatMessage[]; changed: boolean } {
+    const seen = new Set<string>();
+    let changed = false;
+
+    const repaired = messages.map(message => {
+        const existingId = typeof message.id === "string" ? message.id.trim() : "";
+        let id = existingId;
+
+        if (!id || seen.has(id)) {
+            id = createChatMessageId();
+            changed = true;
+        }
+
+        seen.add(id);
+        return id === message.id ? message : { ...message, id };
+    });
+
+    return { messages: repaired, changed };
+}
+
+function repairConversation(conv: Conversation): { conversation: Conversation; changed: boolean } {
+    const { messages, changed } = ensureUniqueMessageIds(conv.messages || []);
+    return {
+        conversation: changed ? { ...conv, messages } : conv,
+        changed,
+    };
+}
+
 function openDB(): Promise<IDBDatabase> {
     return new Promise((resolve, reject) => {
         const req = indexedDB.open(DB_NAME, DB_VER);
         req.onerror = () => reject(req.error);
         req.onsuccess = () => resolve(req.result);
-        req.onupgradeneeded = (e) => {
+        req.onupgradeneeded = e => {
             const db = (e.target as IDBOpenDBRequest).result;
             if (!db.objectStoreNames.contains(STORE)) {
                 const s = db.createObjectStore(STORE, { keyPath: "id" });
@@ -58,7 +101,7 @@ export function useChatStore() {
         try {
             if (id) localStorage.setItem(ACTIVE_KEY, id);
             else localStorage.setItem(ACTIVE_KEY, "__new__");
-        } catch { }
+        } catch {}
     }, []);
 
     useEffect(() => {
@@ -69,12 +112,21 @@ export function useChatStore() {
                 const tx = db.transaction(STORE, "readonly");
                 const req = tx.objectStore(STORE).getAll();
                 req.onsuccess = () => {
-                    const all = (req.result || []).sort((a: Conversation, b: Conversation) => b.updatedAt - a.updatedAt);
+                    let repairedAny = false;
+                    const all = (req.result || [])
+                        .map((conv: Conversation) => {
+                            const repaired = repairConversation(conv);
+                            repairedAny = repairedAny || repaired.changed;
+                            return repaired.conversation;
+                        })
+                        .sort((a: Conversation, b: Conversation) => b.updatedAt - a.updatedAt);
                     setConversations(all);
 
                     // restore persisted active conversation
                     let stored: string | null = null;
-                    try { stored = localStorage.getItem(ACTIVE_KEY); } catch { }
+                    try {
+                        stored = localStorage.getItem(ACTIVE_KEY);
+                    } catch {}
 
                     if (stored === "__new__") {
                         // user explicitly clicked "new session" — stay on blank
@@ -88,9 +140,21 @@ export function useChatStore() {
                     }
 
                     setIsLoaded(true);
+
+                    if (repairedAny && db) {
+                        const repairTx = db.transaction(STORE, "readwrite");
+                        const store = repairTx.objectStore(STORE);
+                        all.forEach((conv: Conversation) => store.put(conv));
+                        repairTx.oncomplete = () => db?.close();
+                        repairTx.onerror = () => db?.close();
+                    } else {
+                        db?.close();
+                    }
+                };
+                tx.onerror = () => {
+                    setIsLoaded(true);
                     db?.close();
                 };
-                tx.onerror = () => { setIsLoaded(true); db?.close(); };
             } catch {
                 setIsLoaded(true);
                 db?.close();
@@ -114,59 +178,75 @@ export function useChatStore() {
         }
     }, []);
 
-    const addMessage = useCallback((msg: Omit<ChatMessage, "timestamp">) => {
-        const message: ChatMessage = { ...msg, timestamp: Date.now() };
+    const addMessage = useCallback(
+        (msg: Omit<ChatMessage, "timestamp" | "id"> & { id?: string }) => {
+            let message: ChatMessage = {
+                ...msg,
+                id: msg.id?.trim() || createChatMessageId(),
+                timestamp: Date.now(),
+            };
 
-        setConversations(prev => {
-            let convs = [...prev];
-            // use the ref — always has the freshest value
-            let conv = convs.find(c => c.id === activeRef.current);
+            setConversations(prev => {
+                let convs = [...prev];
+                // use the ref — always has the freshest value
+                let conv = convs.find(c => c.id === activeRef.current);
 
-            if (!conv) {
-                const id = `conv_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-                conv = {
-                    id,
-                    title: msg.role === "user" ? titleFrom(msg.content) : "New chat",
-                    messages: [message],
-                    createdAt: Date.now(),
-                    updatedAt: Date.now(),
-                };
-                convs = [conv, ...convs];
-                // sync ref immediately so the next addMessage finds this conv
-                setActiveId(id);
-            } else {
-                conv = {
-                    ...conv,
-                    messages: [...conv.messages, message],
-                    updatedAt: Date.now(),
-                    title: conv.title === "New chat" && msg.role === "user" ? titleFrom(msg.content) : conv.title,
-                };
-                convs = convs.map(c => c.id === conv!.id ? conv! : c);
-            }
+                if (!conv) {
+                    const id = createConversationId();
+                    conv = {
+                        id,
+                        title: msg.role === "user" ? titleFrom(msg.content) : "New chat",
+                        messages: [message],
+                        createdAt: Date.now(),
+                        updatedAt: Date.now(),
+                    };
+                    convs = [conv, ...convs];
+                    // sync ref immediately so the next addMessage finds this conv
+                    setActiveId(id);
+                } else {
+                    const repaired = ensureUniqueMessageIds(conv.messages);
+                    const existingIds = new Set(repaired.messages.map(m => m.id));
+                    if (existingIds.has(message.id)) {
+                        message = { ...message, id: createChatMessageId() };
+                    }
 
-            persist(conv);
-            return convs;
-        });
+                    conv = {
+                        ...conv,
+                        messages: [...repaired.messages, message],
+                        updatedAt: Date.now(),
+                        title: conv.title === "New chat" && msg.role === "user" ? titleFrom(msg.content) : conv.title,
+                    };
+                    convs = convs.map(c => (c.id === conv!.id ? conv! : c));
+                }
 
-        return message;
-    }, [persist, setActiveId]);
-
-    const updateMessage = useCallback((messageId: string, update: Partial<ChatMessage>) => {
-        setConversations(prev => {
-            const id = activeRef.current;
-            const convs = prev.map(conv => {
-                if (conv.id !== id) return conv;
-                return {
-                    ...conv,
-                    messages: conv.messages.map(m => m.id === messageId ? { ...m, ...update } : m),
-                    updatedAt: Date.now(),
-                };
+                persist(conv);
+                return convs;
             });
-            const updated = convs.find(c => c.id === id);
-            if (updated) persist(updated);
-            return convs;
-        });
-    }, [persist]);
+
+            return message;
+        },
+        [persist, setActiveId]
+    );
+
+    const updateMessage = useCallback(
+        (messageId: string, update: Partial<ChatMessage>) => {
+            setConversations(prev => {
+                const id = activeRef.current;
+                const convs = prev.map(conv => {
+                    if (conv.id !== id) return conv;
+                    return {
+                        ...conv,
+                        messages: conv.messages.map(m => (m.id === messageId ? { ...m, ...update } : m)),
+                        updatedAt: Date.now(),
+                    };
+                });
+                const updated = convs.find(c => c.id === id);
+                if (updated) persist(updated);
+                return convs;
+            });
+        },
+        [persist]
+    );
 
     const newConversation = useCallback(() => setActiveId(null), [setActiveId]);
 
@@ -177,50 +257,64 @@ export function useChatStore() {
      * including the message identified by `messageId`, then switches to it.
      * Returns the new conversation ID.
      */
-    const branchFrom = useCallback((messageId: string): string => {
-        const id = activeRef.current;
-        const sourceConv = conversations.find(c => c.id === id);
-        if (!sourceConv) return "";
+    const branchFrom = useCallback(
+        (messageId: string): string => {
+            const id = activeRef.current;
+            const sourceConv = conversations.find(c => c.id === id);
+            if (!sourceConv) return "";
 
-        const cutIdx = sourceConv.messages.findIndex(m => m.id === messageId);
-        if (cutIdx === -1) return "";
+            const cutIdx = sourceConv.messages.findIndex(m => m.id === messageId);
+            if (cutIdx === -1) return "";
 
-        const slicedMessages = sourceConv.messages.slice(0, cutIdx + 1);
-        const newId = `conv_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-        const firstUserMsg = slicedMessages.find(m => m.role === "user");
-        const branchConv: Conversation = {
-            id: newId,
-            title: `Branch: ${firstUserMsg ? titleFrom(firstUserMsg.content) : "conversation"}`,
-            messages: slicedMessages.map(m => ({ ...m })),
-            createdAt: Date.now(),
-            updatedAt: Date.now(),
-        };
+            const slicedMessages = sourceConv.messages.slice(0, cutIdx + 1);
+            const newId = createConversationId();
+            const firstUserMsg = slicedMessages.find(m => m.role === "user");
+            const repaired = ensureUniqueMessageIds(slicedMessages.map(m => ({ ...m })));
+            const branchConv: Conversation = {
+                id: newId,
+                title: `Branch: ${firstUserMsg ? titleFrom(firstUserMsg.content) : "conversation"}`,
+                messages: repaired.messages,
+                createdAt: Date.now(),
+                updatedAt: Date.now(),
+            };
 
-        setConversations(prev => [branchConv, ...prev]);
-        persist(branchConv);
-        setActiveId(newId);
-        return newId;
-    }, [conversations, persist, setActiveId]);
+            setConversations(prev => [branchConv, ...prev]);
+            persist(branchConv);
+            setActiveId(newId);
+            return newId;
+        },
+        [conversations, persist, setActiveId]
+    );
 
-    const deleteConversation = useCallback(async (id: string) => {
-        let db: IDBDatabase | null = null;
-        try {
-            db = await openDB();
-            const tx = db.transaction(STORE, "readwrite");
-            tx.objectStore(STORE).delete(id);
-            tx.oncomplete = () => db?.close();
-            tx.onerror = () => db?.close();
-        } catch {
-            db?.close();
-        }
-        setConversations(prev => prev.filter(c => c.id !== id));
-        if (activeRef.current === id) setActiveId(null);
-    }, [setActiveId]);
+    const deleteConversation = useCallback(
+        async (id: string) => {
+            let db: IDBDatabase | null = null;
+            try {
+                db = await openDB();
+                const tx = db.transaction(STORE, "readwrite");
+                tx.objectStore(STORE).delete(id);
+                tx.oncomplete = () => db?.close();
+                tx.onerror = () => db?.close();
+            } catch {
+                db?.close();
+            }
+            setConversations(prev => prev.filter(c => c.id !== id));
+            if (activeRef.current === id) setActiveId(null);
+        },
+        [setActiveId]
+    );
 
     return {
-        conversations, activeId, messages, isLoaded,
+        conversations,
+        activeId,
+        messages,
+        isLoaded,
         activeConversation: active,
-        addMessage, updateMessage,
-        newConversation, switchConversation, deleteConversation, branchFrom,
+        addMessage,
+        updateMessage,
+        newConversation,
+        switchConversation,
+        deleteConversation,
+        branchFrom,
     };
 }

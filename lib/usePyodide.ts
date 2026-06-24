@@ -40,7 +40,9 @@ export function usePyodide() {
         // Memory Guard
         const deviceMemory = (navigator as any).deviceMemory;
         if (deviceMemory && deviceMemory <= 4) {
-            console.warn(`[Hardware Warning] Device reports ${deviceMemory}GB RAM. Loading Pyodide may push this tab over its memory limit and crash.`);
+            console.warn(
+                `[Hardware Warning] Device reports ${deviceMemory}GB RAM. Loading Pyodide may push this tab over its memory limit and crash.`
+            );
         }
 
         try {
@@ -109,12 +111,17 @@ sys.stderr = _out
             // Clear output
             await py.runPythonAsync("_out.clear()");
 
-            // Auto-load packages from imports (graceful fallback)
+            // Auto-load packages from imports
             try {
                 await py.loadPackagesFromImports(code);
             } catch (pkgErr: any) {
-                console.warn("Package auto-load warning:", pkgErr.message);
-                // Continue execution — the import itself may still work or give a clearer error
+                console.warn("Package auto-load failed:", pkgErr.message);
+                // Return early with a helpful error instead of continuing with broken imports
+                return {
+                    output: "",
+                    error: `Failed to install required packages: ${pkgErr.message}.\n\nTip: Use 'import micropip; await micropip.install("package")' to install packages manually.`,
+                    duration: Date.now() - start,
+                };
             }
 
             // Execute

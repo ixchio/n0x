@@ -2,8 +2,15 @@
 
 import React, { Component, ErrorInfo, ReactNode } from "react";
 
-interface Props { children: ReactNode; fallback?: ReactNode }
-interface State { hasError: boolean; error: Error | null; info: string }
+interface Props {
+    children: ReactNode;
+    fallback?: ReactNode;
+}
+interface State {
+    hasError: boolean;
+    error: Error | null;
+    info: string;
+}
 
 export class ErrorBoundary extends Component<Props, State> {
     constructor(props: Props) {
@@ -32,16 +39,18 @@ export class ErrorBoundary extends Component<Props, State> {
                 <div className="max-w-md w-full bg-crt-surface border border-crt-border rounded p-6 space-y-4">
                     <div className="flex items-center gap-2">
                         <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                        <h2 className="text-sm font-mono text-red-400">
-                            {gpuCrash ? "GPU Error" : "Runtime Error"}
-                        </h2>
+                        <h2 className="text-sm font-mono text-red-400">{gpuCrash ? "GPU Error" : "Runtime Error"}</h2>
                     </div>
 
                     <p className="text-xs font-mono text-txt-secondary leading-relaxed">
-                        {gpuCrash
-                            ? <>WebGPU crashed — probably out of VRAM. Try a <span className="text-phosphor">smaller model</span> or close other tabs.</>
-                            : <>Something broke. This shouldn&apos;t happen.</>
-                        }
+                        {gpuCrash ? (
+                            <>
+                                WebGPU crashed — probably out of VRAM. Try a{" "}
+                                <span className="text-phosphor">smaller model</span> or close other tabs.
+                            </>
+                        ) : (
+                            <>Something broke. This shouldn&apos;t happen.</>
+                        )}
                     </p>
 
                     {this.state.error && (

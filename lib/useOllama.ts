@@ -68,18 +68,18 @@ export const useOllama = create<OllamaState>((set, get) => ({
                 name: m.name,
                 size: m.size,
             }));
-            set({ 
-                isSupported: true, 
-                models, 
-                status: "ready", 
+            set({
+                isSupported: true,
+                models,
+                status: "ready",
                 error: null,
-                loadedModel: get().loadedModel || (models.length > 0 ? models[0].name : null)
+                loadedModel: get().loadedModel || (models.length > 0 ? models[0].name : null),
             });
         } catch (e: any) {
             // If the error is a fetch TypeError, it's likely CORS or the server is down.
             let errorMsg = "Ollama not reachable at " + baseUrl;
             if (e.message === "Failed to fetch") {
-                 errorMsg = `Cannot connect to Ollama. Make sure it's running and CORS is enabled: \`OLLAMA_ORIGINS="*" ollama serve\``;
+                errorMsg = `Cannot connect to Ollama. Make sure it's running and CORS is enabled: \`OLLAMA_ORIGINS="*" ollama serve\``;
             }
             set({ isSupported: false, error: errorMsg, status: "error" });
         }
@@ -88,15 +88,15 @@ export const useOllama = create<OllamaState>((set, get) => ({
     startPolling: () => {
         // Stop any existing polling first
         get().stopPolling();
-        
+
         // Initial check
         get().init();
-        
+
         // Poll every 3 seconds
         const interval = setInterval(() => {
             get().init();
         }, 3000);
-        
+
         set({ pollInterval: interval });
     },
 
@@ -142,35 +142,45 @@ export const useOllama = create<OllamaState>((set, get) => ({
             const reader = res.body.getReader();
             const decoder = new TextDecoder();
             let fullResponse = "";
+            let jsonBuffer = "";
 
             while (true) {
                 const { done, value } = await reader.read();
-                if (done) break;
+                if (done) {
+                    if (jsonBuffer.trim()) consumeLine(jsonBuffer.trim());
+                    break;
+                }
 
-                const chunk = decoder.decode(value, { stream: true });
-                const lines = chunk.split("\n").filter(l => l.trim() !== "");
+                jsonBuffer += decoder.decode(value, { stream: true });
+                const lines = jsonBuffer.split(/\r?\n/);
+                jsonBuffer = lines.pop() || "";
 
                 for (const line of lines) {
-                    try {
-                        const parsed = JSON.parse(line);
-                        if (parsed.message?.content) {
-                            const token = parsed.message.content;
-                            fullResponse += token;
-                            tokenCount++;
-                            
-                            const now = performance.now();
-                            const duration = (now - startTime) / 1000;
-                            const tps = duration > 0 ? Math.round(tokenCount / duration) : 0;
-                            
-                            if (tokenCount % 5 === 0) {
-                                set({ stats: { tps, totalTokens: tokenCount, lastTokenTime: now } });
-                            }
-                            
-                            onToken?.(token);
-                        }
-                    } catch (e) {
-                        console.warn("Failed to parse Ollama JSON line", line);
+                    consumeLine(line.trim());
+                }
+            }
+
+            function consumeLine(line: string) {
+                if (!line) return;
+                try {
+                    const parsed = JSON.parse(line);
+                    const token = parsed.message?.content;
+                    if (!token) return;
+
+                    fullResponse += token;
+                    tokenCount++;
+
+                    const now = performance.now();
+                    const duration = (now - startTime) / 1000;
+                    const tps = duration > 0 ? Math.round(tokenCount / duration) : 0;
+
+                    if (tokenCount % 5 === 0) {
+                        set({ stats: { tps, totalTokens: tokenCount, lastTokenTime: now } });
                     }
+
+                    onToken?.(token);
+                } catch {
+                    console.warn("Failed to parse Ollama JSON line", line);
                 }
             }
 
@@ -196,5 +206,5 @@ export const useOllama = create<OllamaState>((set, get) => ({
             abortController.abort();
         }
         set({ status: "ready" });
-    }
+    },
 }));

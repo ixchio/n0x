@@ -21,10 +21,6 @@
             "purpose": "any maskable"
         }
     ],
-    "categories": [
-        "productivity",
-        "utilities",
-        "developer-tools"
-    ],
+    "categories": ["productivity", "utilities", "developer-tools"],
     "prefer_related_applications": false
 }

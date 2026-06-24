@@ -15,10 +15,7 @@ interface ChromeAIState {
     error: string | null;
 
     init: () => Promise<void>;
-    generate: (
-        messages: { role: string; content: string }[],
-        onToken?: (token: string) => void,
-    ) => Promise<string>;
+    generate: (messages: { role: string; content: string }[], onToken?: (token: string) => void) => Promise<string>;
     stop: () => void;
 }
 
@@ -51,7 +48,11 @@ export const useChromeAI = create<ChromeAIState>((set, get) => ({
                 session = await lm.create();
                 set({ status: "ready" });
             } else {
-                set({ isSupported: false, status: "unavailable", error: "Chrome AI model not available on this device." });
+                set({
+                    isSupported: false,
+                    status: "unavailable",
+                    error: "Chrome AI model not available on this device.",
+                });
             }
         } catch (e: any) {
             set({ isSupported: false, status: "unavailable", error: e.message || "Chrome AI check failed" });

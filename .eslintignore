@@ -1,0 +1,5 @@
+.next/
+node_modules/
+*.old.ts
+*.old.tsx
+next-env.d.ts

@@ -32,7 +32,8 @@ export const useTTS = create<TTSState>((set, get) => ({
             const loadVoices = () => {
                 if (!synth) return;
                 const voices = synth.getVoices();
-                const preferredVoice = voices.find(v => v.name.includes("Google US English")) ||
+                const preferredVoice =
+                    voices.find(v => v.name.includes("Google US English")) ||
                     voices.find(v => v.name.includes("Natural")) ||
                     voices.find(v => v.lang.startsWith("en-US"));
 
@@ -55,20 +56,20 @@ export const useTTS = create<TTSState>((set, get) => ({
 
         // Strip markdown formatting so TTS doesn't speak asterisks, backticks, etc.
         const clean = text
-            .replace(/<think>[\s\S]*?<\/think>/g, "")  // remove thinking blocks
-            .replace(/```[\s\S]*?```/g, " code block omitted ")  // remove code blocks
-            .replace(/`([^`]+)`/g, "$1")  // inline code
-            .replace(/\*\*([^*]+)\*\*/g, "$1")  // bold
-            .replace(/\*([^*]+)\*/g, "$1")  // italic
-            .replace(/__([^_]+)__/g, "$1")  // bold alt
-            .replace(/_([^_]+)_/g, "$1")  // italic alt
-            .replace(/#+\s/g, "")  // headers
-            .replace(/!\[.*?\]\(.*?\)/g, "image")  // images
-            .replace(/\[([^\]]+)\]\(.*?\)/g, "$1")  // links
-            .replace(/^\s*[-*+]\s/gm, "")  // list bullets
-            .replace(/^\s*\d+\.\s/gm, "")  // numbered lists
-            .replace(/\n{2,}/g, ". ")  // double newlines to pauses
-            .replace(/\n/g, " ")  // single newlines
+            .replace(/<think>[\s\S]*?<\/think>/g, "") // remove thinking blocks
+            .replace(/```[\s\S]*?```/g, " code block omitted ") // remove code blocks
+            .replace(/`([^`]+)`/g, "$1") // inline code
+            .replace(/\*\*([^*]+)\*\*/g, "$1") // bold
+            .replace(/\*([^*]+)\*/g, "$1") // italic
+            .replace(/__([^_]+)__/g, "$1") // bold alt
+            .replace(/_([^_]+)_/g, "$1") // italic alt
+            .replace(/#+\s/g, "") // headers
+            .replace(/!\[.*?\]\(.*?\)/g, "image") // images
+            .replace(/\[([^\]]+)\]\(.*?\)/g, "$1") // links
+            .replace(/^\s*[-*+]\s/gm, "") // list bullets
+            .replace(/^\s*\d+\.\s/gm, "") // numbered lists
+            .replace(/\n{2,}/g, ". ") // double newlines to pauses
+            .replace(/\n/g, " ") // single newlines
             .trim();
 
         if (!clean) return;
@@ -98,5 +99,5 @@ export const useTTS = create<TTSState>((set, get) => ({
             synth.cancel();
             set({ isSpeaking: false });
         }
-    }
+    },
 }));

@@ -32,7 +32,7 @@ export function getKeySoundEnabled(): boolean {
 export function setKeySoundEnabled(on: boolean): void {
     try {
         localStorage.setItem(STORAGE_KEY, on ? "1" : "0");
-    } catch { }
+    } catch {}
 }
 
 // Play a single mechanical key click

@@ -4,8 +4,20 @@ import React, { useRef, useEffect, useState } from "react";
 import { AgentStep, AgentStatus } from "@/lib/useAgent";
 import { cn } from "@/lib/utils";
 import {
-    Search, FileText, Code, Brain, Zap, Loader2, CheckCircle,
-    AlertCircle, MessageSquare, ChevronDown, ChevronRight, Clock, Square, Bot,
+    Search,
+    FileText,
+    Code,
+    Brain,
+    Zap,
+    Loader2,
+    CheckCircle,
+    AlertCircle,
+    MessageSquare,
+    ChevronDown,
+    ChevronRight,
+    Clock,
+    Square,
+    Bot,
 } from "lucide-react";
 
 // ─── Agent Trace UI v2 ──────────────────────────────────────────────
@@ -16,13 +28,52 @@ import {
 // • Abort button wired to agent.abort()
 // • Connection lines between steps for visual flow
 
-const TOOL_CONFIG: Record<string, { icon: React.ElementType; color: string; label: string; bg: string; border: string }> = {
-    webSearch: { icon: Search, color: "text-blue-400", label: "WEB SEARCH", bg: "bg-blue-500/8", border: "border-blue-500/20" },
-    ragSearch: { icon: FileText, color: "text-amber-400", label: "DOCUMENT SEARCH", bg: "bg-amber-500/8", border: "border-amber-500/20" },
-    python: { icon: Code, color: "text-green-400", label: "PYTHON EXEC", bg: "bg-green-500/8", border: "border-green-500/20" },
-    memorySave: { icon: Brain, color: "text-purple-400", label: "MEMORY WRITE", bg: "bg-purple-500/8", border: "border-purple-500/20" },
-    memoryRecall: { icon: Brain, color: "text-purple-400", label: "MEMORY READ", bg: "bg-purple-500/8", border: "border-purple-500/20" },
-    imageGen: { icon: Zap, color: "text-pink-400", label: "IMAGE GEN", bg: "bg-pink-500/8", border: "border-pink-500/20" },
+const TOOL_CONFIG: Record<
+    string,
+    { icon: React.ElementType; color: string; label: string; bg: string; border: string }
+> = {
+    webSearch: {
+        icon: Search,
+        color: "text-blue-400",
+        label: "WEB SEARCH",
+        bg: "bg-blue-500/8",
+        border: "border-blue-500/20",
+    },
+    ragSearch: {
+        icon: FileText,
+        color: "text-amber-400",
+        label: "DOCUMENT SEARCH",
+        bg: "bg-amber-500/8",
+        border: "border-amber-500/20",
+    },
+    python: {
+        icon: Code,
+        color: "text-green-400",
+        label: "PYTHON EXEC",
+        bg: "bg-green-500/8",
+        border: "border-green-500/20",
+    },
+    memorySave: {
+        icon: Brain,
+        color: "text-purple-400",
+        label: "MEMORY WRITE",
+        bg: "bg-purple-500/8",
+        border: "border-purple-500/20",
+    },
+    memoryRecall: {
+        icon: Brain,
+        color: "text-purple-400",
+        label: "MEMORY READ",
+        bg: "bg-purple-500/8",
+        border: "border-purple-500/20",
+    },
+    imageGen: {
+        icon: Zap,
+        color: "text-pink-400",
+        label: "IMAGE GEN",
+        bg: "bg-pink-500/8",
+        border: "border-pink-500/20",
+    },
 };
 
 // ─── Step Card ──────────────────────────────────────────────────────
@@ -33,7 +84,11 @@ function StepCard({ step, isLast }: { step: AgentStep; isLast: boolean }) {
 
     const styles: Record<string, { bg: string; border: string; labelColor: string }> = {
         thought: { bg: "bg-zinc-900/30", border: "border-zinc-800/60", labelColor: "text-zinc-500" },
-        action: { bg: toolCfg?.bg || "bg-zinc-900/40", border: toolCfg?.border || "border-zinc-700/50", labelColor: toolCfg?.color || "text-zinc-400" },
+        action: {
+            bg: toolCfg?.bg || "bg-zinc-900/40",
+            border: toolCfg?.border || "border-zinc-700/50",
+            labelColor: toolCfg?.color || "text-zinc-400",
+        },
         observation: { bg: "bg-zinc-950/60", border: "border-zinc-800/40", labelColor: "text-zinc-600" },
         final: { bg: "bg-emerald-500/5", border: "border-emerald-500/25", labelColor: "text-emerald-400" },
         error: { bg: "bg-red-500/5", border: "border-red-500/25", labelColor: "text-red-400" },
@@ -47,26 +102,34 @@ function StepCard({ step, isLast }: { step: AgentStep; isLast: boolean }) {
             return <Icon className={cn("w-3.5 h-3.5", toolCfg.color)} />;
         }
         switch (step.type) {
-            case "thought": return <Brain className="w-3.5 h-3.5 text-zinc-500" />;
-            case "observation": return <MessageSquare className="w-3.5 h-3.5 text-zinc-600" />;
-            case "final": return <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />;
-            case "error": return <AlertCircle className="w-3.5 h-3.5 text-red-400" />;
-            default: return <Zap className="w-3.5 h-3.5 text-zinc-600" />;
+            case "thought":
+                return <Brain className="w-3.5 h-3.5 text-zinc-500" />;
+            case "observation":
+                return <MessageSquare className="w-3.5 h-3.5 text-zinc-600" />;
+            case "final":
+                return <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />;
+            case "error":
+                return <AlertCircle className="w-3.5 h-3.5 text-red-400" />;
+            default:
+                return <Zap className="w-3.5 h-3.5 text-zinc-600" />;
         }
     };
 
-    const label = step.type === "action" && toolCfg
-        ? toolCfg.label
-        : step.type === "thought" ? "REASONING"
-            : step.type === "observation" ? "RESULT"
-                : step.type === "final" ? "FINAL ANSWER"
-                    : step.type === "error" ? "ERROR"
-                        : "STEP";
+    const label =
+        step.type === "action" && toolCfg
+            ? toolCfg.label
+            : step.type === "thought"
+              ? "REASONING"
+              : step.type === "observation"
+                ? "RESULT"
+                : step.type === "final"
+                  ? "FINAL ANSWER"
+                  : step.type === "error"
+                    ? "ERROR"
+                    : "STEP";
 
     const isCollapsible = step.type === "observation" && step.content.length > 300;
-    const displayContent = collapsed
-        ? step.content.slice(0, 200) + "…"
-        : step.content;
+    const displayContent = collapsed ? step.content.slice(0, 200) + "…" : step.content;
 
     return (
         <div className="relative">
@@ -75,27 +138,35 @@ function StepCard({ step, isLast }: { step: AgentStep; isLast: boolean }) {
                 <div className="absolute left-[9px] top-[28px] w-px h-[calc(100%+4px)] bg-gradient-to-b from-zinc-800/80 to-zinc-800/20" />
             )}
 
-            <div className={cn(
-                "relative border rounded-lg transition-all duration-200",
-                "ml-5 pl-3 pr-3 py-2.5",
-                s.bg, s.border,
-                isLast && (step.type === "thought" || step.type === "action") && "animate-in fade-in slide-in-from-left-2 duration-300",
-            )}>
+            <div
+                className={cn(
+                    "relative border rounded-lg transition-all duration-200",
+                    "ml-5 pl-3 pr-3 py-2.5",
+                    s.bg,
+                    s.border,
+                    isLast &&
+                        (step.type === "thought" || step.type === "action") &&
+                        "animate-in fade-in slide-in-from-left-2 duration-300"
+                )}
+            >
                 {/* Timeline dot */}
-                <div className={cn(
-                    "absolute -left-5 top-3 w-2.5 h-2.5 rounded-full border-2 z-10",
-                    step.type === "final" ? "bg-emerald-400 border-emerald-400/50" :
-                        step.type === "error" ? "bg-red-400 border-red-400/50" :
-                            step.type === "action" ? `bg-zinc-700 ${toolCfg?.border || "border-zinc-600"}` :
-                                "bg-zinc-800 border-zinc-700",
-                )} />
+                <div
+                    className={cn(
+                        "absolute -left-5 top-3 w-2.5 h-2.5 rounded-full border-2 z-10",
+                        step.type === "final"
+                            ? "bg-emerald-400 border-emerald-400/50"
+                            : step.type === "error"
+                              ? "bg-red-400 border-red-400/50"
+                              : step.type === "action"
+                                ? `bg-zinc-700 ${toolCfg?.border || "border-zinc-600"}`
+                                : "bg-zinc-800 border-zinc-700"
+                    )}
+                />
 
                 {/* Header */}
                 <div className="flex items-center gap-2 mb-1">
                     <StepIcon />
-                    <span className={cn("text-[10px] font-mono font-bold tracking-widest", s.labelColor)}>
-                        {label}
-                    </span>
+                    <span className={cn("text-[10px] font-mono font-bold tracking-widest", s.labelColor)}>{label}</span>
 
                     {/* Duration badge for tool executions */}
                     {step.durationMs != null && (
@@ -107,21 +178,32 @@ function StepCard({ step, isLast }: { step: AgentStep; isLast: boolean }) {
                     )}
 
                     <span className="text-[9px] text-zinc-700 font-mono ml-auto tabular-nums">
-                        {new Date(step.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+                        {new Date(step.timestamp).toLocaleTimeString([], {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                            second: "2-digit",
+                        })}
                     </span>
                 </div>
 
                 {/* Content */}
-                <div className={cn(
-                    "text-xs leading-relaxed whitespace-pre-wrap break-words",
-                    step.type === "thought" ? "text-zinc-400 italic font-sans" :
-                        step.type === "observation" ? "text-zinc-500 font-mono text-[11px]" :
-                            step.type === "action" ? "text-zinc-300 font-mono text-[11px]" :
-                                step.type === "final" ? "text-zinc-200 font-sans" :
-                                    step.type === "error" ? "text-red-300 font-mono text-[11px]" :
-                                        "text-zinc-400",
-                    isCollapsible && !collapsed && "max-h-48 overflow-y-auto no-scrollbar",
-                )}>
+                <div
+                    className={cn(
+                        "text-xs leading-relaxed whitespace-pre-wrap break-words",
+                        step.type === "thought"
+                            ? "text-zinc-400 italic font-sans"
+                            : step.type === "observation"
+                              ? "text-zinc-500 font-mono text-[11px]"
+                              : step.type === "action"
+                                ? "text-zinc-300 font-mono text-[11px]"
+                                : step.type === "final"
+                                  ? "text-zinc-200 font-sans"
+                                  : step.type === "error"
+                                    ? "text-red-300 font-mono text-[11px]"
+                                    : "text-zinc-400",
+                        isCollapsible && !collapsed && "max-h-48 overflow-y-auto no-scrollbar"
+                    )}
+                >
                     {displayContent}
                 </div>
 
@@ -175,13 +257,18 @@ export function AgentTrace({ steps, status, iteration, isActive, elapsedMs = 0, 
         <div className="w-full my-4 border border-zinc-800/60 rounded-xl overflow-hidden bg-zinc-950/30">
             {/* Header bar */}
             <div className="flex items-center gap-2 px-4 py-2.5 bg-zinc-900/30 border-b border-zinc-800/40">
-                <div className={cn(
-                    "w-2 h-2 rounded-full shrink-0",
-                    isRunning ? "bg-amber-400 animate-pulse" :
-                        status === "done" ? "bg-emerald-400" :
-                            status === "error" ? "bg-red-400" :
-                                "bg-zinc-600"
-                )} />
+                <div
+                    className={cn(
+                        "w-2 h-2 rounded-full shrink-0",
+                        isRunning
+                            ? "bg-amber-400 animate-pulse"
+                            : status === "done"
+                              ? "bg-emerald-400"
+                              : status === "error"
+                                ? "bg-red-400"
+                                : "bg-zinc-600"
+                    )}
+                />
 
                 <Bot className="w-3.5 h-3.5 text-zinc-500" />
 
@@ -212,9 +299,7 @@ export function AgentTrace({ steps, status, iteration, isActive, elapsedMs = 0, 
                 )}
 
                 {/* Spinner */}
-                {isRunning && (
-                    <Loader2 className="w-3.5 h-3.5 text-zinc-500 animate-spin shrink-0" />
-                )}
+                {isRunning && <Loader2 className="w-3.5 h-3.5 text-zinc-500 animate-spin shrink-0" />}
             </div>
 
             {/* Steps */}
@@ -229,9 +314,18 @@ export function AgentTrace({ steps, status, iteration, isActive, elapsedMs = 0, 
                         <div className="absolute -left-5 top-2 w-2.5 h-2.5 rounded-full bg-amber-400/50 border-2 border-amber-400/30 animate-pulse" />
                         <div className="flex items-center gap-2 py-2">
                             <div className="flex gap-0.5">
-                                <span className="w-1 h-1 bg-zinc-500 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
-                                <span className="w-1 h-1 bg-zinc-500 rounded-full animate-bounce" style={{ animationDelay: "100ms" }} />
-                                <span className="w-1 h-1 bg-zinc-500 rounded-full animate-bounce" style={{ animationDelay: "200ms" }} />
+                                <span
+                                    className="w-1 h-1 bg-zinc-500 rounded-full animate-bounce"
+                                    style={{ animationDelay: "0ms" }}
+                                />
+                                <span
+                                    className="w-1 h-1 bg-zinc-500 rounded-full animate-bounce"
+                                    style={{ animationDelay: "100ms" }}
+                                />
+                                <span
+                                    className="w-1 h-1 bg-zinc-500 rounded-full animate-bounce"
+                                    style={{ animationDelay: "200ms" }}
+                                />
                             </div>
                             <span className="text-[10px] font-mono text-zinc-600">reasoning…</span>
                         </div>

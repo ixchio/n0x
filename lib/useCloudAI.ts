@@ -47,7 +47,7 @@ const GROQ_MODELS = [
     "llama-3.1-8b-instant",
     "mixtral-8x7b-32768",
     "gemma2-9b-it",
-    "deepseek-r1-distill-llama-70b"
+    "deepseek-r1-distill-llama-70b",
 ];
 
 // Custom sessionStorage adapter — API keys should NOT persist in localStorage
@@ -87,7 +87,13 @@ export const useCloudAI = create<CloudState>()(
                     set({ models: GROQ_MODELS, loadedModel: get().loadedModel || DEFAULT_MODEL });
                 } else if (url.includes("openrouter.ai")) {
                     const orModels = ["liquid/lfm-40b", "google/gemini-2.5-flash", "meta-llama/llama-3.3-70b-instruct"];
-                    set({ models: orModels, loadedModel: get().loadedModel && orModels.includes(get().loadedModel!) ? get().loadedModel : orModels[0] });
+                    set({
+                        models: orModels,
+                        loadedModel:
+                            get().loadedModel && orModels.includes(get().loadedModel!)
+                                ? get().loadedModel
+                                : orModels[0],
+                    });
                 }
                 // Auto-fetch models when both credentials are set
                 if (apiKey && url) {
@@ -107,7 +113,7 @@ export const useCloudAI = create<CloudState>()(
                 set({ fetchingModels: true });
                 try {
                     const res = await fetch(`${baseUrl}/models`, {
-                        headers: { "Authorization": `Bearer ${apiKey}` },
+                        headers: { Authorization: `Bearer ${apiKey}` },
                     });
                     if (!res.ok) {
                         // Not all providers support /models — fall back silently
@@ -159,9 +165,9 @@ export const useCloudAI = create<CloudState>()(
                 try {
                     const res = await fetch(`${baseUrl}/chat/completions`, {
                         method: "POST",
-                        headers: { 
+                        headers: {
                             "Content-Type": "application/json",
-                            "Authorization": `Bearer ${apiKey}`
+                            Authorization: `Bearer ${apiKey}`,
                         },
                         body: JSON.stringify({
                             model: loadedModel,
@@ -180,37 +186,47 @@ export const useCloudAI = create<CloudState>()(
                     const reader = res.body.getReader();
                     const decoder = new TextDecoder();
                     let fullResponse = "";
+                    let sseBuffer = "";
 
                     while (true) {
                         const { done, value } = await reader.read();
-                        if (done) break;
+                        if (done) {
+                            if (sseBuffer.trim()) {
+                                consumeSSELine(sseBuffer.trim());
+                            }
+                            break;
+                        }
 
-                        const chunk = decoder.decode(value, { stream: true });
-                        const lines = chunk.split("\n").filter(l => l.trim() !== "" && l.trim() !== "data: [DONE]");
+                        sseBuffer += decoder.decode(value, { stream: true });
+                        const lines = sseBuffer.split(/\r?\n/);
+                        sseBuffer = lines.pop() || "";
 
                         for (const line of lines) {
-                            if (line.startsWith("data: ")) {
-                                try {
-                                    const parsed = JSON.parse(line.slice(6));
-                                    if (parsed.choices?.[0]?.delta?.content) {
-                                        const token = parsed.choices[0].delta.content;
-                                        fullResponse += token;
-                                        tokenCount++;
-                                        
-                                        const now = performance.now();
-                                        const duration = (now - startTime) / 1000;
-                                        const tps = duration > 0 ? Math.round(tokenCount / duration) : 0;
-                                        
-                                        if (tokenCount % 5 === 0) {
-                                            set({ stats: { tps, totalTokens: tokenCount, lastTokenTime: now } });
-                                        }
-                                        
-                                        onToken?.(token);
-                                    }
-                                } catch (e) {
-                                    // ignore parse errors for partial chunks
-                                }
+                            consumeSSELine(line.trim());
+                        }
+                    }
+
+                    function consumeSSELine(line: string) {
+                        if (!line || line === "data: [DONE]" || !line.startsWith("data: ")) return;
+                        try {
+                            const parsed = JSON.parse(line.slice(6));
+                            const token = parsed.choices?.[0]?.delta?.content;
+                            if (!token) return;
+
+                            fullResponse += token;
+                            tokenCount++;
+
+                            const now = performance.now();
+                            const duration = (now - startTime) / 1000;
+                            const tps = duration > 0 ? Math.round(tokenCount / duration) : 0;
+
+                            if (tokenCount % 5 === 0) {
+                                set({ stats: { tps, totalTokens: tokenCount, lastTokenTime: now } });
                             }
+
+                            onToken?.(token);
+                        } catch {
+                            // Keep streaming even if a provider emits a non-standard event.
                         }
                     }
 
@@ -219,6 +235,7 @@ export const useCloudAI = create<CloudState>()(
                     const tps = duration > 0 ? Math.round(tokenCount / duration) : 0;
                     set({ stats: { tps, totalTokens: tokenCount, lastTokenTime: now }, status: "ready" });
                     addTokens(tokenCount);
+                    abortController = null; // Reset after successful completion
 
                     return fullResponse;
                 } catch (e: any) {
@@ -234,14 +251,15 @@ export const useCloudAI = create<CloudState>()(
             stop: () => {
                 if (abortController) {
                     abortController.abort();
+                    abortController = null; // Reset after abort
                 }
                 set({ status: "ready" });
-            }
+            },
         }),
         {
             name: "n0x-cloud-storage",
             storage: sessionStorageAdapter as any,
-            partialize: (state) => ({ baseUrl: state.baseUrl, apiKey: state.apiKey, loadedModel: state.loadedModel }),
+            partialize: state => ({ baseUrl: state.baseUrl, apiKey: state.apiKey, loadedModel: state.loadedModel }),
         }
     )
 );

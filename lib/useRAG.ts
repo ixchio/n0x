@@ -1,6 +1,7 @@
 "use client";
 
 import { create } from "zustand";
+import { trackFunnelEvent } from "@/lib/analytics";
 
 interface RAGDocument {
     id: string;
@@ -34,7 +35,7 @@ const MAX_DIRECT_INJECT_SIZE = 8000;
 // Singleton Worker interface
 let ragWorker: Worker | null = null;
 let msgIdCounter = 0;
-const resolvers = new Map<number, { resolve: Function, reject: Function }>();
+const resolvers = new Map<number, { resolve: Function; reject: Function; timeout: ReturnType<typeof setTimeout> }>();
 
 function getWorker(onStatus?: (status: string) => void): Worker {
     if (typeof window === "undefined") return null as any; // SSR guard
@@ -42,25 +43,37 @@ function getWorker(onStatus?: (status: string) => void): Worker {
     if (!ragWorker) {
         ragWorker = new Worker(new URL("./rag.worker.ts", import.meta.url), { type: "module" });
 
-        ragWorker.onmessage = (e) => {
+        ragWorker.onmessage = e => {
             const { id, result, error, done, status } = e.data;
 
             if (status && window.__ON_RAG_STATUS) {
                 window.__ON_RAG_STATUS(status);
             }
 
-            if (done && resolvers.has(id)) {
+            if (resolvers.has(id)) {
+                const pending = resolvers.get(id)!;
                 if (error) {
-                    resolvers.get(id)!.reject(new Error(error));
-                } else {
-                    resolvers.get(id)!.resolve(result);
+                    clearTimeout(pending.timeout);
+                    pending.reject(new Error(error));
+                    resolvers.delete(id); // Delete immediately on error
+                } else if (done) {
+                    clearTimeout(pending.timeout);
+                    pending.resolve(result);
+                    resolvers.delete(id);
                 }
-                resolvers.delete(id);
             }
         };
 
-        ragWorker.onerror = (e) => {
+        ragWorker.onerror = e => {
             console.error("Worker fatal error:", e);
+            const error = new Error("Document worker crashed. Try a smaller file or clear the RAG cache.");
+            for (const [id, pending] of resolvers) {
+                clearTimeout(pending.timeout);
+                pending.reject(error);
+                resolvers.delete(id);
+            }
+            ragWorker?.terminate();
+            ragWorker = null;
         };
     }
 
@@ -73,9 +86,16 @@ function getWorker(onStatus?: (status: string) => void): Worker {
 function postToWorker(action: string, payload: any, onStatus?: (s: string) => void): Promise<any> {
     return new Promise((resolve, reject) => {
         const id = ++msgIdCounter;
-        resolvers.set(id, { resolve, reject });
+        const timeoutMs = action === "ADD_FILE" ? 300_000 : 60_000;
+        const timeout = setTimeout(() => {
+            resolvers.delete(id);
+            reject(new Error(`${action} timed out. Try a smaller file or reload the app.`));
+        }, timeoutMs);
+        resolvers.set(id, { resolve, reject, timeout });
         const worker = getWorker(onStatus);
         if (!worker) {
+            clearTimeout(timeout);
+            resolvers.delete(id);
             reject(new Error("Worker not available"));
             return;
         }
@@ -92,9 +112,13 @@ export const useRAG = create<RAGState>((set, get) => ({
 
     addFile: async (file: File) => {
         try {
+            trackFunnelEvent("document_uploaded", {
+                type: file.type || file.name.split(".").pop()?.toLowerCase() || "unknown",
+                sizeBucket: file.size < 1024 * 1024 ? "small" : file.size < 10 * 1024 * 1024 ? "medium" : "large",
+            });
             set({ isIndexing: true, status: `Initializing Worker for ${file.name}...` });
 
-            const newDoc = await postToWorker("ADD_FILE", { file }, (status) => {
+            const newDoc = await postToWorker("ADD_FILE", { file }, status => {
                 set({ status });
             });
 
@@ -105,19 +129,42 @@ export const useRAG = create<RAGState>((set, get) => ({
                 ragEnabled: true,
                 status: "ready",
             }));
-
         } catch (e: any) {
             console.error("RAG Worker Error:", e);
-            set({ status: `Error: ${e.message}`, isIndexing: false });
+
+            // Try fallback extraction
             try {
+                set({ status: `Worker failed, trying fallback extraction...` });
+
                 let fallbackText = "";
-                const ext = file.name.split('.').pop()?.toLowerCase();
-                const isBinary = ["pdf", "docx", "xlsx", "pptx", "png", "jpg", "jpeg", "gif", "webp", "zip", "tar", "gz"].includes(ext || "");
+                const ext = file.name.split(".").pop()?.toLowerCase();
+                const isBinary = [
+                    "pdf",
+                    "docx",
+                    "xlsx",
+                    "pptx",
+                    "png",
+                    "jpg",
+                    "jpeg",
+                    "gif",
+                    "webp",
+                    "zip",
+                    "tar",
+                    "gz",
+                ].includes(ext || "");
 
                 if (isBinary) {
-                    fallbackText = `[Error extracting text from ${file.name}. Binary parsing failed or is unsupported.]`;
+                    fallbackText = `[Binary file: ${file.name}. Vector search unavailable, but file is attached to your messages for context.]`;
                 } else {
-                    fallbackText = ((await file.text()) || "").slice(0, 50000);
+                    try {
+                        fallbackText = ((await file.text()) || "").slice(0, 50000);
+                    } catch {
+                        fallbackText = `[Could not read ${file.name}. File may be corrupted or in an unsupported format.]`;
+                    }
+                }
+
+                if (!fallbackText.trim()) {
+                    throw new Error("File appears to be empty");
                 }
 
                 const fallbackDoc: RAGDocument = {
@@ -128,15 +175,20 @@ export const useRAG = create<RAGState>((set, get) => ({
                     chunks: 1,
                     rawText: fallbackText,
                 };
+
                 set(state => ({
                     documents: [...state.documents, fallbackDoc],
                     pendingFiles: [...state.pendingFiles, fallbackDoc],
                     isIndexing: false,
                     ragEnabled: true,
-                    status: "ready",
+                    status: "ready (fallback mode - no vector search)",
                 }));
-            } catch (fallbackError) {
+            } catch (fallbackError: any) {
                 console.error("Fallback extraction failed:", fallbackError);
+                set({
+                    status: `Failed to load ${file.name}: ${e.message}. Try a different file.`,
+                    isIndexing: false,
+                });
             }
         }
     },
@@ -187,14 +239,16 @@ export const useRAG = create<RAGState>((set, get) => ({
             const remainingPending = state.pendingFiles.filter(d => d.id !== id);
             // If no documents left, clear the worker index too
             if (remaining.length === 0) {
-                postToWorker("CLEAR", {}).catch(() => { });
+                postToWorker("CLEAR", {}).catch(() => {});
+            } else {
+                postToWorker("REMOVE_FILE", { fileKey: id }).catch(() => {});
             }
             return { documents: remaining, pendingFiles: remainingPending };
         });
     },
 
     clear: () => {
-        postToWorker("CLEAR", {}).catch(() => { });
+        postToWorker("CLEAR", {}).catch(() => {});
         set({ documents: [], pendingFiles: [], status: "ready" });
     },
 
@@ -210,7 +264,7 @@ export const useRAG = create<RAGState>((set, get) => ({
         }
     },
 
-    toggle: () => set(state => ({ ragEnabled: !state.ragEnabled }))
+    toggle: () => set(state => ({ ragEnabled: !state.ragEnabled })),
 }));
 
 declare global {

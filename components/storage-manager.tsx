@@ -19,8 +19,15 @@ export function StorageManager() {
                 const req = indexedDB.deleteDatabase(dbName);
                 req.onsuccess = () => resolve();
                 req.onerror = () => reject(req.error);
-                // onblocked fires when another tab has the DB open; still resolve so UX doesn't hang
-                req.onblocked = () => resolve();
+                // onblocked fires when another tab has the DB open
+                req.onblocked = () => {
+                    setClearing(null);
+                    setConfirmTarget(null);
+                    alert(
+                        `Cannot clear ${dbName}: it's being used in another tab.\n\nClose other n0x tabs and try again.`
+                    );
+                    reject(new Error("Blocked by another tab"));
+                };
             });
             setTimeout(() => window.location.reload(), 600);
         } catch (e) {
@@ -35,11 +42,12 @@ export function StorageManager() {
         try {
             const cacheNames = await caches.keys();
             // MLC WebLLM uses keys like "webllm/v0" or prefixed with "mlc-ai"
-            const webllmCaches = cacheNames.filter(name =>
-                name.includes("webllm") ||
-                name.includes("mlc-ai") ||
-                name.includes("mlc_llm") ||
-                name.startsWith("n0x-model")
+            const webllmCaches = cacheNames.filter(
+                name =>
+                    name.includes("webllm") ||
+                    name.includes("mlc-ai") ||
+                    name.includes("mlc_llm") ||
+                    name.startsWith("n0x-model")
             );
             await Promise.all(webllmCaches.map(name => caches.delete(name)));
             setTimeout(() => window.location.reload(), 600);
@@ -90,7 +98,10 @@ export function StorageManager() {
                 // z-[200] so it renders above the sidebar (z-40) and any overlay (z-50)
                 <div
                     className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/80 font-sans"
-                    onClick={() => { setIsOpen(false); setConfirmTarget(null); }}
+                    onClick={() => {
+                        setIsOpen(false);
+                        setConfirmTarget(null);
+                    }}
                 >
                     <div
                         className="bg-[#0a0a0a] border border-zinc-800 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden"
@@ -103,7 +114,10 @@ export function StorageManager() {
                                 Storage Manager
                             </div>
                             <button
-                                onClick={() => { setIsOpen(false); setConfirmTarget(null); }}
+                                onClick={() => {
+                                    setIsOpen(false);
+                                    setConfirmTarget(null);
+                                }}
                                 className="text-zinc-500 hover:text-white transition-colors p-1 rounded-md hover:bg-zinc-800"
                             >
                                 <X className="w-4 h-4" />
@@ -115,7 +129,8 @@ export function StorageManager() {
                             <div className="bg-amber-500/10 border border-amber-500/20 text-amber-400/90 text-[11px] p-3 rounded-lg flex gap-2 leading-relaxed">
                                 <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
                                 <span>
-                                    Browsers cap IndexedDB storage (~2GB). If you hit errors saving, uploading, or loading models — clear the relevant store here. Page will reload automatically.
+                                    Browsers cap IndexedDB storage (~2GB). If you hit errors saving, uploading, or
+                                    loading models — clear the relevant store here. Page will reload automatically.
                                 </span>
                             </div>
 
@@ -127,8 +142,12 @@ export function StorageManager() {
                                         className="flex items-center justify-between p-3 rounded-lg border border-zinc-800 bg-zinc-900/30 gap-3"
                                     >
                                         <div className="min-w-0">
-                                            <div className="text-sm font-semibold text-zinc-200 leading-tight">{row.title}</div>
-                                            <div className="text-[10px] text-zinc-500 font-mono mt-0.5 truncate">{row.desc}</div>
+                                            <div className="text-sm font-semibold text-zinc-200 leading-tight">
+                                                {row.title}
+                                            </div>
+                                            <div className="text-[10px] text-zinc-500 font-mono mt-0.5 truncate">
+                                                {row.desc}
+                                            </div>
                                         </div>
 
                                         {clearing === row.target ? (

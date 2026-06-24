@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { Monitor, Zap, Brain, FileText, ImageIcon, Code, ArrowRight, X } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { setAnalyticsEnabled, trackFunnelEvent } from "@/lib/analytics";
 
 const ONBOARDING_KEY = "n0x_onboarded";
 
@@ -27,17 +27,24 @@ const STEPS = [
 
 export function Onboarding({ onComplete, chromeAIAvailable }: OnboardingProps) {
     const [visible, setVisible] = useState(false);
+    const [shareTelemetry, setShareTelemetry] = useState(false);
 
     useEffect(() => {
         try {
             if (!localStorage.getItem(ONBOARDING_KEY)) setVisible(true);
-        } catch { /* SSR or storage unavailable */ }
+        } catch {
+            /* SSR or storage unavailable */
+        }
     }, []);
 
     const dismiss = () => {
-        try { localStorage.setItem(ONBOARDING_KEY, "1"); } catch {}
+        try {
+            localStorage.setItem(ONBOARDING_KEY, "1");
+        } catch {}
+        setAnalyticsEnabled(shareTelemetry);
         setVisible(false);
         onComplete();
+        if (shareTelemetry) trackFunnelEvent("visit", { source: "onboarding" });
     };
 
     if (!visible) return null;
@@ -48,7 +55,10 @@ export function Onboarding({ onComplete, chromeAIAvailable }: OnboardingProps) {
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-md animate-in fade-in duration-300">
             <div className="relative w-full max-w-lg mx-4 bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden">
                 {/* Close */}
-                <button onClick={dismiss} className="absolute top-4 right-4 text-zinc-500 hover:text-white transition-colors p-1 rounded-lg hover:bg-zinc-800">
+                <button
+                    onClick={dismiss}
+                    className="absolute top-4 right-4 text-zinc-500 hover:text-white transition-colors p-1 rounded-lg hover:bg-zinc-800"
+                >
                     <X className="w-4 h-4" />
                 </button>
 
@@ -68,7 +78,10 @@ export function Onboarding({ onComplete, chromeAIAvailable }: OnboardingProps) {
                 {/* Features */}
                 <div className="px-8 pb-4 space-y-2">
                     {step.features.map((f, i) => (
-                        <div key={i} className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-zinc-900/50 border border-zinc-800/50">
+                        <div
+                            key={i}
+                            className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-zinc-900/50 border border-zinc-800/50"
+                        >
                             <f.icon className="w-4 h-4 text-zinc-400 shrink-0" />
                             <div>
                                 <span className="text-sm font-medium text-white">{f.label}</span>
@@ -82,11 +95,32 @@ export function Onboarding({ onComplete, chromeAIAvailable }: OnboardingProps) {
                 <div className="px-8 pb-4">
                     <div className="text-[11px] text-zinc-500 bg-zinc-900/30 rounded-lg px-4 py-3 border border-zinc-800/40">
                         {chromeAIAvailable ? (
-                            <span>✨ <strong className="text-purple-400">Chrome AI detected</strong> — you can start chatting instantly with Gemini Nano, no download needed. Or load a WebGPU model for more power.</span>
+                            <span>
+                                <strong className="text-purple-400">Chrome AI detected</strong> — you can start chatting
+                                instantly with Gemini Nano, no download needed. Or load a WebGPU model for more power.
+                            </span>
                         ) : (
-                            <span>A small model (~360MB) will download on first use. After that, everything works offline — no cloud required.</span>
+                            <span>
+                                A small model (~360MB) will download on first use. After that, everything works offline
+                                — no cloud required.
+                            </span>
                         )}
                     </div>
+                </div>
+
+                <div className="px-8 pb-4">
+                    <label className="flex items-start gap-3 rounded-lg border border-zinc-800/50 bg-zinc-900/30 px-4 py-3 text-left">
+                        <input
+                            type="checkbox"
+                            checked={shareTelemetry}
+                            onChange={e => setShareTelemetry(e.target.checked)}
+                            className="mt-0.5 h-4 w-4 rounded border-zinc-700 bg-zinc-900"
+                        />
+                        <span className="text-[11px] leading-relaxed text-zinc-500">
+                            Share anonymous product telemetry. No prompts, responses, file names, document text, or API
+                            keys are collected.
+                        </span>
+                    </label>
                 </div>
 
                 {/* CTA */}

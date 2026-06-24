@@ -25,7 +25,14 @@ export function RAGPanel() {
                     <span className="text-neon-cyan">knowledge base</span>
                 </div>
                 <div className="flex items-center gap-2">
-                    <button onClick={async () => { await rag.clearCache(); rag.clear(); }} className="text-txt-tertiary hover:text-red-400 transition-colors" title="Clear Vector Cache">
+                    <button
+                        onClick={async () => {
+                            await rag.clearCache();
+                            rag.clear();
+                        }}
+                        className="text-txt-tertiary hover:text-red-400 transition-colors"
+                        title="Clear Vector Cache"
+                    >
                         <Database className="w-3.5 h-3.5" />
                     </button>
                     <button onClick={rag.toggle} className="text-txt-tertiary hover:text-txt-primary">
@@ -44,11 +51,16 @@ export function RAGPanel() {
                 ) : (
                     <div className="space-y-1">
                         {rag.documents.map(doc => (
-                            <div key={doc.id} className="flex items-center gap-2 px-2 py-1.5 rounded text-xs font-mono hover:bg-crt-hover">
+                            <div
+                                key={doc.id}
+                                className="flex items-center gap-2 px-2 py-1.5 rounded text-xs font-mono hover:bg-crt-hover"
+                            >
                                 <FileText className="w-3.5 h-3.5 text-phosphor-dim shrink-0" />
                                 <div className="flex-1 min-w-0">
                                     <div className="truncate text-txt-primary">{doc.name}</div>
-                                    <div className="text-[10px] text-txt-tertiary">{doc.chunks} chunks · {Math.round(doc.size / 1024)}kb</div>
+                                    <div className="text-[10px] text-txt-tertiary">
+                                        {doc.chunks} chunks · {Math.round(doc.size / 1024)}kb
+                                    </div>
                                 </div>
                             </div>
                         ))}

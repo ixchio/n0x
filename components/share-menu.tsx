@@ -37,11 +37,10 @@ function shareTexts(snippet: string, hasChat: boolean) {
 }
 
 // render conversation as a branded card image
-async function renderCard(
-    messages: Array<{ role: string; content: string }>,
-    model: string
-): Promise<Blob | null> {
-    const W = 800, PAD = 40, MSG_GAP = 16;
+async function renderCard(messages: Array<{ role: string; content: string }>, model: string): Promise<Blob | null> {
+    const W = 800,
+        PAD = 40,
+        MSG_GAP = 16;
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext("2d");
     if (!ctx) return null;
@@ -142,7 +141,11 @@ async function renderCard(
     ctx.fillText("github.com/ixchio/n0x", PAD, totalH - PAD + 5);
 
     ctx.fillStyle = "#39ff1425";
-    ctx.fillText("the full AI stack, in one browser tab", W - PAD - ctx.measureText("the full AI stack, in one browser tab").width, totalH - PAD + 5);
+    ctx.fillText(
+        "the full AI stack, in one browser tab",
+        W - PAD - ctx.measureText("the full AI stack, in one browser tab").width,
+        totalH - PAD + 5
+    );
 
     return new Promise(resolve => canvas.toBlob(resolve, "image/png"));
 }
@@ -171,19 +174,27 @@ export function ShareMenu({ messages = [], modelName, appUrl = REPO }: ShareMenu
 
     const links = [
         {
-            name: "X (Twitter)", icon: "𝕏", hover: "hover:text-white",
+            name: "X (Twitter)",
+            icon: "𝕏",
+            hover: "hover:text-white",
             href: `https://x.com/intent/tweet?text=${enc(texts.x)}`,
         },
         {
-            name: "LinkedIn", icon: "in", hover: "hover:text-blue-400",
+            name: "LinkedIn",
+            icon: "in",
+            hover: "hover:text-blue-400",
             href: `https://www.linkedin.com/sharing/share-offsite/?url=${enc(appUrl)}&summary=${enc(texts.linkedin)}`,
         },
         {
-            name: "Reddit", icon: "r/", hover: "hover:text-orange-400",
+            name: "Reddit",
+            icon: "r/",
+            hover: "hover:text-orange-400",
             href: `https://reddit.com/submit?url=${enc(appUrl)}&title=${enc(texts.hn)}`,
         },
         {
-            name: "Hacker News", icon: "Y", hover: "hover:text-orange-500",
+            name: "Hacker News",
+            icon: "Y",
+            hover: "hover:text-orange-500",
             href: `https://news.ycombinator.com/submitlink?u=${enc(appUrl)}&t=${enc(texts.hn)}`,
         },
     ];
@@ -233,10 +244,19 @@ export function ShareMenu({ messages = [], modelName, appUrl = REPO }: ShareMenu
             const file = new File([cardRef.current], "n0x-convo.png", { type: "image/png" });
             const withFile = { ...shareData, files: [file] };
             if (navigator.canShare(withFile)) {
-                try { await navigator.share(withFile); return; } catch { /* fall through */ }
+                try {
+                    await navigator.share(withFile);
+                    return;
+                } catch {
+                    /* fall through */
+                }
             }
         }
-        try { await navigator.share(shareData); } catch { /* cancelled */ }
+        try {
+            await navigator.share(shareData);
+        } catch {
+            /* cancelled */
+        }
     }, [texts.x, appUrl]);
 
     return (
@@ -254,7 +274,9 @@ export function ShareMenu({ messages = [], modelName, appUrl = REPO }: ShareMenu
                     <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
                     <div className="absolute top-full right-0 mt-2 w-64 bg-crt-surface border border-crt-border rounded z-50 overflow-hidden shadow-lg shadow-black/50">
                         <div className="px-3 py-2 border-b border-crt-border flex items-center justify-between">
-                            <span className="text-[10px] text-txt-tertiary font-mono uppercase tracking-wider">share n0x</span>
+                            <span className="text-[10px] text-txt-tertiary font-mono uppercase tracking-wider">
+                                share n0x
+                            </span>
                             <button onClick={() => setOpen(false)} className="text-txt-tertiary hover:text-txt-primary">
                                 <X className="w-3 h-3" />
                             </button>
@@ -263,8 +285,10 @@ export function ShareMenu({ messages = [], modelName, appUrl = REPO }: ShareMenu
                         <div className="p-1">
                             {links.map(l => (
                                 <a
-                                    key={l.name} href={l.href}
-                                    target="_blank" rel="noopener noreferrer"
+                                    key={l.name}
+                                    href={l.href}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
                                     onClick={() => setOpen(false)}
                                     className={cn(
                                         "flex items-center gap-3 px-3 py-2 rounded text-xs font-mono text-txt-secondary transition-all hover:bg-crt-hover",
@@ -294,7 +318,11 @@ export function ShareMenu({ messages = [], modelName, appUrl = REPO }: ShareMenu
                                         <Camera className="w-3.5 h-3.5 ml-0.5" />
                                     )}
                                     <span>
-                                        {cardStatus === "generating" ? "rendering..." : cardStatus === "done" ? "saved!" : "screenshot card"}
+                                        {cardStatus === "generating"
+                                            ? "rendering..."
+                                            : cardStatus === "done"
+                                              ? "saved!"
+                                              : "screenshot card"}
                                     </span>
                                     <Download className="w-3 h-3 ml-auto opacity-30" />
                                 </button>
@@ -302,7 +330,10 @@ export function ShareMenu({ messages = [], modelName, appUrl = REPO }: ShareMenu
 
                             {typeof navigator !== "undefined" && "share" in navigator && (
                                 <button
-                                    onClick={() => { nativeShare(); setOpen(false); }}
+                                    onClick={() => {
+                                        nativeShare();
+                                        setOpen(false);
+                                    }}
                                     className="w-full flex items-center gap-3 px-3 py-2 rounded text-xs font-mono text-txt-secondary hover:bg-crt-hover hover:text-phosphor transition-all"
                                 >
                                     <Share2 className="w-3.5 h-3.5 ml-0.5" />
@@ -314,7 +345,11 @@ export function ShareMenu({ messages = [], modelName, appUrl = REPO }: ShareMenu
                                 onClick={copyText}
                                 className="w-full flex items-center gap-3 px-3 py-2 rounded text-xs font-mono text-txt-secondary hover:bg-crt-hover hover:text-phosphor transition-all"
                             >
-                                {copied ? <Check className="w-3.5 h-3.5 ml-0.5 text-phosphor" /> : <Copy className="w-3.5 h-3.5 ml-0.5" />}
+                                {copied ? (
+                                    <Check className="w-3.5 h-3.5 ml-0.5 text-phosphor" />
+                                ) : (
+                                    <Copy className="w-3.5 h-3.5 ml-0.5" />
+                                )}
                                 <span>{copied ? "copied!" : "copy share text"}</span>
                             </button>
 
@@ -324,12 +359,16 @@ export function ShareMenu({ messages = [], modelName, appUrl = REPO }: ShareMenu
                                     <div className="my-1 border-t border-crt-border" />
                                     <button
                                         onClick={() => {
-                                            const md = messages.map(m => `**${m.role === "user" ? "You" : "N0X"}:**\n${m.content}`).join("\n\n---\n\n");
+                                            const md = messages
+                                                .map(m => `**${m.role === "user" ? "You" : "N0X"}:**\n${m.content}`)
+                                                .join("\n\n---\n\n");
                                             const header = `# N0X Conversation\n*Model: ${modelName || "unknown"} · ${new Date().toLocaleDateString()}*\n\n---\n\n`;
                                             const blob = new Blob([header + md], { type: "text/markdown" });
                                             const url = URL.createObjectURL(blob);
                                             const a = document.createElement("a");
-                                            a.href = url; a.download = `n0x-chat-${Date.now()}.md`; a.click();
+                                            a.href = url;
+                                            a.download = `n0x-chat-${Date.now()}.md`;
+                                            a.click();
                                             URL.revokeObjectURL(url);
                                             setOpen(false);
                                         }}
@@ -341,11 +380,19 @@ export function ShareMenu({ messages = [], modelName, appUrl = REPO }: ShareMenu
                                     </button>
                                     <button
                                         onClick={() => {
-                                            const data = { model: modelName, exportedAt: new Date().toISOString(), messages };
-                                            const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+                                            const data = {
+                                                model: modelName,
+                                                exportedAt: new Date().toISOString(),
+                                                messages,
+                                            };
+                                            const blob = new Blob([JSON.stringify(data, null, 2)], {
+                                                type: "application/json",
+                                            });
                                             const url = URL.createObjectURL(blob);
                                             const a = document.createElement("a");
-                                            a.href = url; a.download = `n0x-chat-${Date.now()}.json`; a.click();
+                                            a.href = url;
+                                            a.download = `n0x-chat-${Date.now()}.json`;
+                                            a.click();
                                             URL.revokeObjectURL(url);
                                             setOpen(false);
                                         }}

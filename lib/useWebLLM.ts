@@ -2,6 +2,7 @@
 
 import { create } from "zustand";
 import * as webllm from "@mlc-ai/web-llm";
+import { trackFunnelEvent } from "@/lib/analytics";
 
 // Complete open-source model list: 360MB → 100GB+
 // All models are MLC-compiled and available via Hugging Face / MLC releases.
@@ -252,12 +253,12 @@ export const WEBLLM_MODELS = [
 
 // Group models by category for the model selector UI
 export const MODEL_CATEGORIES = {
-    fast:      { label: "⚡ Tiny (< 1GB)",       desc: "Any device, instant responses" },
-    balanced:  { label: "⚖️ Balanced (1–3GB)",   desc: "Good speed & quality" },
-    powerful:  { label: "🚀 Powerful (4–30GB+)",  desc: "High quality — needs VRAM" },
-    reasoning: { label: "🧠 Reasoning (R1 CoT)",  desc: "Chain-of-thought specialist" },
-    coding:    { label: "💻 Coding",               desc: "Optimised for code & math" },
-    uncensored:{ label: "🔓 Uncensored",           desc: "No safety filters" },
+    fast: { label: "⚡ Tiny (< 1GB)", desc: "Any device, instant responses" },
+    balanced: { label: "⚖️ Balanced (1–3GB)", desc: "Good speed & quality" },
+    powerful: { label: "🚀 Powerful (4–30GB+)", desc: "High quality — needs VRAM" },
+    reasoning: { label: "🧠 Reasoning (R1 CoT)", desc: "Chain-of-thought specialist" },
+    coding: { label: "💻 Coding", desc: "Optimised for code & math" },
+    uncensored: { label: "🔓 Uncensored", desc: "No safety filters" },
 };
 
 export type WebLLMStatus = "unloaded" | "loading" | "ready" | "generating" | "error";
@@ -291,7 +292,11 @@ interface WebLLMState {
     // Actions
     init: () => Promise<void>;
     loadModel: (modelId: string, force?: boolean) => Promise<void>;
-    generate: (messages: ChatMessage[], onToken?: (token: string) => void, responseFormat?: { type: string; schema?: object }) => Promise<string>;
+    generate: (
+        messages: ChatMessage[],
+        onToken?: (token: string) => void,
+        responseFormat?: { type: string; schema?: object }
+    ) => Promise<string>;
     stop: () => void;
     unload: () => Promise<void>;
 }
@@ -303,10 +308,16 @@ let isLoadingModel = false;
 // Cumulative token counter persisted to localStorage for cost savings display
 const TOKENS_KEY = "n0x_total_tokens";
 export function getTotalTokens(): number {
-    try { return parseInt(localStorage.getItem(TOKENS_KEY) || "0", 10) || 0; } catch { return 0; }
+    try {
+        return parseInt(localStorage.getItem(TOKENS_KEY) || "0", 10) || 0;
+    } catch {
+        return 0;
+    }
 }
 export function addTokens(n: number) {
-    try { localStorage.setItem(TOKENS_KEY, String(getTotalTokens() + n)); } catch {}
+    try {
+        localStorage.setItem(TOKENS_KEY, String(getTotalTokens() + n));
+    } catch {}
 }
 
 /**
@@ -334,8 +345,9 @@ export const useWebLLM = create<WebLLMState>((set, get) => ({
         if (status !== "unloaded") return;
 
         // Mobile detection — cap model selection and warn about memory
-        const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) ||
-            ((navigator as any).userAgentData?.mobile === true) ||
+        const isMobile =
+            /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) ||
+            (navigator as any).userAgentData?.mobile === true ||
             (typeof screen !== "undefined" && screen.width < 768);
         set({ isMobile });
 
@@ -347,7 +359,11 @@ export const useWebLLM = create<WebLLMState>((set, get) => ({
         try {
             const adapter = await (navigator as any).gpu.requestAdapter();
             if (!adapter) {
-                set({ isSupported: false, gpuTier: "none", error: "No WebGPU adapter found. Try updating your browser/drivers." });
+                set({
+                    isSupported: false,
+                    gpuTier: "none",
+                    error: "No WebGPU adapter found. Try updating your browser/drivers.",
+                });
                 return;
             }
 
@@ -355,13 +371,15 @@ export const useWebLLM = create<WebLLMState>((set, get) => ({
             let gpuLabel = "";
             let gpuTier: GpuTier = "unknown";
             try {
-                const info = await adapter.requestAdapterInfo?.() || (adapter as any).info;
+                const info = (await adapter.requestAdapterInfo?.()) || (adapter as any).info;
                 if (info) {
                     const desc = info.description || info.device || "";
                     const vendor = info.vendor || "";
                     gpuLabel = desc || vendor || "Unknown GPU";
                 }
-            } catch { /* adapter info not available */ }
+            } catch {
+                /* adapter info not available */
+            }
 
             // Estimate tier from device memory + GPU heuristics
             const deviceMem = (navigator as any).deviceMemory;
@@ -382,7 +400,9 @@ export const useWebLLM = create<WebLLMState>((set, get) => ({
                 if (maxBuf >= 2 * 1024 * 1024 * 1024) gpuTier = isMobile ? "low" : "high";
                 else if (maxBuf >= 512 * 1024 * 1024) gpuTier = gpuTier === "low" ? "low" : "medium";
                 else gpuTier = "low";
-            } catch { /* fine, use deviceMemory estimate */ }
+            } catch {
+                /* fine, use deviceMemory estimate */
+            }
 
             set({ gpuTier, gpuLabel });
         } catch (e) {
@@ -404,12 +424,18 @@ export const useWebLLM = create<WebLLMState>((set, get) => ({
             if (model) {
                 // If device has 4GB or less, block anything larger than 'fast' (which are > 1GB)
                 if (deviceMemory <= 4 && model.category !== "fast") {
-                    set({ error: `Hardware Restricted: Device reports ${deviceMemory}GB RAM. Loading this model will likely crash your browser. Please select a 'Fast' model.`, status: "error" });
+                    set({
+                        error: `Hardware Restricted: Device reports ${deviceMemory}GB RAM. Loading this model will likely crash your browser. Please select a 'Fast' model.`,
+                        status: "error",
+                    });
                     return;
                 }
                 // If device has 8GB or less, warn/block massive models
                 if (deviceMemory <= 8 && (model.category === "uncensored" || model.category === "powerful")) {
-                    set({ error: `Hardware Restricted: Device reports ${deviceMemory}GB RAM. Loading a heavy model requires 16GB+ and may cause an Out-Of-Memory crash.`, status: "error" });
+                    set({
+                        error: `Hardware Restricted: Device reports ${deviceMemory}GB RAM. Loading a heavy model requires 16GB+ and may cause an Out-Of-Memory crash.`,
+                        status: "error",
+                    });
                     return;
                 }
             }
@@ -417,11 +443,21 @@ export const useWebLLM = create<WebLLMState>((set, get) => ({
 
         isLoadingModel = true;
         try {
+            const selectedModel = WEBLLM_MODELS.find(m => m.id === modelId);
+            trackFunnelEvent("model_load_started", {
+                provider: "browser",
+                modelCategory: selectedModel?.category || "unknown",
+                force,
+            });
             set({ status: "loading", loadProgress: 0, loadingModel: modelId, error: null });
 
             // Cleanup previous engine (resilient to failures)
             if (engine) {
-                try { await engine.unload(); } catch (e) { console.warn("Engine cleanup failed:", e); }
+                try {
+                    await engine.unload();
+                } catch (e) {
+                    console.warn("Engine cleanup failed:", e);
+                }
                 engine = null;
             }
 
@@ -434,7 +470,9 @@ export const useWebLLM = create<WebLLMState>((set, get) => ({
                     stallCount++;
                     if (stallCount >= 3) {
                         // 30s with no progress — likely OOM or network issue
-                        set({ error: `Download stalled at ${Math.round(cur * 100)}%. Your device may not have enough memory for this model. Try a smaller model or use Cloud API for instant access.` });
+                        set({
+                            error: `Download stalled at ${Math.round(cur * 100)}%. Your device may not have enough memory for this model. Try a smaller model or use Cloud API for instant access.`,
+                        });
                     }
                 } else {
                     stallCount = 0;
@@ -442,37 +480,36 @@ export const useWebLLM = create<WebLLMState>((set, get) => ({
                 }
             }, 10000);
 
-            // Try Web Worker engine first (keeps UI at 60fps during inference)
-            // Falls back to main-thread engine if Worker isn't available
-            const initOpts = {
-                initProgressCallback: (progress: any) => {
-                    set({ loadProgress: progress.progress });
-                },
-            };
             try {
-                const worker = new Worker(
-                    new URL("./webllm.worker.ts", import.meta.url),
-                    { type: "module" },
-                );
-                // Race against a timeout — if the Worker hangs, fall back
-                engine = await Promise.race([
-                    webllm.CreateWebWorkerMLCEngine(worker, modelId, initOpts),
-                    new Promise<never>((_, reject) => {
-                        setTimeout(() => {
-                            // Only reject if still at 0% (Worker never responded)
-                            if (get().loadProgress === 0) {
-                                worker.terminate();
-                                reject(new Error("Worker init timeout"));
-                            }
-                        }, 5000);
-                    }),
-                ]);
-            } catch {
-                // Worker failed — fall back to main thread engine
-                engine = await webllm.CreateMLCEngine(modelId, initOpts);
+                // Try Web Worker engine first (keeps UI at 60fps during inference)
+                // Falls back to main-thread engine if Worker isn't available
+                const initOpts = {
+                    initProgressCallback: (progress: any) => {
+                        set({ loadProgress: progress.progress });
+                    },
+                };
+                try {
+                    const worker = new Worker(new URL("./webllm.worker.ts", import.meta.url), { type: "module" });
+                    // Race against a timeout — if the Worker hangs, fall back
+                    engine = await Promise.race([
+                        webllm.CreateWebWorkerMLCEngine(worker, modelId, initOpts),
+                        new Promise<never>((_, reject) => {
+                            setTimeout(() => {
+                                // Only reject if still at 0% (Worker never responded)
+                                if (get().loadProgress === 0) {
+                                    worker.terminate();
+                                    reject(new Error("Worker init timeout"));
+                                }
+                            }, 5000);
+                        }),
+                    ]);
+                } catch {
+                    // Worker failed — fall back to main thread engine
+                    engine = await webllm.CreateMLCEngine(modelId, initOpts);
+                }
+            } finally {
+                clearInterval(stallWatchdog); // Always cleanup
             }
-
-            clearInterval(stallWatchdog);
 
             // Extract context window size dynamically for agent budgeting
             const windowSize = (engine.chat as any).config?.context_window_size || 4096;
@@ -480,25 +517,38 @@ export const useWebLLM = create<WebLLMState>((set, get) => ({
             contextCharsLimit = Math.floor(windowSize * 4 * 0.85);
 
             set({ loadedModel: modelId, loadingModel: null, status: "ready" });
+            trackFunnelEvent("model_load_succeeded", {
+                provider: "browser",
+                modelCategory: selectedModel?.category || "unknown",
+            });
         } catch (e: any) {
             console.error("Model load error:", e);
             engine = null;
             // Make error messages human-readable
             const raw = e.message || "Failed to load model";
-            const friendly = raw.includes("memory") || raw.includes("OOM")
-                ? "Out of memory — this model is too large for your GPU. Try a smaller model or switch to Cloud API."
-                : raw.includes("timeout") || raw.includes("Worker")
-                ? "Model failed to initialize. Your browser may need a restart, or try a smaller model."
-                : raw.includes("network") || raw.includes("fetch")
-                ? "Download failed — check your internet connection and try again."
-                : raw;
+            const friendly =
+                raw.includes("memory") || raw.includes("OOM")
+                    ? "Out of memory — this model is too large for your GPU. Try a smaller model or switch to Cloud API."
+                    : raw.includes("timeout") || raw.includes("Worker")
+                      ? "Model failed to initialize. Your browser may need a restart, or try a smaller model."
+                      : raw.includes("network") || raw.includes("fetch")
+                        ? "Download failed — check your internet connection and try again."
+                        : raw;
             set({ error: friendly, loadingModel: null, status: "error" });
+            trackFunnelEvent("model_load_failed", {
+                provider: "browser",
+                reason: friendly.slice(0, 80),
+            });
         } finally {
             isLoadingModel = false;
         }
     },
 
-    generate: async (messages: ChatMessage[], onToken?: (token: string) => void, responseFormat?: { type: string; schema?: object }) => {
+    generate: async (
+        messages: ChatMessage[],
+        onToken?: (token: string) => void,
+        responseFormat?: { type: string; schema?: object }
+    ) => {
         const { status } = get();
         if (!engine || status !== "ready") {
             throw new Error("Model not loaded");
@@ -527,7 +577,7 @@ export const useWebLLM = create<WebLLMState>((set, get) => ({
                 createOpts.response_format = responseFormat;
             }
 
-            const asyncGenerator = await engine.chat.completions.create(createOpts) as any;
+            const asyncGenerator = (await engine.chat.completions.create(createOpts)) as any;
 
             for await (const chunk of asyncGenerator) {
                 if (abortController?.signal.aborted) break;

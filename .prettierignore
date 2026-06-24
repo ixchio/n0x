@@ -1,0 +1,16 @@
+node_modules
+.next
+out
+build
+dist
+coverage
+.vercel
+
+package-lock.json
+*.tsbuildinfo
+next-env.d.ts
+
+public/sw.js
+public/*.png
+public/*.ico
+app/favicon.ico

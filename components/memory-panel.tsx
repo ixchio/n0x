@@ -63,8 +63,8 @@ export function MemoryPanel({ isOpen, onClose, memories, onSave, onDelete, onSea
             <div className="px-3 py-2 border-b border-crt-border flex gap-2">
                 <input
                     value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+                    onChange={e => setSearchQuery(e.target.value)}
+                    onKeyDown={e => e.key === "Enter" && handleSearch()}
                     placeholder="search memories..."
                     className="flex-1 bg-transparent text-xs font-mono text-txt-primary outline-none placeholder:text-txt-tertiary"
                 />
@@ -78,12 +78,17 @@ export function MemoryPanel({ isOpen, onClose, memories, onSave, onDelete, onSea
                 {displayMemories.length === 0 ? (
                     <div className="text-center py-4 text-txt-tertiary text-[10px] font-mono">no memories stored</div>
                 ) : (
-                    displayMemories.map((m) => (
-                        <div key={m.id} className="group flex items-start gap-2 px-2 py-1.5 rounded hover:bg-crt-hover text-xs font-mono">
+                    displayMemories.map(m => (
+                        <div
+                            key={m.id}
+                            className="group flex items-start gap-2 px-2 py-1.5 rounded hover:bg-crt-hover text-xs font-mono"
+                        >
                             <span className="text-phosphor-dim mt-0.5">·</span>
                             <div className="flex-1 min-w-0">
                                 <div className="text-txt-primary truncate">{m.content}</div>
-                                <div className="text-[10px] text-txt-tertiary">{new Date(m.timestamp).toLocaleDateString()}</div>
+                                <div className="text-[10px] text-txt-tertiary">
+                                    {new Date(m.timestamp).toLocaleDateString()}
+                                </div>
                             </div>
                             <button
                                 onClick={() => onDelete(m.id)}
@@ -100,8 +105,8 @@ export function MemoryPanel({ isOpen, onClose, memories, onSave, onDelete, onSea
             <div className="p-2 border-t border-crt-border flex gap-2">
                 <input
                     value={newMemory}
-                    onChange={(e) => setNewMemory(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && handleSave()}
+                    onChange={e => setNewMemory(e.target.value)}
+                    onKeyDown={e => e.key === "Enter" && handleSave()}
                     placeholder="add memory..."
                     className="flex-1 bg-transparent text-xs font-mono text-txt-primary outline-none placeholder:text-txt-tertiary"
                 />

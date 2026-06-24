@@ -62,8 +62,24 @@ export function PersonaSelector({ compact }: { compact?: boolean }) {
                             <span className="flex-1">{p.name}</span>
                             {!p.builtin && (
                                 <div className="flex gap-1">
-                                    <button onClick={e => { e.stopPropagation(); startEdit(p.id); }} className="text-txt-tertiary hover:text-phosphor"><Edit2 className="w-3 h-3" /></button>
-                                    <button onClick={e => { e.stopPropagation(); deletePersona(p.id); }} className="text-txt-tertiary hover:text-red-400"><Trash2 className="w-3 h-3" /></button>
+                                    <button
+                                        onClick={e => {
+                                            e.stopPropagation();
+                                            startEdit(p.id);
+                                        }}
+                                        className="text-txt-tertiary hover:text-phosphor"
+                                    >
+                                        <Edit2 className="w-3 h-3" />
+                                    </button>
+                                    <button
+                                        onClick={e => {
+                                            e.stopPropagation();
+                                            deletePersona(p.id);
+                                        }}
+                                        className="text-txt-tertiary hover:text-red-400"
+                                    >
+                                        <Trash2 className="w-3 h-3" />
+                                    </button>
                                 </div>
                             )}
                         </div>
@@ -94,16 +110,23 @@ export function PersonaSelector({ compact }: { compact?: boolean }) {
                             {personas.map(p => (
                                 <button
                                     key={p.id}
-                                    onClick={() => { selectPersona(p.id); setOpen(false); }}
+                                    onClick={() => {
+                                        selectPersona(p.id);
+                                        setOpen(false);
+                                    }}
                                     className={cn(
                                         "w-full flex items-center gap-2 px-3 py-2 text-xs font-mono text-left transition-all",
-                                        activeId === p.id ? "bg-phosphor-faint text-phosphor" : "text-txt-secondary hover:bg-crt-hover hover:text-phosphor"
+                                        activeId === p.id
+                                            ? "bg-phosphor-faint text-phosphor"
+                                            : "text-txt-secondary hover:bg-crt-hover hover:text-phosphor"
                                     )}
                                 >
                                     <User className="w-3 h-3 shrink-0" />
                                     <div className="flex-1 min-w-0">
                                         <div className="truncate">{p.name}</div>
-                                        <div className="text-[10px] text-txt-tertiary truncate">{p.prompt.slice(0, 50)}...</div>
+                                        <div className="text-[10px] text-txt-tertiary truncate">
+                                            {p.prompt.slice(0, 50)}...
+                                        </div>
                                     </div>
                                     {activeId === p.id && <Check className="w-3 h-3 text-phosphor shrink-0" />}
                                 </button>
@@ -111,7 +134,10 @@ export function PersonaSelector({ compact }: { compact?: boolean }) {
                         </div>
                         <div className="border-t border-crt-border p-2">
                             <button
-                                onClick={() => { setCreating(true); setOpen(false); }}
+                                onClick={() => {
+                                    setCreating(true);
+                                    setOpen(false);
+                                }}
                                 className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded text-[11px] font-mono border border-crt-border text-txt-secondary hover:text-phosphor hover:border-phosphor-dim transition-all"
                             >
                                 <Plus className="w-3 h-3" /> new persona
@@ -135,19 +161,22 @@ export function PersonaSelector({ compact }: { compact?: boolean }) {
                         </div>
 
                         <input
-                            type="text" value={name}
+                            type="text"
+                            value={name}
                             onChange={e => setName(e.target.value)}
                             placeholder="name"
                             className="w-full bg-crt-black border border-crt-border rounded px-3 py-2 text-xs font-mono text-txt-primary placeholder:text-txt-tertiary outline-none focus:border-phosphor-dim"
                         />
                         <textarea
-                            value={prompt} onChange={e => setPrompt(e.target.value)}
+                            value={prompt}
+                            onChange={e => setPrompt(e.target.value)}
                             placeholder="system prompt..."
                             rows={4}
                             className="w-full bg-crt-black border border-crt-border rounded px-3 py-2 text-xs font-mono text-txt-primary placeholder:text-txt-tertiary outline-none focus:border-phosphor-dim resize-none"
                         />
                         <button
-                            onClick={save} disabled={!canSave}
+                            onClick={save}
+                            disabled={!canSave}
                             className="w-full px-3 py-2 rounded text-xs font-mono border border-phosphor-dim text-phosphor hover:bg-phosphor-faint transition-all disabled:opacity-30 disabled:cursor-not-allowed"
                         >
                             {editId ? "save" : "create"}

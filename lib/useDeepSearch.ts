@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useRef } from "react";
+import { trackFunnelEvent } from "@/lib/analytics";
 
 // Advanced Deep Search Hook with real-time phase updates
 
@@ -16,6 +17,7 @@ interface SearchResult {
 interface DeepSearchState {
     phase: SearchPhase;
     query: string;
+    refinedQuery: string;
     results: SearchResult[];
     content: string[];
     sources: string[];
@@ -23,12 +25,14 @@ interface DeepSearchState {
     streamingText: string;
     summary: string;
     error: string | null;
+    noUsefulResults: boolean;
 }
 
 export function useDeepSearch() {
     const [state, setState] = useState<DeepSearchState>({
         phase: "idle",
         query: "",
+        refinedQuery: "",
         results: [],
         content: [],
         sources: [],
@@ -36,6 +40,7 @@ export function useDeepSearch() {
         streamingText: "",
         summary: "",
         error: null,
+        noUsefulResults: false,
     });
 
     const abortRef = useRef<AbortController | null>(null);
@@ -43,11 +48,13 @@ export function useDeepSearch() {
     const search = useCallback(async (query: string) => {
         if (abortRef.current) abortRef.current.abort();
         abortRef.current = new AbortController();
+        trackFunnelEvent("search_used");
 
         // Reset state
         setState({
             phase: "planning",
             query,
+            refinedQuery: "",
             results: [],
             content: [],
             sources: [],
@@ -55,6 +62,7 @@ export function useDeepSearch() {
             streamingText: "Analyzing query...",
             summary: "",
             error: null,
+            noUsefulResults: false,
         });
 
         try {
@@ -63,7 +71,7 @@ export function useDeepSearch() {
             setState(prev => ({
                 ...prev,
                 phase: "searching",
-                streamingText: "Searching DuckDuckGo + Wikipedia..."
+                streamingText: "Searching web sources...",
             }));
 
             // Make the search request
@@ -83,10 +91,36 @@ export function useDeepSearch() {
                 return null;
             }
 
+            if (data.noUsefulResults) {
+                setState(prev => ({
+                    ...prev,
+                    phase: "complete",
+                    query: data.query || query,
+                    refinedQuery: data.refinedQuery || "",
+                    results: [],
+                    content: [],
+                    sources: [],
+                    streamingText: "No relevant web sources found. Answering without search context.",
+                    summary: "",
+                    noUsefulResults: true,
+                }));
+                return {
+                    results: [],
+                    content: [],
+                    sources: [],
+                    summary: "",
+                    query: data.query || query,
+                    refinedQuery: data.refinedQuery || "",
+                    noUsefulResults: true,
+                };
+            }
+
             // Update with search results
             setState(prev => ({
                 ...prev,
                 phase: "reading",
+                query: data.query || query,
+                refinedQuery: data.refinedQuery || "",
                 results: data.results || [],
                 streamingText: `Found ${data.results?.length || 0} results. Extracting content...`,
             }));
@@ -146,6 +180,9 @@ export function useDeepSearch() {
                 content: contents,
                 sources,
                 summary: data.summary,
+                query: data.query || query,
+                refinedQuery: data.refinedQuery || "",
+                noUsefulResults: false,
             };
         } catch (error: any) {
             if (error.name === "AbortError") return null;
@@ -169,6 +206,7 @@ export function useDeepSearch() {
         setState({
             phase: "idle",
             query: "",
+            refinedQuery: "",
             results: [],
             content: [],
             sources: [],
@@ -176,6 +214,7 @@ export function useDeepSearch() {
             streamingText: "",
             summary: "",
             error: null,
+            noUsefulResults: false,
         });
     }, [stop]);
 

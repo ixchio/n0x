@@ -40,10 +40,13 @@ export function AgentThinking({ phase, query, results, readingUrl, streamingText
                     const isActive = i <= currentPhaseIndex;
                     const isCurrent = p.key === phase;
                     return (
-                        <div key={p.key} className={cn(
-                            "flex items-center gap-1 transition-colors",
-                            isCurrent ? "text-phosphor" : isActive ? "text-phosphor-dim" : "text-txt-tertiary"
-                        )}>
+                        <div
+                            key={p.key}
+                            className={cn(
+                                "flex items-center gap-1 transition-colors",
+                                isCurrent ? "text-phosphor" : isActive ? "text-phosphor-dim" : "text-txt-tertiary"
+                            )}
+                        >
                             {isCurrent && phase !== "complete" ? (
                                 <Loader2 className="w-3 h-3 animate-spin" />
                             ) : isActive ? (
@@ -72,7 +75,14 @@ export function AgentThinking({ phase, query, results, readingUrl, streamingText
             {readingUrl && isActive && (
                 <div className="flex items-center gap-2 text-[11px] font-mono text-neon-cyan">
                     <BookOpen className="w-3 h-3 animate-pulse" />
-                    reading: {(() => { try { return new URL(readingUrl).hostname; } catch { return readingUrl; } })()}
+                    reading:{" "}
+                    {(() => {
+                        try {
+                            return new URL(readingUrl).hostname;
+                        } catch {
+                            return readingUrl;
+                        }
+                    })()}
                 </div>
             )}
 
