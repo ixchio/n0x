@@ -5,6 +5,42 @@ import { trackFunnelEvent } from "@/lib/analytics";
 
 // Advanced Deep Search Hook with real-time phase updates
 
+// In-memory cache for search results (5 minute TTL)
+const searchCache = new Map<string, { result: any; timestamp: number }>();
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+function getCacheKey(query: string): string {
+    return query.toLowerCase().trim();
+}
+
+function getCachedResult(query: string): any | null {
+    const key = getCacheKey(query);
+    const cached = searchCache.get(key);
+    if (!cached) return null;
+
+    const age = Date.now() - cached.timestamp;
+    if (age > CACHE_TTL) {
+        searchCache.delete(key);
+        return null;
+    }
+
+    return cached.result;
+}
+
+function setCachedResult(query: string, result: any): void {
+    const key = getCacheKey(query);
+    searchCache.set(key, { result, timestamp: Date.now() });
+
+    // Cleanup old entries (keep cache size reasonable)
+    if (searchCache.size > 50) {
+        const entries = Array.from(searchCache.entries());
+        entries
+            .sort((a, b) => a[1].timestamp - b[1].timestamp)
+            .slice(0, 10)
+            .forEach(([k]) => searchCache.delete(k));
+    }
+}
+
 type SearchPhase = "idle" | "planning" | "searching" | "reading" | "analyzing" | "complete" | "error";
 
 interface SearchResult {
@@ -49,6 +85,25 @@ export function useDeepSearch() {
         if (abortRef.current) abortRef.current.abort();
         abortRef.current = new AbortController();
         trackFunnelEvent("search_used");
+
+        // Check cache first
+        const cached = getCachedResult(query);
+        if (cached) {
+            setState({
+                phase: "complete",
+                query,
+                refinedQuery: cached.refinedQuery || query,
+                results: cached.results || [],
+                content: cached.content || [],
+                sources: cached.sources || [],
+                currentUrl: "",
+                streamingText: "",
+                summary: cached.summary || "",
+                error: null,
+                noUsefulResults: cached.noUsefulResults || false,
+            });
+            return cached;
+        }
 
         // Reset state
         setState({
@@ -175,7 +230,7 @@ export function useDeepSearch() {
                 sources,
             }));
 
-            return {
+            const result = {
                 results: data.results,
                 content: contents,
                 sources,
@@ -184,6 +239,11 @@ export function useDeepSearch() {
                 refinedQuery: data.refinedQuery || "",
                 noUsefulResults: false,
             };
+
+            // Cache the successful result
+            setCachedResult(query, result);
+
+            return result;
         } catch (error: any) {
             if (error.name === "AbortError") return null;
 

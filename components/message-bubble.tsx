@@ -2,6 +2,10 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+
+// Optimize: Move remarkPlugins to constant to prevent ReactMarkdown reconfiguration on every render
+const REMARK_PLUGINS = [remarkGfm];
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
 import {
@@ -497,7 +501,7 @@ export const MessageBubble = React.memo(function MessageBubble({
                         {showThinking && (
                             <div className="px-4 pb-4 pt-2 border-t border-zinc-800/80 bg-[#0a0a0a]/50">
                                 <div className="text-[13px] border-l-2 border-zinc-800 pl-4 py-1 my-2 text-zinc-500 font-serif italic max-w-none leading-relaxed whitespace-pre-wrap">
-                                    <ReactMarkdown>{thinking}</ReactMarkdown>
+                                    <ReactMarkdown remarkPlugins={REMARK_PLUGINS}>{thinking}</ReactMarkdown>
                                 </div>
                             </div>
                         )}
@@ -507,6 +511,7 @@ export const MessageBubble = React.memo(function MessageBubble({
                 {finalContent && (
                     <div className="prose-crt select-text w-full max-w-none">
                         <ReactMarkdown
+                            remarkPlugins={REMARK_PLUGINS}
                             components={{
                                 code: props => (
                                     <CodeBlock
@@ -516,6 +521,11 @@ export const MessageBubble = React.memo(function MessageBubble({
                                         runningCode={runningCode}
                                         handleRunCode={handleRunCode}
                                     />
+                                ),
+                                table: props => (
+                                    <div className="table-wrapper">
+                                        <table {...props} />
+                                    </div>
                                 ),
                             }}
                         >

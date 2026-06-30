@@ -84,6 +84,8 @@ export const useChromeAI = create<ChromeAIState>((set, get) => ({
             prompt += "Assistant:";
 
             // Stream the response
+            // Note: Chrome Prompt API v1 does not support temperature/top_p parameters
+            // Consistency with other providers is limited by browser API constraints
             const stream = await session.promptStreaming(prompt, {
                 signal: abortCtrl.signal,
             });

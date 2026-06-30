@@ -173,6 +173,8 @@ export const useCloudAI = create<CloudState>()(
                             model: loadedModel,
                             messages,
                             stream: true,
+                            temperature: 0.25,
+                            top_p: 0.9,
                         }),
                         signal: abortController.signal,
                     });

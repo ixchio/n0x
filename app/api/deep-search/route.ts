@@ -81,6 +81,10 @@ const AI_MODEL_SOURCE_HOSTS = [
     "llm-stats.com",
     "openrouter.ai",
     "huggingface.co",
+    "firstpagesage.com",
+    "momenticmarketing.com",
+    "business-standard.com",
+    "sensortower.com",
 ];
 
 const AI_MODEL_SOURCES: SearchResult[] = [
@@ -110,6 +114,29 @@ const AI_MODEL_SOURCES: SearchResult[] = [
     },
 ];
 
+const AI_MODEL_USAGE_SOURCES: SearchResult[] = [
+    {
+        title: "OpenRouter Model Rankings",
+        url: "https://openrouter.ai/rankings",
+        snippet:
+            "Model rankings based on benchmarks and real usage data from users accessing models through OpenRouter.",
+        source: "curated",
+    },
+    {
+        title: "OpenRouter Data",
+        url: "https://openrouter.ai/data",
+        snippet: "Usage-oriented model rankings and data from OpenRouter traffic.",
+        source: "curated",
+    },
+    {
+        title: "Top Generative AI Chatbots by Market Share",
+        url: "https://firstpagesage.com/reports/top-generative-ai-chatbots/",
+        snippet:
+            "Market share trends for major generative AI chatbot products such as ChatGPT, Gemini, Perplexity, and Claude.",
+        source: "curated",
+    },
+];
+
 function cleanQuery(input: string): string {
     let q = input.trim().replace(/\s+/g, " ");
     q = q
@@ -135,18 +162,49 @@ function isAIModelRankingQuery(query: string): boolean {
     return hasModelTerm && hasRankingIntent;
 }
 
+function isAIModelPopularityQuery(query: string): boolean {
+    const q = query.toLowerCase();
+    const hasModelTerm =
+        /\b(ai\s+models?|ai\s+chatbots?|llms?|large\s+language\s+models?|language\s+models?|chatgpt|gpt|claude|gemini|deepseek|mistral|llama|grok|perplexity)\b/.test(
+            q
+        );
+    const hasUsageIntent =
+        /\b(most\s+used|popular|popularity|usage|used|adoption|market\s+share|share|traffic|users|token\s+volume|widely\s+used)\b/.test(
+            q
+        );
+    return hasModelTerm && hasUsageIntent;
+}
+
 function buildSearchIntent(rawQuery: string): {
     originalQuery: string;
     query: string;
     refinedQuery: string;
     aiModelRanking: boolean;
+    aiModelPopularity: boolean;
 } {
     const originalQuery = rawQuery.trim().replace(/\s+/g, " ");
     const query = cleanQuery(originalQuery);
     const aiModelRanking = isAIModelRankingQuery(query);
+    const aiModelPopularity = isAIModelPopularityQuery(query);
 
-    if (!aiModelRanking) {
-        return { originalQuery, query, refinedQuery: query, aiModelRanking };
+    if (!aiModelRanking && !aiModelPopularity) {
+        return { originalQuery, query, refinedQuery: query, aiModelRanking, aiModelPopularity };
+    }
+
+    if (aiModelPopularity) {
+        const additions: string[] = [];
+        if (!new RegExp(`\\b${CURRENT_YEAR}\\b`).test(query)) additions.push(String(CURRENT_YEAR));
+        if (!/\bopenrouter/i.test(query)) additions.push("OpenRouter real usage data");
+        if (!/\bmarket\s+share|traffic|users/i.test(query)) additions.push("chatbot market share traffic users");
+        additions.push("ChatGPT Gemini Claude Perplexity");
+
+        return {
+            originalQuery,
+            query,
+            refinedQuery: [query, ...additions].join(" ").replace(/\s+/g, " ").trim(),
+            aiModelRanking,
+            aiModelPopularity,
+        };
     }
 
     const additions: string[] = [];
@@ -161,6 +219,7 @@ function buildSearchIntent(rawQuery: string): {
         query,
         refinedQuery: [query, ...additions].join(" ").replace(/\s+/g, " ").trim(),
         aiModelRanking,
+        aiModelPopularity,
     };
 }
 
@@ -183,12 +242,29 @@ function tokenize(text: string): string[] {
     return Array.from(new Set(tokens));
 }
 
-function queryTerms(query: string, aiModelRanking: boolean): string[] {
+function queryTerms(query: string, aiModelRanking: boolean, aiModelPopularity = false): string[] {
     const terms = new Set(tokenize(query));
     if (aiModelRanking) {
         ["ai", "model", "llm", "leaderboard", "benchmark", "ranking", "arena", "intelligence", "reasoning"].forEach(
             term => terms.add(term)
         );
+    }
+    if (aiModelPopularity) {
+        [
+            "ai",
+            "model",
+            "llm",
+            "usage",
+            "popular",
+            "market",
+            "share",
+            "traffic",
+            "users",
+            "openrouter",
+            "chatgpt",
+            "gemini",
+            "claude",
+        ].forEach(term => terms.add(term));
     }
     return Array.from(terms);
 }
@@ -215,8 +291,8 @@ function termScore(text: string, terms: string[], weight: number): number {
     return score;
 }
 
-function scoreResult(query: string, result: SearchResult, aiModelRanking: boolean): number {
-    const terms = queryTerms(query, aiModelRanking);
+function scoreResult(query: string, result: SearchResult, aiModelRanking: boolean, aiModelPopularity = false): number {
+    const terms = queryTerms(query, aiModelRanking, aiModelPopularity);
     const title = result.title || "";
     const snippet = result.snippet || "";
     const combined = `${title} ${snippet} ${result.url}`.toLowerCase();
@@ -237,11 +313,30 @@ function scoreResult(query: string, result: SearchResult, aiModelRanking: boolea
         if (result.source === "wikipedia") score -= 8;
     }
 
+    if (aiModelPopularity) {
+        const hasModelTerm =
+            /\b(ai|llm|model|models|chatbot|chatgpt|gpt|claude|gemini|deepseek|mistral|llama|grok|perplexity)\b/.test(
+                combined
+            );
+        const hasUsageTerm =
+            /\b(usage|popular|market share|traffic|users|token|volume|rank|ranking|data|openrouter)\b/.test(combined);
+        if (!hasModelTerm) score -= 6;
+        if (hasUsageTerm) score += 6;
+        if (hostname(result.url) === "openrouter.ai" || hostname(result.url).endsWith(".openrouter.ai")) score += 12;
+        if (
+            /leaderboard|benchmark|intelligence index|arena/i.test(combined) &&
+            !/usage|users|traffic|token|market share/i.test(combined)
+        ) {
+            score -= 4;
+        }
+        if (result.source === "wikipedia") score -= 8;
+    }
+
     return score;
 }
 
-function scoreContent(query: string, content: string, aiModelRanking: boolean): number {
-    const terms = queryTerms(query, aiModelRanking);
+function scoreContent(query: string, content: string, aiModelRanking: boolean, aiModelPopularity = false): number {
+    const terms = queryTerms(query, aiModelRanking, aiModelPopularity);
     const lower = content.toLowerCase();
     let score = termScore(content, terms, 1.4);
 
@@ -254,22 +349,38 @@ function scoreContent(query: string, content: string, aiModelRanking: boolean): 
         if (hasRankingTerm) score += 5;
     }
 
+    if (aiModelPopularity) {
+        const hasModelTerm =
+            /\b(ai|llm|model|models|chatbot|chatgpt|gpt|claude|gemini|deepseek|mistral|llama|grok|perplexity)\b/.test(
+                lower
+            );
+        const hasUsageTerm =
+            /\b(usage|popular|market share|traffic|users|token|volume|rank|ranking|data|openrouter)\b/.test(lower);
+        if (!hasModelTerm) score -= 8;
+        if (hasUsageTerm) score += 7;
+    }
+
     return score;
 }
 
-function rankResults(query: string, results: SearchResult[], aiModelRanking: boolean): SearchResult[] {
-    const minimumScore = aiModelRanking ? 5 : 1.5;
+function rankResults(
+    query: string,
+    results: SearchResult[],
+    aiModelRanking: boolean,
+    aiModelPopularity = false
+): SearchResult[] {
+    const minimumScore = aiModelRanking || aiModelPopularity ? 3 : 1.5;
     return results
-        .map(result => ({ result, score: scoreResult(query, result, aiModelRanking) }))
+        .map(result => ({ result, score: scoreResult(query, result, aiModelRanking, aiModelPopularity) }))
         .filter(({ score }) => score >= minimumScore)
         .sort((a, b) => b.score - a.score)
         .map(({ result }) => result);
 }
 
-function rankContent(query: string, content: string[], aiModelRanking: boolean): string[] {
-    const minimumScore = aiModelRanking ? 4 : 1.2;
+function rankContent(query: string, content: string[], aiModelRanking: boolean, aiModelPopularity = false): string[] {
+    const minimumScore = aiModelRanking || aiModelPopularity ? 2.5 : 1.2;
     return content
-        .map(text => ({ text, score: scoreContent(query, text, aiModelRanking) }))
+        .map(text => ({ text, score: scoreContent(query, text, aiModelRanking, aiModelPopularity) }))
         .filter(({ text, score }) => text.trim().length > 40 && score >= minimumScore)
         .sort((a, b) => b.score - a.score)
         .map(({ text }) => text);
@@ -573,6 +684,25 @@ function synthesizeAnswer(query: string, allContent: string[], summary?: string)
         }
     }
 
+    if (isAIModelPopularityQuery(query)) {
+        const usageLines = allContent
+            .flatMap(content => content.split("\n"))
+            .map(line =>
+                line
+                    .replace(/^#+\s*/, "")
+                    .replace(/^\*\s*/, "")
+                    .trim()
+            )
+            .filter(line => line.length > 35)
+            .filter(line => /market share|traffic|users|real usage|token|popular|usage|openrouter/i.test(line))
+            .filter(line => !/benchmark|intelligence index|highest intelligence/i.test(line))
+            .slice(0, 4);
+
+        if (usageLines.length > 0) {
+            return usageLines.join(" ");
+        }
+    }
+
     // Extract key facts from content
     const facts: string[] = [];
     for (const content of allContent.slice(0, 3)) {
@@ -604,7 +734,8 @@ export async function POST(request: NextRequest) {
         }
 
         const intent = buildSearchIntent(String(rawQuery));
-        const { originalQuery, query, refinedQuery, aiModelRanking } = intent;
+        const { originalQuery, query, refinedQuery, aiModelRanking, aiModelPopularity } = intent;
+        const aiModelSearch = aiModelRanking || aiModelPopularity;
 
         // Run ALL search engines in parallel for maximum speed
         const [tavilyResult, braveResult, searxResult, ddgResult, wikiResult] = await Promise.all([
@@ -612,7 +743,7 @@ export async function POST(request: NextRequest) {
             searchBrave(refinedQuery).catch(() => null),
             searchSearXNG(refinedQuery).catch(() => ({ results: [], content: [] })),
             getDDGInstant(refinedQuery).catch(() => ({ summary: null, results: [] })),
-            aiModelRanking
+            aiModelSearch
                 ? Promise.resolve({ results: [], content: [] })
                 : searchWikipedia(refinedQuery).catch(() => ({ results: [], content: [] })),
         ]);
@@ -654,6 +785,11 @@ export async function POST(request: NextRequest) {
                 addUniqueResult(allResults, seenUrls, r);
             }
         }
+        if (aiModelPopularity) {
+            for (const r of AI_MODEL_USAGE_SOURCES) {
+                addUniqueResult(allResults, seenUrls, r);
+            }
+        }
 
         // 4. Collect content
         if (ddgResult.summary && !finalAnswer) {
@@ -667,10 +803,13 @@ export async function POST(request: NextRequest) {
             }
         }
 
-        let rankedResults = rankResults(refinedQuery, allResults, aiModelRanking).slice(0, 10);
-        let rankedContent = rankContent(refinedQuery, allContent, aiModelRanking).slice(0, 6);
+        let rankedResults = rankResults(refinedQuery, allResults, aiModelRanking, aiModelPopularity).slice(0, 10);
+        let rankedContent = rankContent(refinedQuery, allContent, aiModelRanking, aiModelPopularity).slice(0, 6);
 
-        if (finalAnswer && scoreContent(refinedQuery, finalAnswer, aiModelRanking) < (aiModelRanking ? 4 : 1.2)) {
+        if (
+            finalAnswer &&
+            scoreContent(refinedQuery, finalAnswer, aiModelRanking, aiModelPopularity) < (aiModelSearch ? 4 : 1.2)
+        ) {
             finalAnswer = undefined;
         }
 
@@ -678,7 +817,7 @@ export async function POST(request: NextRequest) {
         if (rankedContent.length < 3 && rankedResults.length > 0) {
             const jinaUrls = rankedResults
                 .filter(r => r.source !== "wikipedia" && r.url.startsWith("http"))
-                .slice(0, aiModelRanking ? 3 : 2)
+                .slice(0, aiModelSearch ? 3 : 2)
                 .map(r => r.url);
 
             if (jinaUrls.length > 0) {
@@ -691,7 +830,7 @@ export async function POST(request: NextRequest) {
                         }
                     }
                 }
-                rankedContent = rankContent(refinedQuery, allContent, aiModelRanking).slice(0, 6);
+                rankedContent = rankContent(refinedQuery, allContent, aiModelRanking, aiModelPopularity).slice(0, 6);
             }
         }
 
@@ -705,7 +844,7 @@ export async function POST(request: NextRequest) {
 
             if (snippetContent) {
                 allContent.push(snippetContent);
-                rankedContent = rankContent(refinedQuery, allContent, aiModelRanking).slice(0, 6);
+                rankedContent = rankContent(refinedQuery, allContent, aiModelRanking, aiModelPopularity).slice(0, 6);
             }
         }
 

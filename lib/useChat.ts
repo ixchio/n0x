@@ -41,6 +41,14 @@ const IMG_PATTERNS = [
     /^\/image\s+/i,
 ];
 
+const RESPONSE_QUALITY_RULES = `## Response Quality Rules
+- Answer directly first. Do not start with meta commentary.
+- Prefer short paragraphs and clean bullets.
+- Do not use markdown tables unless the user explicitly asks for a table.
+- For current questions, distinguish source-backed facts from inference.
+- If sources disagree or measure different things, say that plainly.
+- Use citations like [1], [2] only for claims supported by provided search results.`;
+
 export function useChat(providerCtx?: {
     provider: "browser" | "ollama" | "cloud" | "chrome-ai";
     ollama: any;
@@ -283,6 +291,7 @@ export function useChat(providerCtx?: {
                         // Build clean numbered citations — LLM synthesizes, doesn't regurgitate
                         const pieces: string[] = [];
 
+                        // Add instant answer if available (DDG Quick Answer)
                         if (result.summary) {
                             pieces.push(`Quick Answer: ${result.summary.slice(0, maxChars)}`);
                         }
@@ -304,7 +313,7 @@ export function useChat(providerCtx?: {
                         });
 
                         if (pieces.length > 0) {
-                            searchCtx = `SEARCH RESULTS for "${message}"${searchQuery !== message ? ` (refined query: "${searchQuery}")` : ""}:\n\n${pieces.join("\n\n")}\n\nSynthesize these results into a direct, concise answer. Cite sources as [1], [2] etc. Do not copy text verbatim.`;
+                            searchCtx = `SEARCH RESULTS for "${message}"${searchQuery !== message ? ` (refined query: "${searchQuery}")` : ""}:\n\n${pieces.join("\n\n")}\n\nUse the numbered search results above for current facts. If the user asks what is "most used" or "most popular", distinguish consumer app usage from API/developer token usage. If search results contain only benchmark rankings (no usage/traffic data), acknowledge this limitation rather than making unsupported usage claims. You may synthesize information from the results but cite sources as [1], [2], etc.`;
                         }
 
                         // Append source list for reference
@@ -373,7 +382,8 @@ export function useChat(providerCtx?: {
                     ? `[CONTEXT]\n${contextParts.join("\n\n")}\n[END CONTEXT]\n\nBased on the context above, answer the following:\n`
                     : "";
 
-            let baseTokens = estimateTokens(systemContent) + estimateTokens(message);
+            const systemForModel = `${systemContent.trim()}\n\n${RESPONSE_QUALITY_RULES}`;
+            let baseTokens = estimateTokens(systemForModel) + estimateTokens(message);
             if (userContextBlock.length > 0) {
                 const ctxTokens = estimateTokens(userContextBlock);
                 if (baseTokens + ctxTokens > MAX_CONTEXT_TOKENS) {
@@ -397,7 +407,7 @@ export function useChat(providerCtx?: {
                 baseTokens += estimateTokens(userContextBlock);
             }
 
-            const msgs: { role: string; content: string }[] = [{ role: "system", content: systemContent }];
+            const msgs: { role: string; content: string }[] = [{ role: "system", content: systemForModel }];
             let currentTokens = baseTokens;
             const history = chatStore.messages.map(m => ({ role: m.role, content: m.content }));
             const trimmedHistory: { role: string; content: string }[] = [];

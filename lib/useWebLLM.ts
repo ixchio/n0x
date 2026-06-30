@@ -568,7 +568,8 @@ export const useWebLLM = create<WebLLMState>((set, get) => ({
             const createOpts: any = {
                 messages: messages as any,
                 stream: true,
-                temperature: 0.7,
+                temperature: 0.25,
+                top_p: 0.9,
                 max_tokens: 4096,
             };
 
