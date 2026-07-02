@@ -99,10 +99,7 @@ export default function RootLayout({
     return (
         <html lang="en" className={`dark ${inter.variable} ${jetbrainsMono.variable}`}>
             <head>
-                <script
-                    type="application/ld+json"
-                    dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
-                />
+                <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
             </head>
             <body className="bg-crt-black text-txt-primary font-sans antialiased">
                 {/* Background layer */}

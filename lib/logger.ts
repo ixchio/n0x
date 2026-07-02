@@ -9,7 +9,7 @@
  *   logger.error('Error occurred', error);
  */
 
-type LogLevel = 'debug' | 'info' | 'warn' | 'error';
+type LogLevel = "debug" | "info" | "warn" | "error";
 
 const LOG_LEVELS: Record<LogLevel, number> = {
     debug: 0,
@@ -23,9 +23,9 @@ class Logger {
     private isProduction: boolean;
 
     constructor() {
-        this.isProduction = process.env.NODE_ENV === 'production';
+        this.isProduction = process.env.NODE_ENV === "production";
         // In production, only show warnings and errors
-        this.minLevel = this.isProduction ? 'warn' : 'debug';
+        this.minLevel = this.isProduction ? "warn" : "debug";
     }
 
     private shouldLog(level: LogLevel): boolean {
@@ -39,35 +39,35 @@ class Logger {
         const prefix = `[${timestamp}] [${level.toUpperCase()}]`;
 
         switch (level) {
-            case 'debug':
+            case "debug":
                 console.debug(prefix, message, ...args);
                 break;
-            case 'info':
+            case "info":
                 console.info(prefix, message, ...args);
                 break;
-            case 'warn':
+            case "warn":
                 console.warn(prefix, message, ...args);
                 break;
-            case 'error':
+            case "error":
                 console.error(prefix, message, ...args);
                 break;
         }
     }
 
     debug(message: string, ...args: any[]): void {
-        this.format('debug', message, ...args);
+        this.format("debug", message, ...args);
     }
 
     info(message: string, ...args: any[]): void {
-        this.format('info', message, ...args);
+        this.format("info", message, ...args);
     }
 
     warn(message: string, ...args: any[]): void {
-        this.format('warn', message, ...args);
+        this.format("warn", message, ...args);
     }
 
     error(message: string, ...args: any[]): void {
-        this.format('error', message, ...args);
+        this.format("error", message, ...args);
     }
 
     /**

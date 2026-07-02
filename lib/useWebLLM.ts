@@ -464,7 +464,7 @@ export const useWebLLM = create<WebLLMState>((set, get) => ({
                 loadProgress: 0,
                 loadingModel: modelId,
                 error: null,
-                loadingStats: { startTime, estimatedTimeRemaining: null, downloadSpeed: null }
+                loadingStats: { startTime, estimatedTimeRemaining: null, downloadSpeed: null },
             });
 
             // Cleanup previous engine (resilient to failures)
@@ -497,8 +497,8 @@ export const useWebLLM = create<WebLLMState>((set, get) => ({
                         loadingStats: {
                             startTime,
                             estimatedTimeRemaining: Math.round(estimatedTimeRemaining),
-                            downloadSpeed
-                        }
+                            downloadSpeed,
+                        },
                     });
 
                     lastProgress = cur;

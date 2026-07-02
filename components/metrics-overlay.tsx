@@ -116,14 +116,17 @@ export function MetricsOverlay({
                                             style={{ width: `${Math.round(progress * 100)}%` }}
                                         />
                                     </div>
-                                    {estimatedTimeRemaining !== null && estimatedTimeRemaining !== undefined && progress > 0 && progress < 1 && (
-                                        <div className="flex items-center justify-between text-[10px]">
-                                            <span className="text-zinc-600">Time remaining</span>
-                                            <span className="text-amber-400 font-semibold">
-                                                ~{formatTimeRemaining(estimatedTimeRemaining)}
-                                            </span>
-                                        </div>
-                                    )}
+                                    {estimatedTimeRemaining !== null &&
+                                        estimatedTimeRemaining !== undefined &&
+                                        progress > 0 &&
+                                        progress < 1 && (
+                                            <div className="flex items-center justify-between text-[10px]">
+                                                <span className="text-zinc-600">Time remaining</span>
+                                                <span className="text-amber-400 font-semibold">
+                                                    ~{formatTimeRemaining(estimatedTimeRemaining)}
+                                                </span>
+                                            </div>
+                                        )}
                                     <div className="text-[10px] text-zinc-600 mt-1">
                                         💡 Model downloads once, then loads instantly from cache
                                     </div>
