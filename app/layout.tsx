@@ -42,10 +42,10 @@ export const metadata: Metadata = {
         url: "https://n0xth.vercel.app",
         images: [
             {
-                url: "/icon.png",
-                width: 512,
-                height: 512,
-                alt: "N0X - AI in Your Browser",
+                url: "/og-image.png",
+                width: 1200,
+                height: 630,
+                alt: "N0X — The Full AI Stack in One Browser Tab",
             },
         ],
         siteName: "N0X",
@@ -54,7 +54,7 @@ export const metadata: Metadata = {
         card: "summary_large_image",
         title: "N0X — The Full AI Stack in One Browser Tab",
         description: "LLMs, agents, RAG, code execution, image gen — all local via WebGPU. Zero backend.",
-        images: ["/icon.png"],
+        images: ["/og-image.png"],
         creator: "@ixchio",
     },
 };
@@ -93,12 +93,7 @@ export default function RootLayout({
             "Text-to-speech",
             "Speech-to-text",
         ],
-        screenshot: "https://n0xth.vercel.app/icon.png",
-        aggregateRating: {
-            "@type": "AggregateRating",
-            ratingValue: "4.8",
-            ratingCount: "127",
-        },
+        screenshot: "https://n0xth.vercel.app/og-image.png",
     };
 
     return (

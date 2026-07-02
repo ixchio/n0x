@@ -2,6 +2,7 @@
 
 import { create } from "zustand";
 import { addTokens } from "@/lib/useWebLLM";
+import { logger } from "@/lib/logger";
 
 export type OllamaStatus = "unloaded" | "ready" | "generating" | "error";
 
@@ -182,7 +183,7 @@ export const useOllama = create<OllamaState>((set, get) => ({
 
                     onToken?.(token);
                 } catch {
-                    console.warn("Failed to parse Ollama JSON line", line);
+                    logger.warn("Failed to parse Ollama JSON line", line);
                 }
             }
 
@@ -195,7 +196,7 @@ export const useOllama = create<OllamaState>((set, get) => ({
             return fullResponse;
         } catch (e: any) {
             if (e.name !== "AbortError") {
-                console.error("Ollama generation error:", e);
+                logger.error("Ollama generation error:", e);
                 set({ error: e.message });
             }
             set({ status: "ready" });

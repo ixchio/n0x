@@ -2,6 +2,7 @@
 
 import { create } from "zustand";
 import { trackFunnelEvent } from "@/lib/analytics";
+import { logger } from "@/lib/logger";
 
 interface RAGDocument {
     id: string;
@@ -65,7 +66,7 @@ function getWorker(onStatus?: (status: string) => void): Worker {
         };
 
         ragWorker.onerror = e => {
-            console.error("Worker fatal error:", e);
+            logger.error("Worker fatal error:", e);
             const error = new Error("Document worker crashed. Try a smaller file or clear the RAG cache.");
             for (const [id, pending] of resolvers) {
                 clearTimeout(pending.timeout);
@@ -130,7 +131,7 @@ export const useRAG = create<RAGState>((set, get) => ({
                 status: "ready",
             }));
         } catch (e: any) {
-            console.error("RAG Worker Error:", e);
+            logger.error("RAG Worker Error:", e);
 
             // Try fallback extraction
             try {
@@ -184,7 +185,7 @@ export const useRAG = create<RAGState>((set, get) => ({
                     status: "ready (fallback mode - no vector search)",
                 }));
             } catch (fallbackError: any) {
-                console.error("Fallback extraction failed:", fallbackError);
+                logger.error("Fallback extraction failed:", fallbackError);
                 set({
                     status: `Failed to load ${file.name}: ${e.message}. Try a different file.`,
                     isIndexing: false,
@@ -198,7 +199,7 @@ export const useRAG = create<RAGState>((set, get) => ({
             const chunks = await postToWorker("SEARCH", { query, limit });
             return chunks || [];
         } catch (e) {
-            console.error("Worker search failed:", e);
+            logger.error("Worker search failed:", e);
             return [];
         }
     },
@@ -226,7 +227,7 @@ export const useRAG = create<RAGState>((set, get) => ({
                     );
                 }
             } catch (e) {
-                console.error("RAG search failed:", e);
+                logger.error("RAG search failed:", e);
             }
         }
 
@@ -260,7 +261,7 @@ export const useRAG = create<RAGState>((set, get) => ({
         try {
             await postToWorker("CLEAR_CACHE", {});
         } catch (e) {
-            console.error(e);
+            logger.error("RAG error:", e);
         }
     },
 

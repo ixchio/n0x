@@ -3,6 +3,7 @@
 import { create } from "zustand";
 import * as webllm from "@mlc-ai/web-llm";
 import { trackFunnelEvent } from "@/lib/analytics";
+import { logger } from "@/lib/logger";
 
 // Complete open-source model list: 360MB → 100GB+
 // All models are MLC-compiled and available via Hugging Face / MLC releases.
@@ -274,6 +275,12 @@ interface WebLLMStats {
     lastTokenTime: number;
 }
 
+interface LoadingStats {
+    startTime: number;
+    estimatedTimeRemaining: number | null;
+    downloadSpeed: number | null;
+}
+
 // GPU capability tiers based on detected VRAM
 export type GpuTier = "none" | "low" | "medium" | "high" | "unknown";
 
@@ -288,6 +295,7 @@ interface WebLLMState {
     gpuLabel: string;
     isMobile: boolean;
     stats: WebLLMStats;
+    loadingStats: LoadingStats;
 
     // Actions
     init: () => Promise<void>;
@@ -338,6 +346,7 @@ export const useWebLLM = create<WebLLMState>((set, get) => ({
     gpuLabel: "",
     isMobile: false,
     stats: { tps: 0, totalTokens: 0, lastTokenTime: 0 },
+    loadingStats: { startTime: 0, estimatedTimeRemaining: null, downloadSpeed: null },
 
     init: async () => {
         if (typeof navigator === "undefined") return;
@@ -449,24 +458,53 @@ export const useWebLLM = create<WebLLMState>((set, get) => ({
                 modelCategory: selectedModel?.category || "unknown",
                 force,
             });
-            set({ status: "loading", loadProgress: 0, loadingModel: modelId, error: null });
+            const startTime = Date.now();
+            set({
+                status: "loading",
+                loadProgress: 0,
+                loadingModel: modelId,
+                error: null,
+                loadingStats: { startTime, estimatedTimeRemaining: null, downloadSpeed: null }
+            });
 
             // Cleanup previous engine (resilient to failures)
             if (engine) {
                 try {
                     await engine.unload();
                 } catch (e) {
-                    console.warn("Engine cleanup failed:", e);
+                    logger.warn("Engine cleanup failed:", e);
                 }
                 engine = null;
             }
 
-            // Progress stall watchdog — detect if download freezes
+            // Progress stall watchdog — detect if download freezes + calculate ETA
             let lastProgress = 0;
             let stallCount = 0;
+            let lastProgressTime = startTime;
             const stallWatchdog = setInterval(() => {
                 const cur = get().loadProgress;
-                if (cur === lastProgress && cur < 1 && cur > 0) {
+                const now = Date.now();
+
+                if (cur > lastProgress && cur > 0 && cur < 1) {
+                    // Calculate ETA based on progress velocity
+                    const elapsedSec = (now - lastProgressTime) / 1000;
+                    const progressDelta = cur - lastProgress;
+                    const remainingProgress = 1 - cur;
+                    const estimatedTimeRemaining = (remainingProgress / progressDelta) * elapsedSec;
+                    const downloadSpeed = progressDelta / elapsedSec; // progress per second
+
+                    set({
+                        loadingStats: {
+                            startTime,
+                            estimatedTimeRemaining: Math.round(estimatedTimeRemaining),
+                            downloadSpeed
+                        }
+                    });
+
+                    lastProgress = cur;
+                    lastProgressTime = now;
+                    stallCount = 0;
+                } else if (cur === lastProgress && cur < 1 && cur > 0) {
                     stallCount++;
                     if (stallCount >= 3) {
                         // 30s with no progress — likely OOM or network issue
@@ -474,9 +512,6 @@ export const useWebLLM = create<WebLLMState>((set, get) => ({
                             error: `Download stalled at ${Math.round(cur * 100)}%. Your device may not have enough memory for this model. Try a smaller model or use Cloud API for instant access.`,
                         });
                     }
-                } else {
-                    stallCount = 0;
-                    lastProgress = cur;
                 }
             }, 10000);
 
@@ -522,7 +557,7 @@ export const useWebLLM = create<WebLLMState>((set, get) => ({
                 modelCategory: selectedModel?.category || "unknown",
             });
         } catch (e: any) {
-            console.error("Model load error:", e);
+            logger.error("Model load error:", e);
             engine = null;
             // Make error messages human-readable
             const raw = e.message || "Failed to load model";
@@ -610,7 +645,7 @@ export const useWebLLM = create<WebLLMState>((set, get) => ({
             return fullResponse;
         } catch (e: any) {
             if (e.name !== "AbortError") {
-                console.error("Generation error:", e);
+                logger.error("Generation error:", e);
                 set({ error: e.message });
             }
             set({ status: "ready" });

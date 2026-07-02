@@ -13,6 +13,7 @@ import { tick as keySoundTick } from "@/lib/useKeySound";
 import { useAgent, AgentToolkit } from "@/lib/useAgent";
 import { routeMessage, classifyComplexity, type RouteDecision } from "@/lib/useAutoRouter";
 import { trackFirstMessage } from "@/lib/analytics";
+import { logger } from "@/lib/logger";
 
 const CHARS_PER_TOKEN = 4;
 function estimateTokens(text: string): number {
@@ -259,7 +260,7 @@ export function useChat(providerCtx?: {
                 try {
                     ragCtx = await rag.getFileContext(message);
                 } catch (e) {
-                    console.error("RAG context failed:", e);
+                    logger.error("RAG context failed:", e);
                     try {
                         const chunks = await rag.search(message, 4);
                         if (chunks.length > 0) {
@@ -322,7 +323,7 @@ export function useChat(providerCtx?: {
                         }
                     }
                 } catch (e) {
-                    console.error("Deep search error (non-fatal):", e);
+                    logger.warn("Deep search error (non-fatal):", e);
                 }
             }
 
@@ -497,7 +498,7 @@ export function useChat(providerCtx?: {
                     setStreamingContent("");
                     if (tts.isEnabled) tts.speak(finalAnswer);
                 } catch (err: any) {
-                    console.error("Agent loop error:", err);
+                    logger.error("Agent loop error:", err);
                     setStreamingContent("");
                     chatStore.addMessage({ role: "assistant", content: `Agent failed: ${err.message}` });
                     agent.reset();
@@ -548,7 +549,7 @@ export function useChat(providerCtx?: {
                 searchCtx = context.searchCtx;
                 hasDocuments = context.hasDocuments;
             } catch (ctxErr: any) {
-                console.error("Context gathering failed (non-fatal):", ctxErr);
+                logger.warn("Context gathering failed (non-fatal):", ctxErr);
                 // Continue without context rather than failing completely
             }
 
@@ -588,7 +589,7 @@ export function useChat(providerCtx?: {
                         try {
                             await memory.saveMemory(summary, tags);
                         } catch (memErr) {
-                            console.warn("Memory save failed (non-fatal):", memErr);
+                            logger.warn("Memory save failed (non-fatal):", memErr);
                         }
                     }
 
@@ -596,7 +597,7 @@ export function useChat(providerCtx?: {
                         try {
                             tts.speak(full);
                         } catch (ttsErr) {
-                            console.warn("TTS failed (non-fatal):", ttsErr);
+                            logger.warn("TTS failed (non-fatal):", ttsErr);
                         }
                     }
 
@@ -610,7 +611,7 @@ export function useChat(providerCtx?: {
                     }
 
                     retryCount++;
-                    console.error(`Generation error (attempt ${retryCount}/${MAX_RETRIES + 1}):`, err);
+                    logger.error(`Generation error (attempt ${retryCount}/${MAX_RETRIES + 1}):`, err);
 
                     // Determine if error is retryable
                     const isNetworkError =
@@ -706,14 +707,13 @@ export function useChat(providerCtx?: {
     }, [chatStore, deepSearch]);
 
     const runPython = useCallback(
-        async (code: string) => {
+        async (code: string, _isSelfHeal = false) => {
             if (!pyodide.isReady) await pyodide.load();
             const res = await pyodide.run(code);
 
-            // Self-Healing
-            if (res.error) {
+            // Self-Healing — only attempt once to avoid infinite error loops
+            if (res.error && !_isSelfHeal) {
                 const errorMsg = `Code Execution Failed:\n\`\`\`text\n${res.error}\n\`\`\`\nPlease fix the code and try again.`;
-                // Trigger automatic retry using the error message
                 handleSend(errorMsg);
             }
 

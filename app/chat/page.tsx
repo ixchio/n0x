@@ -208,6 +208,25 @@ function ChatPageInner() {
     const handleModelChange = useCallback(
         async (modelId: string) => {
             setHeaderModelOpen(false);
+
+            // Mobile warning for large models
+            if (webllm.isMobile && webllm.loadedModel !== modelId) {
+                const model = WEBLLM_MODELS.find(m => m.id === modelId);
+                const sizeInGB = parseFloat(model?.size?.replace(/[^0-9.]/g, '') || '0');
+
+                if (sizeInGB > 2) {
+                    const proceed = window.confirm(
+                        `⚠️ Mobile Device Warning\n\n` +
+                        `${model?.label} (${model?.size}) is large for mobile devices.\n\n` +
+                        `This may cause your browser to crash or freeze. Consider:\n` +
+                        `• Using a smaller model (< 2GB)\n` +
+                        `• Switching to Cloud API (free with Groq)\n\n` +
+                        `Continue loading this model anyway?`
+                    );
+                    if (!proceed) return;
+                }
+            }
+
             if (webllm.loadedModel !== modelId) {
                 await webllm.loadModel(modelId);
             }
@@ -308,6 +327,7 @@ function ChatPageInner() {
                     }
                     isLoading={provider === "browser" && webllm.status === "loading"}
                     progress={webllm.loadProgress}
+                    estimatedTimeRemaining={webllm.loadingStats?.estimatedTimeRemaining}
                     isOpen={showMetrics}
                     onToggle={() => setShowMetrics(!showMetrics)}
                 />

@@ -11,7 +11,7 @@ interface Memory {
     tags: string[];
 }
 
-const DB_NAME = "voidchat_memory";
+const DB_NAME = "n0x_memory";
 const STORE_NAME = "memories";
 
 const STOP_WORDS = new Set([

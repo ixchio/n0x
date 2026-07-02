@@ -2,6 +2,7 @@
 
 import { create } from "zustand";
 import { addTokens } from "@/lib/useWebLLM";
+import { logger } from "@/lib/logger";
 
 // Chrome Built-in AI (Gemini Nano) — zero download, instant inference
 // Uses the Prompt API: https://developer.chrome.com/docs/ai/prompt-api
@@ -132,7 +133,7 @@ export const useChromeAI = create<ChromeAIState>((set, get) => ({
             return fullResponse;
         } catch (e: any) {
             if (e.name !== "AbortError") {
-                console.error("Chrome AI error:", e);
+                logger.error("Chrome AI error:", e);
                 set({ error: e.message });
             }
             set({ status: "ready" });

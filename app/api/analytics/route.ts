@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { logger } from "@/lib/logger";
 import { checkRateLimit } from "@/lib/server/rate-limit";
 
 const EVENTS = new Set([
@@ -48,7 +49,7 @@ export async function POST(request: NextRequest) {
                 .map(([key, value]) => [key.slice(0, 40), typeof value === "string" ? value.slice(0, 80) : value])
         );
 
-        console.info("n0x_analytics", {
+        logger.info("n0x_analytics", {
             event: body.event,
             path: typeof body.path === "string" ? body.path.slice(0, 120) : "",
             ts: typeof body.ts === "number" ? body.ts : Date.now(),

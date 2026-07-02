@@ -1,4 +1,5 @@
 "use client";
+import { logger } from "@/lib/logger";
 
 import React, { useState } from "react";
 import { Database, Trash2, HardDrive, RefreshCw, X, AlertTriangle, CheckCircle2 } from "lucide-react";
@@ -31,7 +32,7 @@ export function StorageManager() {
             });
             setTimeout(() => window.location.reload(), 600);
         } catch (e) {
-            console.error(`[StorageManager] Failed to clear ${dbName}:`, e);
+            logger.error(`[StorageManager] Failed to clear ${dbName}:`, e);
             setClearing(null);
         }
     };
@@ -52,7 +53,7 @@ export function StorageManager() {
             await Promise.all(webllmCaches.map(name => caches.delete(name)));
             setTimeout(() => window.location.reload(), 600);
         } catch (e) {
-            console.error("[StorageManager] Failed to clear Cache API:", e);
+            logger.error("[StorageManager] Failed to clear Cache API:", e);
             setClearing(null);
         }
     };

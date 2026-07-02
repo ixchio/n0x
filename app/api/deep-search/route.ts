@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { logger } from "@/lib/logger";
 import { checkRateLimit } from "@/lib/server/rate-limit";
 
 // N0X Deep Search
@@ -499,7 +500,7 @@ async function searchBrave(
 
         return { results, content, answer };
     } catch (e) {
-        console.error("Brave search error:", e);
+        logger.error("Brave search error:", e);
         return null;
     }
 }
@@ -545,7 +546,7 @@ async function searchTavily(
             summary: response.answer || undefined,
         };
     } catch (e) {
-        console.error("Tavily error:", e);
+        logger.error("Tavily error:", e);
         return null;
     }
 }
@@ -887,7 +888,7 @@ export async function POST(request: NextRequest) {
 
         return NextResponse.json(response);
     } catch (error) {
-        console.error("Deep search error:", error);
+        logger.error("Deep search error:", error);
         return NextResponse.json({
             query: "",
             results: [],

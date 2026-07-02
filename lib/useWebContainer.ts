@@ -2,6 +2,7 @@
 
 import { create } from "zustand";
 import { WebContainer } from "@webcontainer/api";
+import { logger } from "@/lib/logger";
 
 type WebContainerStatus = "unloaded" | "loading" | "ready" | "error";
 
@@ -30,7 +31,7 @@ export const useWebContainer = create<WebContainerState>((set, get) => ({
         try {
             // Check if we're in a cross-origin isolated environment
             if (typeof window !== "undefined" && !window.crossOriginIsolated) {
-                console.warn("WebContainers require Cross-Origin Isolation (COOP/COEP headers).");
+                logger.warn("WebContainers require Cross-Origin Isolation (COOP/COEP headers).");
                 set({ error: "Missing COOP/COEP headers for WebContainers", status: "error" });
                 return;
             }
@@ -38,7 +39,7 @@ export const useWebContainer = create<WebContainerState>((set, get) => ({
             const instance = await WebContainer.boot();
 
             instance.on("server-ready", (port, url) => {
-                console.log(`WebContainer Server ready at ${url}`);
+                logger.info(`WebContainer Server ready at ${url}`);
                 set({ previewUrl: url });
             });
 
@@ -121,7 +122,7 @@ export default function App() {
 
             set({ status: "ready", instance, error: null });
         } catch (e: any) {
-            console.error("WebContainer boot failed:", e);
+            logger.error("WebContainer boot failed:", e);
             set({ status: "error", error: e.message || "Failed to boot WebContainer" });
         }
     },
@@ -153,7 +154,7 @@ export default function App() {
             new WritableStream({
                 write(data) {
                     output += data;
-                    console.log(data); // Also log to console
+                    logger.debug(data);
                 },
             })
         );
@@ -179,7 +180,7 @@ export default function App() {
         process.output.pipeTo(
             new WritableStream({
                 write(data) {
-                    console.log("[Vite]", data);
+                    logger.debug("[Vite]", data);
                 },
             })
         );

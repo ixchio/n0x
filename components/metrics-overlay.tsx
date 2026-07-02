@@ -13,6 +13,7 @@ interface MetricsOverlayProps {
     progress: number;
     isOpen: boolean;
     onToggle: () => void;
+    estimatedTimeRemaining?: number | null;
 }
 
 export function MetricsOverlay({
@@ -23,7 +24,15 @@ export function MetricsOverlay({
     progress,
     isOpen,
     onToggle,
+    estimatedTimeRemaining,
 }: MetricsOverlayProps) {
+    const formatTimeRemaining = (seconds: number | null | undefined): string => {
+        if (!seconds || seconds <= 0) return "Calculating...";
+        if (seconds < 60) return `${seconds}s`;
+        const mins = Math.floor(seconds / 60);
+        const secs = seconds % 60;
+        return `${mins}m ${secs}s`;
+    };
     return (
         <div className="absolute top-4 right-4 z-50">
             <AnimatePresence>
@@ -94,16 +103,29 @@ export function MetricsOverlay({
 
                             {/* Progress Bar (if loading) */}
                             {isLoading && (
-                                <div className="space-y-1.5">
+                                <div className="space-y-2">
                                     <div className="flex items-center justify-between text-[10px]">
-                                        <span className="text-zinc-500">VRAM Transfer</span>
+                                        <span className="text-zinc-500">
+                                            {progress === 0 ? "Initializing..." : "Downloading to browser cache"}
+                                        </span>
                                         <span className="text-yellow-400">{Math.round(progress * 100)}%</span>
                                     </div>
-                                    <div className="h-1 bg-zinc-900 rounded-full overflow-hidden border border-zinc-800">
+                                    <div className="h-1.5 bg-zinc-900 rounded-full overflow-hidden border border-zinc-800">
                                         <div
-                                            className="h-full bg-yellow-400 rounded-full transition-all duration-300"
+                                            className="h-full bg-gradient-to-r from-yellow-400 to-amber-400 rounded-full transition-all duration-300"
                                             style={{ width: `${Math.round(progress * 100)}%` }}
                                         />
+                                    </div>
+                                    {estimatedTimeRemaining !== null && estimatedTimeRemaining !== undefined && progress > 0 && progress < 1 && (
+                                        <div className="flex items-center justify-between text-[10px]">
+                                            <span className="text-zinc-600">Time remaining</span>
+                                            <span className="text-amber-400 font-semibold">
+                                                ~{formatTimeRemaining(estimatedTimeRemaining)}
+                                            </span>
+                                        </div>
+                                    )}
+                                    <div className="text-[10px] text-zinc-600 mt-1">
+                                        💡 Model downloads once, then loads instantly from cache
                                     </div>
                                 </div>
                             )}

@@ -41,3 +41,7 @@ coverage/
 # gemini/agent artifacts (not project code)
 .gemini/
 .agent/
+.claude/
+
+# build artifacts
+tsconfig.tsbuildinfo

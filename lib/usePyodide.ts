@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useRef } from "react";
+import { logger } from "@/lib/logger";
 
 // Pyodide - In-browser Python (WebAssembly)
 // Supports numpy, pandas, scipy, matplotlib, etc.
@@ -40,7 +41,7 @@ export function usePyodide() {
         // Memory Guard
         const deviceMemory = (navigator as any).deviceMemory;
         if (deviceMemory && deviceMemory <= 4) {
-            console.warn(
+            logger.warn(
                 `[Hardware Warning] Device reports ${deviceMemory}GB RAM. Loading Pyodide may push this tab over its memory limit and crash.`
             );
         }
@@ -68,6 +69,7 @@ export function usePyodide() {
             await py.runPythonAsync(`
 import sys
 from io import StringIO
+import { logger } from "@/lib/logger";
 
 class _Out:
     def __init__(self):
@@ -90,7 +92,7 @@ sys.stderr = _out
             setLoadProgress(1);
             setStatus("ready");
         } catch (e: any) {
-            console.error("Pyodide error:", e);
+            logger.error("Pyodide error:", e);
             setStatus("error");
             setLoadError(e.message || "Failed to load Pyodide");
             loadingRef.current = false;
@@ -115,7 +117,7 @@ sys.stderr = _out
             try {
                 await py.loadPackagesFromImports(code);
             } catch (pkgErr: any) {
-                console.warn("Package auto-load failed:", pkgErr.message);
+                logger.warn("Package auto-load failed:", pkgErr.message);
                 // Return early with a helpful error instead of continuing with broken imports
                 return {
                     output: "",

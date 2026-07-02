@@ -3,6 +3,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { addTokens } from "@/lib/useWebLLM";
+import { logger } from "@/lib/logger";
 
 export type CloudStatus = "ready" | "generating" | "error";
 
@@ -242,7 +243,7 @@ export const useCloudAI = create<CloudState>()(
                     return fullResponse;
                 } catch (e: any) {
                     if (e.name !== "AbortError") {
-                        console.error("Cloud API generation error:", e);
+                        logger.error("Cloud API generation error:", e);
                         set({ error: e.message });
                     }
                     set({ status: "ready" });

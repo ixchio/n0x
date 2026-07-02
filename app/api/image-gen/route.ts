@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { logger } from "@/lib/logger";
 import { checkRateLimit } from "@/lib/server/rate-limit";
 
 // N0X Image Generation
@@ -35,7 +36,7 @@ async function tryPollinationsAuth(prompt: string, model: string, apiKey: string
         });
 
         if (!res.ok) {
-            console.warn(`Pollinations ${model}: HTTP ${res.status}`);
+            logger.warn(`Pollinations ${model}: HTTP ${res.status}`);
             return null;
         }
 
@@ -48,7 +49,7 @@ async function tryPollinationsAuth(prompt: string, model: string, apiKey: string
         const b64 = Buffer.from(buf).toString("base64");
         return { image: `data:${mime};base64,${b64}`, provider: `pollinations-${model}` };
     } catch (e) {
-        console.warn(`Pollinations ${model} error:`, e);
+        logger.warn(`Pollinations ${model} error:`, e);
         return null;
     }
 }
@@ -189,7 +190,7 @@ export async function POST(request: NextRequest) {
 
         return NextResponse.json({ success: true, image: result.image, provider: result.provider });
     } catch (error) {
-        console.error("Image gen error:", error);
+        logger.error("Image gen error:", error);
         return NextResponse.json({ error: "Generation failed" }, { status: 500 });
     }
 }
