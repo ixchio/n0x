@@ -23,8 +23,8 @@ import {
     Zap,
     type LucideIcon,
 } from "lucide-react";
-import { PixelNoxMark } from "@/components/pixel-nox-mark";
-import { trackFunnelEvent } from "@/lib/analytics";
+import { PixelNoxMark } from "@/components/brand/pixel-nox-mark";
+import { trackFunnelEvent } from "@/lib/core/analytics";
 
 const profileFacts = [
     { label: "Category", value: "Local-first AI workspace" },

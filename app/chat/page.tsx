@@ -26,28 +26,28 @@ import {
     HardDrive,
     ExternalLink,
 } from "lucide-react";
-import { MetricsOverlay } from "@/components/metrics-overlay";
-import { Sidebar } from "@/components/sidebar";
-import { MessageBubble } from "@/components/message-bubble";
-import { ChatInput } from "@/components/chat-input";
-import { AgentThinking } from "@/components/agent-thinking";
-import { MemoryPanel } from "@/components/memory-panel";
-import { WEBLLM_MODELS, MODEL_CATEGORIES } from "@/lib/useWebLLM";
-import { useOllama } from "@/lib/useOllama";
-import { useCloudAI } from "@/lib/useCloudAI";
-import { useChromeAI } from "@/lib/useChromeAI";
-import { getTotalTokens } from "@/lib/useWebLLM";
+import { MetricsOverlay } from "@/components/chat/metrics-overlay";
+import { Sidebar } from "@/components/layout/sidebar";
+import { MessageBubble } from "@/components/chat/message-bubble";
+import { ChatInput } from "@/components/chat/chat-input";
+import { AgentThinking } from "@/components/chat/agent-thinking";
+import { MemoryPanel } from "@/components/chat/memory-panel";
+import { WEBLLM_MODELS, MODEL_CATEGORIES } from "@/lib/providers/useWebLLM";
+import { useOllama } from "@/lib/providers/useOllama";
+import { useCloudAI } from "@/lib/providers/useCloudAI";
+import { useChromeAI } from "@/lib/providers/useChromeAI";
+import { getTotalTokens } from "@/lib/providers/useWebLLM";
 import { cn } from "@/lib/utils";
-import { CommandMenu } from "@/components/command-menu";
-import { ErrorBoundary } from "@/components/error-boundary";
-import { PersonaSelector } from "@/components/persona-selector";
-import { ShareMenu } from "@/components/share-menu";
-import { useChat } from "@/lib/useChat";
-import { useSTT } from "@/lib/useSTT";
-import { AgentTrace } from "@/components/agent-trace";
-import { Onboarding } from "@/components/onboarding";
-import { trackFunnelEvent } from "@/lib/analytics";
-import { PixelNoxMark } from "@/components/pixel-nox-mark";
+import { CommandMenu } from "@/components/chat/command-menu";
+import { ErrorBoundary } from "@/components/system/error-boundary";
+import { PersonaSelector } from "@/components/chat/persona-selector";
+import { ShareMenu } from "@/components/chat/share-menu";
+import { useChat } from "@/lib/chat/useChat";
+import { useSTT } from "@/lib/media/useSTT";
+import { AgentTrace } from "@/components/chat/agent-trace";
+import { Onboarding } from "@/components/system/onboarding";
+import { trackFunnelEvent } from "@/lib/core/analytics";
+import { PixelNoxMark } from "@/components/brand/pixel-nox-mark";
 
 type AIProvider = "browser" | "ollama" | "cloud" | "chrome-ai";
 

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { logger } from "@/lib/logger";
+import { logger } from "@/lib/core/logger";
 import { checkRateLimit } from "@/lib/server/rate-limit";
 
 const EVENTS = new Set([

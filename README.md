@@ -21,7 +21,7 @@
 
 <br />
 
-<img width="1440" height="960" alt="n0x private docs workflow" src="public/screenshots/chat-workspace.png" />
+<img width="1440" height="960" alt="n0x private docs workflow" src="public/screenshots/chat-workbench.png" />
 
 <br />
 
@@ -49,7 +49,7 @@ Everything runs **client-side**. Your prompts, files, and model weights never le
 
 | Feature                          | Preview                                                                                      |
 | -------------------------------- | -------------------------------------------------------------------------------------------- |
-| Private docs first run           | <img width="900" alt="Private docs first run" src="public/screenshots/chat-workspace.png" /> |
+| Private docs first run           | <img width="900" alt="Private docs first run" src="public/screenshots/chat-workbench.png" /> |
 | Landing page product positioning | <img width="900" alt="Landing page" src="public/screenshots/home-page.png" />                |
 
 ---
@@ -75,6 +75,28 @@ Open `http://localhost:3000`. Pick a model. First load downloads it (~1GB). Afte
 # All optional. n0x works 100% free without any of these.
 TAVILY_API_KEY=tvly-xxxxx      # Research-grade search
 BRAVE_API_KEY=BSA-xxxxx        # Better search quality
+```
+
+---
+
+## Project structure
+
+```text
+app/                  Next.js routes, metadata, and API routes
+components/brand/     N0X identity marks and brand primitives
+components/chat/      Chat workbench UI, messages, panels, and sharing
+components/layout/    Shell and navigation components
+components/system/    PWA, onboarding, storage, skeletons, and boundaries
+components/ui/        Reusable low-level UI primitives
+lib/chat/             Chat orchestration, routing, and conversation state
+lib/core/             Analytics and logging utilities
+lib/media/            Speech, TTS, and interaction sound hooks
+lib/memory/           Persistent semantic memory
+lib/providers/        WebGPU, Chrome AI, Ollama, and cloud providers
+lib/retrieval/        RAG, deep search, and document workers
+lib/runtime/          Agent loop, Pyodide, and WebContainer runtime hooks
+public/brand/         Launch and marketplace brand assets
+public/screenshots/   Current product screenshots
 ```
 
 ---
