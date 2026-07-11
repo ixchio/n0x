@@ -64,8 +64,8 @@ export interface AgentToolkit {
 
 // ─── Config ─────────────────────────────────────────────────────────
 
-const MAX_ITERATIONS = 8;
-const TOOL_TIMEOUT_MS = 30_000; // 30s max per tool execution
+const MAX_ITERATIONS = 12;
+const TOOL_TIMEOUT_MS = 45_000; // 45s max per tool execution
 const MAX_LOOP_REPEATS = 3; // same tool+args 3x = force stop
 
 // ─── System prompt for agent mode ────────────────────────────────────

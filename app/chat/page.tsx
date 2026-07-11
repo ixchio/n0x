@@ -13,16 +13,18 @@ import {
     Cpu,
     Menu,
     AlertTriangle,
-    Download,
     Cloud,
     Server,
     Monitor,
-    ImageIcon,
     Search,
-    Bot,
     FileText,
     Sparkles,
-    Shuffle,
+    Database,
+    KeyRound,
+    Lock,
+    Wifi,
+    HardDrive,
+    ExternalLink,
 } from "lucide-react";
 import { MetricsOverlay } from "@/components/metrics-overlay";
 import { Sidebar } from "@/components/sidebar";
@@ -45,8 +47,11 @@ import { useSTT } from "@/lib/useSTT";
 import { AgentTrace } from "@/components/agent-trace";
 import { Onboarding } from "@/components/onboarding";
 import { trackFunnelEvent } from "@/lib/analytics";
+import { PixelNoxMark } from "@/components/pixel-nox-mark";
 
 type AIProvider = "browser" | "ollama" | "cloud" | "chrome-ai";
+
+const ATTACH_INPUT_ID = "n0x-attach-input";
 
 const SAMPLE_DOC = `# N0X Sample Brief
 
@@ -66,6 +71,460 @@ Known tradeoffs:
 - Deep Search depends on third-party search providers.
 - Cloud API sends selected context to the configured provider.
 `;
+
+function recommendedModelForDevice(gpuTier: string, isMobile: boolean) {
+    if (isMobile || gpuTier === "low") {
+        return {
+            id: "SmolLM2-360M-Instruct-q4f16_1-MLC",
+            label: "SmolLM2 360M",
+            reason: "smallest local model; safest for mobile or low-memory GPUs",
+        };
+    }
+    if (gpuTier === "high") {
+        return {
+            id: "Qwen2.5-3B-Instruct-q4f16_1-MLC",
+            label: "Qwen 2.5 3B",
+            reason: "better quality while still practical for a strong browser GPU",
+        };
+    }
+    return {
+        id: "Qwen2.5-1.5B-Instruct-q4f16_1-MLC",
+        label: "Qwen 2.5 1.5B",
+        reason: "balanced quality and download size for most laptops/desktops",
+    };
+}
+
+function statusTone(status: "ready" | "issue" | "optional" | "checking") {
+    if (status === "ready") return "border-emerald-500/20 bg-emerald-500/10 text-emerald-300";
+    if (status === "issue") return "border-red-500/20 bg-red-500/10 text-red-300";
+    if (status === "checking") return "border-amber-500/20 bg-amber-500/10 text-amber-300";
+    return "border-zinc-700 bg-zinc-900/70 text-zinc-400";
+}
+
+type BannerTone = "blue" | "amber" | "red" | "zinc";
+
+interface BannerAction {
+    label: string;
+    onClick: () => void;
+    primary?: boolean;
+}
+
+interface ProviderSetup {
+    title: string;
+    detail: string;
+    tone: BannerTone;
+    actions: BannerAction[];
+}
+
+function setupToneClasses(tone: BannerTone) {
+    if (tone === "blue") return "border-blue-500/20 bg-blue-500/5 text-blue-200";
+    if (tone === "amber") return "border-amber-500/20 bg-amber-500/5 text-amber-200";
+    if (tone === "red") return "border-red-500/20 bg-red-500/5 text-red-200";
+    return "border-zinc-800 bg-zinc-950/70 text-zinc-200";
+}
+
+function ProviderSetupBanner({ setup }: { setup: ProviderSetup | null }) {
+    if (!setup) return null;
+
+    return (
+        <div className="border-b border-zinc-900 bg-background/80 px-4 py-2 backdrop-blur">
+            <div
+                className={cn(
+                    "mx-auto flex max-w-5xl flex-col gap-2 rounded-lg border px-3 py-2 text-xs sm:flex-row sm:items-center sm:justify-between",
+                    setupToneClasses(setup.tone)
+                )}
+            >
+                <div className="flex min-w-0 items-center gap-2">
+                    <AlertTriangle className="h-3.5 w-3.5 shrink-0 opacity-80" />
+                    <div className="min-w-0">
+                        <span className="font-semibold text-zinc-100">{setup.title}</span>
+                        <span className="mx-2 text-zinc-600">·</span>
+                        <span className="text-zinc-400">{setup.detail}</span>
+                    </div>
+                </div>
+                <div className="flex flex-wrap gap-1.5 sm:justify-end">
+                    {setup.actions.map(action => (
+                        <button
+                            key={action.label}
+                            onClick={action.onClick}
+                            className={cn(
+                                "rounded-md border px-2.5 py-1.5 text-[11px] font-medium transition-colors",
+                                action.primary
+                                    ? "border-zinc-200 bg-zinc-100 text-black hover:bg-white"
+                                    : "border-zinc-800 bg-black/20 text-zinc-300 hover:border-zinc-700 hover:text-white"
+                            )}
+                        >
+                            {action.label}
+                        </button>
+                    ))}
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function EmptyStateCard({
+    icon: Icon,
+    title,
+    detail,
+    onClick,
+    disabled,
+}: {
+    icon: React.ElementType;
+    title: string;
+    detail: string;
+    onClick: () => void;
+    disabled?: boolean;
+}) {
+    return (
+        <button
+            onClick={onClick}
+            disabled={disabled}
+            className={cn(
+                "group flex min-h-[86px] items-start gap-3 rounded-lg border border-zinc-900 bg-zinc-950/45 p-3 text-left transition-colors",
+                disabled
+                    ? "cursor-not-allowed opacity-45"
+                    : "hover:border-zinc-700 hover:bg-zinc-900/70 focus:outline-none focus:ring-1 focus:ring-zinc-700"
+            )}
+        >
+            <Icon className="mt-0.5 h-4 w-4 shrink-0 text-zinc-500 transition-colors group-hover:text-zinc-200" />
+            <span className="min-w-0">
+                <span className="block text-sm font-semibold text-zinc-200">{title}</span>
+                <span className="mt-1 block text-[11px] leading-relaxed text-zinc-500">{detail}</span>
+            </span>
+        </button>
+    );
+}
+
+function WorkbenchEmptyState({
+    provider,
+    recommendedLabel,
+    recommendedReason,
+    localModelDisabled,
+    onAttachDocs,
+    onBestLocalModel,
+    onSampleDocDemo,
+    onSearchWeb,
+    onPrivacyInspector,
+}: {
+    provider: AIProvider;
+    recommendedLabel: string;
+    recommendedReason: string;
+    localModelDisabled: boolean;
+    onAttachDocs: () => void;
+    onBestLocalModel: () => void;
+    onSampleDocDemo: () => void;
+    onSearchWeb: () => void;
+    onPrivacyInspector: () => void;
+}) {
+    const providerNote =
+        provider === "cloud"
+            ? "Cloud only runs after you add a key. Local paths stay available."
+            : provider === "ollama"
+              ? "Ollama stays on your machine when the local server is reachable."
+              : provider === "chrome-ai"
+                ? "Chrome AI is local when Gemini Nano is ready in this browser."
+                : "Browser mode keeps docs and prompts on this machine.";
+
+    return (
+        <div className="min-h-full px-1 py-8 sm:px-4">
+            <div className="mx-auto flex w-full max-w-3xl flex-col gap-5">
+                <div className="flex items-start gap-3">
+                    <PixelNoxMark className="mt-1 h-5 w-10 text-zinc-300" />
+                    <div className="min-w-0">
+                        <h2 className="text-xl font-semibold text-zinc-100">Drop files or ask a question</h2>
+                        <p className="mt-1 max-w-xl text-sm leading-relaxed text-zinc-500">
+                            Start with docs, notes, logs, or a plain question. The provider badge tells you when context
+                            stays local or goes to a configured cloud endpoint.
+                        </p>
+                    </div>
+                </div>
+
+                <div className="grid gap-2 sm:grid-cols-2">
+                    <EmptyStateCard
+                        icon={FileText}
+                        title="Attach docs"
+                        detail="PDFs, notes, CSVs, logs. Build context before you ask."
+                        onClick={onAttachDocs}
+                    />
+                    <EmptyStateCard
+                        icon={HardDrive}
+                        title="Best local model"
+                        detail={`${recommendedLabel}. ${recommendedReason}.`}
+                        onClick={onBestLocalModel}
+                        disabled={localModelDisabled}
+                    />
+                    <EmptyStateCard
+                        icon={FileText}
+                        title="Private docs demo"
+                        detail="Load a sample brief and get a useful first prompt."
+                        onClick={onSampleDocDemo}
+                    />
+                    <EmptyStateCard
+                        icon={Search}
+                        title="Search web"
+                        detail="Turn on web context when local docs are not enough."
+                        onClick={onSearchWeb}
+                    />
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 text-[11px] text-zinc-600">
+                    <span>{providerNote}</span>
+                    <button
+                        onClick={onPrivacyInspector}
+                        className="rounded-md border border-zinc-900 px-2 py-1 text-zinc-400 transition hover:border-zinc-700 hover:text-white"
+                    >
+                        Open privacy inspector
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function StartHereStrip({
+    show,
+    localModelDisabled,
+    onBestLocalModel,
+    onAttachDocs,
+    onCloudSetup,
+    onPrivacyInspector,
+}: {
+    show: boolean;
+    localModelDisabled: boolean;
+    onBestLocalModel: () => void;
+    onAttachDocs: () => void;
+    onCloudSetup: () => void;
+    onPrivacyInspector: () => void;
+}) {
+    if (!show) return null;
+
+    const actions = [
+        { label: "Best local model", onClick: onBestLocalModel, disabled: localModelDisabled },
+        { label: "Attach docs", onClick: onAttachDocs },
+        { label: "Configure cloud", onClick: onCloudSetup },
+        { label: "Open privacy inspector", onClick: onPrivacyInspector },
+    ];
+
+    return (
+        <div className="px-4 pb-1">
+            <div className="mx-auto flex max-w-4xl flex-col gap-2 rounded-lg border border-zinc-900 bg-zinc-950/70 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+                <span className="text-[11px] font-semibold text-zinc-400">Start here</span>
+                <div className="flex flex-wrap gap-1.5">
+                    {actions.map(action => (
+                        <button
+                            key={action.label}
+                            onClick={action.onClick}
+                            disabled={action.disabled}
+                            className={cn(
+                                "rounded-md border border-zinc-800 px-2.5 py-1.5 text-[11px] font-medium text-zinc-300 transition-colors",
+                                action.disabled
+                                    ? "cursor-not-allowed opacity-45"
+                                    : "hover:border-zinc-700 hover:bg-zinc-900 hover:text-white"
+                            )}
+                        >
+                            {action.label}
+                        </button>
+                    ))}
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function DependencyFallbackPanel({
+    provider,
+    webllm,
+    chromeAI,
+    ollama,
+    cloudAI,
+    searchError,
+}: {
+    provider: AIProvider;
+    webllm: any;
+    chromeAI: any;
+    ollama: any;
+    cloudAI: any;
+    searchError?: string | null;
+}) {
+    const rows = [
+        {
+            name: "WebGPU",
+            status: !webllm.isSupported ? "issue" : webllm.gpuTier === "unknown" ? "checking" : "ready",
+            detail: !webllm.isSupported
+                ? webllm.error || "Unavailable in this browser"
+                : `Detected ${webllm.gpuTier} tier`,
+            fallback: "Use Chrome AI, Ollama, or Cloud API.",
+        },
+        {
+            name: "Chrome AI",
+            status: chromeAI.status === "ready" ? "ready" : provider === "chrome-ai" ? "issue" : "optional",
+            detail:
+                chromeAI.status === "ready"
+                    ? "Gemini Nano ready"
+                    : chromeAI.error || "Requires Chrome Prompt API and local model availability",
+            fallback: "Use WebGPU, Ollama, or Cloud API.",
+        },
+        {
+            name: "Ollama",
+            status: ollama.isSupported ? "ready" : provider === "ollama" ? "issue" : "optional",
+            detail: ollama.isSupported
+                ? `${ollama.models.length} local model(s)`
+                : ollama.error || "Local server not reachable",
+            fallback: "Run ollama serve, or use WebGPU/Cloud.",
+        },
+        {
+            name: "Cloud key",
+            status: cloudAI.apiKey ? (cloudAI.error ? "issue" : "ready") : "optional",
+            detail: cloudAI.apiKey ? cloudAI.error || "Configured for this browser session" : "No key stored",
+            fallback: "Stay local, or paste a valid OpenAI-compatible key.",
+        },
+        {
+            name: "Search",
+            status: searchError ? "issue" : "ready",
+            detail: searchError || "DDG, SearXNG, Wikipedia; Brave/Tavily if server keys exist",
+            fallback: "Answer from local model and uploaded docs.",
+        },
+    ] as const;
+
+    return (
+        <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-3 text-left">
+            <div className="mb-2 flex items-center gap-2 text-xs font-semibold text-zinc-300">
+                <AlertTriangle className="h-3.5 w-3.5 text-zinc-500" />
+                Dependency fallbacks
+            </div>
+            <div className="space-y-1.5">
+                {rows.map(row => (
+                    <div key={row.name} className="rounded-lg bg-zinc-900/40 p-2 text-[10px]">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                            <span
+                                className={cn(
+                                    "rounded border px-1.5 py-0.5 font-semibold uppercase",
+                                    statusTone(row.status)
+                                )}
+                            >
+                                {row.status}
+                            </span>
+                            <span className="font-semibold text-zinc-300">{row.name}</span>
+                        </div>
+                        <div className="mt-1 leading-relaxed text-zinc-500">
+                            {row.detail} <span className="text-zinc-600">{row.fallback}</span>
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+}
+
+function PrivacyInspector({
+    open,
+    onClose,
+    ragCount,
+    cloudKeySet,
+    deepSearchEnabled,
+    memoryEnabled,
+    provider,
+    webllm,
+    chromeAI,
+    ollama,
+    cloudAI,
+    searchError,
+}: {
+    open: boolean;
+    onClose: () => void;
+    ragCount: number;
+    cloudKeySet: boolean;
+    deepSearchEnabled: boolean;
+    memoryEnabled: boolean;
+    provider: AIProvider;
+    webllm: any;
+    chromeAI: any;
+    ollama: any;
+    cloudAI: any;
+    searchError?: string | null;
+}) {
+    if (!open) return null;
+
+    const rows = [
+        {
+            icon: Database,
+            label: "IndexedDB",
+            value: `${ragCount} attached file${ragCount === 1 ? "" : "s"} · conversations, memory, vector cache`,
+        },
+        {
+            icon: KeyRound,
+            label: "Cloud keys",
+            value: cloudKeySet ? "sessionStorage for this browser session" : "not configured",
+        },
+        {
+            icon: Lock,
+            label: "Current chat path",
+            value:
+                provider === "cloud"
+                    ? "cloud provider receives selected prompt/context"
+                    : deepSearchEnabled
+                      ? "local model plus network search context"
+                      : "local provider path",
+        },
+        {
+            icon: Wifi,
+            label: "Network toggles",
+            value: `search ${deepSearchEnabled ? "on" : "off"} · memory recall ${memoryEnabled ? "on" : "off"}`,
+        },
+    ];
+
+    return (
+        <div className="fixed right-4 top-16 z-50 w-[min(360px,calc(100vw-2rem))] rounded-xl border border-zinc-800 bg-[#0b0b0b] p-4 shadow-2xl">
+            <div className="mb-3 flex items-start justify-between gap-3">
+                <div>
+                    <div className="flex items-center gap-2 text-sm font-semibold text-white">
+                        <Shield className="h-4 w-4 text-emerald-300" />
+                        Privacy inspector
+                    </div>
+                    <p className="mt-1 text-[11px] leading-relaxed text-zinc-500">
+                        Shows where the next prompt and local data can go.
+                    </p>
+                </div>
+                <button
+                    onClick={onClose}
+                    className="rounded-md px-2 py-1 text-xs text-zinc-500 hover:bg-zinc-900 hover:text-white"
+                >
+                    Close
+                </button>
+            </div>
+            <div className="space-y-2">
+                {rows.map(({ icon: Icon, label, value }) => (
+                    <div key={label} className="flex gap-3 rounded-lg border border-zinc-900 bg-zinc-950/60 p-3">
+                        <Icon className="mt-0.5 h-4 w-4 shrink-0 text-zinc-500" />
+                        <div>
+                            <div className="text-[11px] font-semibold text-zinc-300">{label}</div>
+                            <div className="mt-0.5 text-[10px] leading-relaxed text-zinc-500">{value}</div>
+                        </div>
+                    </div>
+                ))}
+            </div>
+            <div className="mt-3 flex gap-3 border-t border-zinc-900 pt-3 text-[10px] font-mono">
+                <a href="/security" className="inline-flex items-center gap-1 text-zinc-500 hover:text-white">
+                    Security <ExternalLink className="h-3 w-3" />
+                </a>
+                <a href="/privacy" className="inline-flex items-center gap-1 text-zinc-500 hover:text-white">
+                    Privacy <ExternalLink className="h-3 w-3" />
+                </a>
+            </div>
+            <div className="mt-4">
+                <DependencyFallbackPanel
+                    provider={provider}
+                    webllm={webllm}
+                    chromeAI={chromeAI}
+                    ollama={ollama}
+                    cloudAI={cloudAI}
+                    searchError={searchError}
+                />
+            </div>
+        </div>
+    );
+}
 
 function ChatPageInner() {
     const [provider, _setProvider] = useState<AIProvider>(() => {
@@ -150,6 +609,7 @@ function ChatPageInner() {
     const [pyEnabled, setPyEnabled] = useState(false);
     const [providerMenuOpen, setProviderMenuOpen] = useState(false);
     const [showShortcuts, setShowShortcuts] = useState(false);
+    const [showPrivacyInspector, setShowPrivacyInspector] = useState(false);
 
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     const userScrolledUpRef = useRef(false);
@@ -190,9 +650,13 @@ function ChatPageInner() {
     useEffect(() => {
         const el = scrollContainerRef.current;
         if (el && !userScrolledUpRef.current) {
+            if (chatStore.messages.length === 0 && !streamingContent && !deepSearch.isActive) {
+                el.scrollTop = 0;
+                return;
+            }
             el.scrollTop = el.scrollHeight;
         }
-    }, [chatStore.messages, streamingContent, deepSearch.phase, deepSearch.streamingText]);
+    }, [chatStore.messages, streamingContent, deepSearch.isActive, deepSearch.phase, deepSearch.streamingText]);
 
     useEffect(() => {
         const el = scrollContainerRef.current;
@@ -243,6 +707,46 @@ function ChatPageInner() {
         setInput("Summarize the attached sample brief in 5 bullets and list the privacy tradeoffs.");
     }, [provider, rag, setInput, webllm]);
 
+    const localModelRecommendation = recommendedModelForDevice(webllm.gpuTier, webllm.isMobile);
+
+    const openAttachPicker = useCallback(() => {
+        document.getElementById(ATTACH_INPUT_ID)?.click();
+    }, []);
+
+    const openCloudSetup = useCallback(() => {
+        setProvider("cloud");
+        setHeaderModelOpen(false);
+        setProviderMenuOpen(true);
+    }, [setProvider]);
+
+    const openOllamaSetup = useCallback(() => {
+        setProvider("ollama");
+        ollama.setBaseUrl(ollamaUrl);
+        setHeaderModelOpen(false);
+        setProviderMenuOpen(true);
+    }, [ollama, ollamaUrl, setProvider]);
+
+    const switchToWebGPU = useCallback(() => {
+        setProvider("browser");
+        setHeaderModelOpen(false);
+        setProviderMenuOpen(false);
+    }, [setProvider]);
+
+    const loadBestLocalModel = useCallback(() => {
+        if (!webllm.isSupported) return;
+        setProvider("browser");
+        void handleModelChange(localModelRecommendation.id);
+    }, [handleModelChange, localModelRecommendation.id, setProvider, webllm.isSupported]);
+
+    const startWebSearch = useCallback(() => {
+        setDeepSearchEnabled(true);
+        setInput("search the web for ");
+    }, [setDeepSearchEnabled, setInput]);
+
+    const openPrivacyInspector = useCallback(() => {
+        setShowPrivacyInspector(true);
+    }, []);
+
     const onNewChat = useCallback(() => {
         setIsExploding(true);
         setTimeout(() => {
@@ -269,6 +773,110 @@ function ChatPageInner() {
         document.addEventListener("keydown", handler);
         return () => document.removeEventListener("keydown", handler);
     }, [onNewChat]);
+
+    const activeModelName =
+        provider === "ollama"
+            ? ollama.loadedModel || "Ollama"
+            : provider === "cloud"
+              ? cloudAI.loadedModel || "Cloud API"
+              : provider === "chrome-ai"
+                ? "Gemini Nano"
+                : WEBLLM_MODELS.find(m => m.id === webllm.loadedModel)?.label || webllm.loadedModel || "No model";
+    const liveMessageMeta = {
+        provider,
+        providerLabel:
+            provider === "browser"
+                ? "WebGPU"
+                : provider === "chrome-ai"
+                  ? "Chrome AI"
+                  : provider === "ollama"
+                    ? "Ollama"
+                    : "Cloud API",
+        modelName: activeModelName,
+        privacy: provider === "cloud" ? "cloud" : deepSearchEnabled ? "mixed" : "local",
+        usedSearch: deepSearchEnabled,
+        usedDocs: rag.documents.length > 0,
+        usedMemory: memoryEnabled,
+        agent: agent.enabled,
+    } as const;
+
+    const cloudBlockingError =
+        cloudAI.apiKey && cloudAI.error && cloudAI.error !== "API Key required for Cloud AI" ? cloudAI.error : null;
+
+    const providerSetup: ProviderSetup | null =
+        provider === "cloud" && !cloudAI.apiKey
+            ? {
+                  title: "Cloud API not configured",
+                  detail: "Add a session key or stay local.",
+                  tone: "blue",
+                  actions: [
+                      { label: "Add key", onClick: openCloudSetup, primary: true },
+                      { label: "Switch to WebGPU", onClick: switchToWebGPU },
+                      { label: "Use Ollama", onClick: openOllamaSetup },
+                  ],
+              }
+            : provider === "cloud" && cloudBlockingError
+              ? {
+                    title: "Cloud API needs attention",
+                    detail: cloudBlockingError,
+                    tone: "red",
+                    actions: [
+                        { label: "Update key", onClick: openCloudSetup, primary: true },
+                        { label: "Switch to WebGPU", onClick: switchToWebGPU },
+                        { label: "Use Ollama", onClick: openOllamaSetup },
+                    ],
+                }
+              : provider === "browser" && !webllm.isSupported
+                ? {
+                      title: "WebGPU unavailable",
+                      detail: webllm.error || "This browser cannot run local WebGPU models.",
+                      tone: "amber",
+                      actions: [
+                          { label: "Configure cloud", onClick: openCloudSetup, primary: true },
+                          { label: "Use Ollama", onClick: openOllamaSetup },
+                          { label: "Privacy inspector", onClick: openPrivacyInspector },
+                      ],
+                  }
+                : provider === "ollama" && !ollama.isSupported
+                  ? {
+                        title: "Ollama unreachable",
+                        detail: ollama.error || "Start your local Ollama server or pick another provider.",
+                        tone: "amber",
+                        actions: [
+                            { label: "Configure Ollama", onClick: openOllamaSetup, primary: true },
+                            { label: "Switch to WebGPU", onClick: switchToWebGPU },
+                            { label: "Configure cloud", onClick: openCloudSetup },
+                        ],
+                    }
+                  : provider === "chrome-ai" && chromeAI.status !== "ready"
+                    ? {
+                          title: chromeAI.status === "downloading" ? "Chrome AI downloading" : "Chrome AI unavailable",
+                          detail:
+                              chromeAI.error ||
+                              (chromeAI.status === "downloading"
+                                  ? "Gemini Nano is still installing in Chrome."
+                                  : "Use another provider for this session."),
+                          tone: chromeAI.status === "downloading" ? "zinc" : "amber",
+                          actions: [
+                              { label: "Switch to WebGPU", onClick: switchToWebGPU, primary: true },
+                              { label: "Use Ollama", onClick: openOllamaSetup },
+                              { label: "Configure cloud", onClick: openCloudSetup },
+                          ],
+                      }
+                    : null;
+
+    const activeProviderReady =
+        provider === "browser"
+            ? webllm.isSupported && webllm.status === "ready"
+            : provider === "ollama"
+              ? ollama.isSupported && Boolean(ollama.loadedModel)
+              : provider === "cloud"
+                ? Boolean(cloudAI.apiKey) && !cloudBlockingError
+                : chromeAI.status === "ready";
+
+    const emptyWorkbenchVisible =
+        chatStore.messages.length === 0 && !deepSearch.isActive && webllm.status !== "loading";
+    const showStartHereStrip = emptyWorkbenchVisible && !activeProviderReady;
 
     return (
         <div className="h-screen flex bg-background font-sans overflow-hidden text-foreground selection:bg-white/20">
@@ -614,7 +1222,7 @@ function ChatPageInner() {
                                         <div>
                                             <div className="font-semibold">Cloud API</div>
                                             <div className="text-[10px] text-zinc-500">
-                                                Groq, OpenRouter, or any OpenAI-compatible API
+                                                Sends selected prompt/context to your configured provider
                                             </div>
                                         </div>
                                     </button>
@@ -742,6 +1350,19 @@ function ChatPageInner() {
                                 )}
                             </button>
 
+                            <button
+                                onClick={() => setShowPrivacyInspector(open => !open)}
+                                title="Privacy inspector"
+                                className={cn(
+                                    "ml-2 p-1 rounded transition-all",
+                                    showPrivacyInspector
+                                        ? "text-emerald-300"
+                                        : "text-txt-tertiary hover:text-txt-secondary"
+                                )}
+                            >
+                                <Shield className="w-3.5 h-3.5" />
+                            </button>
+
                             {/* TPS — provider-aware */}
                             {(() => {
                                 const tps =
@@ -796,6 +1417,23 @@ function ChatPageInner() {
                     <div className="ml-auto text-[10px] text-txt-tertiary font-mono">ctrl+k</div>
                 </header>
 
+                <PrivacyInspector
+                    open={showPrivacyInspector}
+                    onClose={() => setShowPrivacyInspector(false)}
+                    ragCount={rag.documents.length}
+                    cloudKeySet={Boolean(cloudAI.apiKey)}
+                    deepSearchEnabled={deepSearchEnabled}
+                    memoryEnabled={memoryEnabled}
+                    provider={provider}
+                    webllm={webllm}
+                    chromeAI={chromeAI}
+                    ollama={ollama}
+                    cloudAI={cloudAI}
+                    searchError={deepSearch.error}
+                />
+
+                <ProviderSetupBanner setup={providerSetup} />
+
                 {/* Messages */}
                 <div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-6">
                     {/* WebGPU unsupported hint is now integrated into the welcome screen */}
@@ -826,7 +1464,7 @@ function ChatPageInner() {
                                         onClick={() => setProvider("cloud")}
                                         className="w-full px-4 py-2.5 bg-blue-500/15 hover:bg-blue-500/25 border border-blue-500/30 text-blue-300 text-xs font-mono font-bold rounded-lg transition-colors flex items-center justify-center gap-2"
                                     >
-                                        <Cloud className="w-3.5 h-3.5" /> Switch to Cloud API (instant, free via Groq)
+                                        <Cloud className="w-3.5 h-3.5" /> Use Cloud API for this session
                                     </button>
 
                                     {/* Force load (if hardware restricted) */}
@@ -901,7 +1539,7 @@ function ChatPageInner() {
                                                         onClick={() => setProvider("cloud")}
                                                         className="px-3 py-1.5 bg-blue-500/15 hover:bg-blue-500/25 border border-blue-500/25 text-[10px] text-blue-300 font-mono font-bold rounded transition-colors"
                                                     >
-                                                        Switch to Cloud API
+                                                        Use Cloud API
                                                     </button>
                                                 </div>
                                             </>
@@ -924,307 +1562,18 @@ function ChatPageInner() {
                             </div>
                         )}
 
-                    {/* Welcome screen (no messages yet) */}
-                    {chatStore.messages.length === 0 && !deepSearch.isActive && webllm.status !== "loading" ? (
-                        <div className="h-full flex flex-col items-center justify-center">
-                            <div className="space-y-6 text-center max-w-md w-full">
-                                <h2 className="text-3xl text-white font-bold tracking-tight">N0X</h2>
-                                <p className="text-sm text-zinc-400 font-medium mt-2 max-w-xs mx-auto">
-                                    {provider === "browser" && !webllm.isSupported
-                                        ? "Your browser doesn't support WebGPU yet — switch to Ollama or Cloud below, or try Chrome 113+."
-                                        : provider === "browser" && webllm.status === "unloaded"
-                                          ? "Select a model to begin. All inference runs locally on your GPU — zero cloud, zero latency."
-                                          : provider === "browser" && webllm.status === "ready"
-                                            ? "Model loaded. Ask me anything — code, analysis, research. Everything stays on your machine."
-                                            : provider === "ollama" && ollama.isSupported
-                                              ? `Connected to Ollama · ${ollama.models.length} model${ollama.models.length !== 1 ? "s" : ""} available. Ask me anything.`
-                                              : provider === "ollama" && !ollama.isSupported
-                                                ? "Can't reach Ollama — make sure it's installed and running on your machine."
-                                                : provider === "cloud" && cloudAI.apiKey
-                                                  ? `Cloud API ready · ${cloudAI.loadedModel || "no model"}. Ask me anything — fast inference, unlimited context.`
-                                                  : provider === "cloud"
-                                                    ? "Set your API key to get started — click the Cloud button in the header to configure."
-                                                    : provider === "chrome-ai" && chromeAI.status === "ready"
-                                                      ? "Chrome AI ready. Ask me anything — instant inference, zero download, fully private."
-                                                      : provider === "chrome-ai" && chromeAI.status === "downloading"
-                                                        ? "Chrome AI is downloading the Gemini Nano model. This only happens once — please wait."
-                                                        : provider === "chrome-ai"
-                                                          ? "Chrome AI is initializing. Make sure you're on Chrome 138+ with Gemini Nano enabled."
-                                                          : "Ready to go. Ask me anything."}
-                                </p>
-
-                                {provider === "browser" && webllm.isSupported && webllm.status === "unloaded" && (
-                                    <>
-                                        <button
-                                            onClick={handleSampleDocDemo}
-                                            className="w-full rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-left transition-all hover:border-emerald-400/40 hover:bg-emerald-500/15"
-                                        >
-                                            <div className="flex items-center gap-2 text-sm font-semibold text-emerald-200">
-                                                <FileText className="h-4 w-4" />
-                                                30-second private docs demo
-                                            </div>
-                                            <div className="mt-1 text-[11px] leading-relaxed text-emerald-100/60">
-                                                Attaches a sample brief, loads the tiny local model, and prepares a
-                                                useful first question.
-                                            </div>
-                                        </button>
-
-                                        <div className="grid grid-cols-3 gap-2 pt-4">
-                                            <button
-                                                onClick={() => handleModelChange("SmolLM2-360M-Instruct-q4f16_1-MLC")}
-                                                className="p-3 rounded bg-crt-surface border border-crt-border hover:border-phosphor-dim transition-all text-left group"
-                                            >
-                                                <div className="flex items-center gap-1.5 mb-1">
-                                                    <Zap className="w-3 h-3 text-neon-amber" />
-                                                    <span className="text-[11px] text-txt-secondary group-hover:text-phosphor">
-                                                        SmolLM2 360M
-                                                    </span>
-                                                </div>
-                                                <div className="text-[10px] text-txt-tertiary">ultra-fast · 360MB</div>
-                                            </button>
-
-                                            <button
-                                                onClick={() =>
-                                                    handleModelChange(
-                                                        webllm.gpuTier === "low"
-                                                            ? "SmolLM2-360M-Instruct-q4f16_1-MLC"
-                                                            : "Qwen2.5-1.5B-Instruct-q4f16_1-MLC"
-                                                    )
-                                                }
-                                                className="p-3 rounded bg-crt-surface border border-phosphor-dim hover:border-phosphor transition-all text-left group relative"
-                                            >
-                                                <div className="absolute -top-2 right-2 text-[8px] bg-phosphor text-crt-black px-1.5 py-0.5 rounded font-mono font-bold">
-                                                    recommended
-                                                </div>
-                                                <div className="flex items-center gap-1.5 mb-1">
-                                                    <Brain className="w-3 h-3 text-neon-cyan" />
-                                                    <span className="text-[11px] text-txt-secondary group-hover:text-phosphor">
-                                                        {webllm.gpuTier === "low" ? "SmolLM2 360M" : "Qwen 1.5B"}
-                                                    </span>
-                                                </div>
-                                                <div className="text-[10px] text-txt-tertiary">
-                                                    {webllm.gpuTier === "low" ? "safe for your GPU" : "balanced · 1GB"}
-                                                </div>
-                                            </button>
-
-                                            <button
-                                                onClick={() =>
-                                                    handleModelChange("Qwen2.5-Coder-1.5B-Instruct-q4f16_1-MLC")
-                                                }
-                                                className="p-3 rounded bg-crt-surface border border-crt-border hover:border-phosphor-dim transition-all text-left group"
-                                            >
-                                                <div className="flex items-center gap-1.5 mb-1">
-                                                    <Code className="w-3 h-3 text-phosphor" />
-                                                    <span className="text-[11px] text-txt-secondary group-hover:text-phosphor">
-                                                        Coder 1.5B
-                                                    </span>
-                                                </div>
-                                                <div className="text-[10px] text-txt-tertiary">code · 1GB</div>
-                                            </button>
-                                        </div>
-
-                                        {/* GPU tier hint + alternative provider suggestion */}
-                                        {webllm.gpuTier === "low" && (
-                                            <div className="mt-3 p-3 rounded-lg bg-amber-500/5 border border-amber-500/15 text-center">
-                                                <p className="text-[10px] text-amber-300/80 font-mono mb-2">
-                                                    {webllm.isMobile
-                                                        ? "📱 Mobile device — only tiny models work in-browser. For full power, use Cloud API."
-                                                        : "⚡ Low GPU memory detected — browser models will be limited."}
-                                                </p>
-                                                <button
-                                                    onClick={() => setProvider("cloud")}
-                                                    className="text-[10px] text-blue-400 hover:text-blue-300 font-mono font-bold underline underline-offset-2"
-                                                >
-                                                    Try Cloud API instead → 70B quality, instant, free via Groq
-                                                </button>
-                                            </div>
-                                        )}
-                                        {(webllm.gpuTier === "unknown" || webllm.gpuTier === "medium") && (
-                                            <p className="text-[10px] text-zinc-600 font-mono mt-2">
-                                                Want faster responses?{" "}
-                                                <button
-                                                    onClick={() => setProvider("cloud")}
-                                                    className="text-blue-400/80 hover:text-blue-300 underline underline-offset-2"
-                                                >
-                                                    Try Cloud API
-                                                </button>{" "}
-                                                — instant inference, free tier available.
-                                            </p>
-                                        )}
-                                        {webllm.gpuLabel && (
-                                            <p className="text-[9px] text-zinc-700 font-mono mt-1">
-                                                Detected: {webllm.gpuLabel}
-                                            </p>
-                                        )}
-                                    </>
-                                )}
-
-                                {/* Provider switch when WebGPU unavailable */}
-                                {provider === "browser" && !webllm.isSupported && (
-                                    <div className="flex flex-col items-center gap-3 pt-4">
-                                        <p className="text-xs text-zinc-500">
-                                            WebGPU isn't available in this browser. Try another provider:
-                                        </p>
-                                        <div className="flex gap-2">
-                                            <button
-                                                onClick={() => setProvider("cloud")}
-                                                className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-blue-500/15 border border-blue-500/25 text-xs text-blue-300 font-bold hover:bg-blue-500/25 transition-all"
-                                            >
-                                                <Cloud className="w-3.5 h-3.5" /> Cloud API (recommended)
-                                            </button>
-                                            <button
-                                                onClick={() => setProvider("ollama")}
-                                                className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-orange-500/10 border border-orange-500/20 text-xs text-orange-300 hover:bg-orange-500/20 transition-all"
-                                            >
-                                                <Server className="w-3.5 h-3.5" /> Ollama
-                                            </button>
-                                        </div>
-                                    </div>
-                                )}
-
-                                {/* Cloud API quick setup on welcome screen */}
-                                {provider === "cloud" && !cloudAI.apiKey && (
-                                    <div className="flex flex-col items-center gap-3 pt-4 max-w-sm mx-auto">
-                                        <div className="w-full rounded-xl bg-blue-500/5 border border-blue-500/15 p-4 space-y-3 text-left">
-                                            <div className="flex items-center gap-2 text-blue-300 text-xs font-semibold">
-                                                <Cloud className="w-3.5 h-3.5" />
-                                                Quick setup — 30 seconds:
-                                            </div>
-                                            <ol className="text-[11px] text-zinc-400 space-y-2 list-decimal list-inside leading-relaxed">
-                                                <li>
-                                                    Get a free API key from{" "}
-                                                    <a
-                                                        href="https://console.groq.com/keys"
-                                                        target="_blank"
-                                                        rel="noopener noreferrer"
-                                                        className="text-blue-300 underline underline-offset-2 hover:text-blue-200 font-bold"
-                                                    >
-                                                        console.groq.com
-                                                    </a>{" "}
-                                                    (free tier, no credit card)
-                                                </li>
-                                                <li>
-                                                    Click the <span className="text-blue-300 font-bold">Cloud</span>{" "}
-                                                    button in the header ↑
-                                                </li>
-                                                <li>Paste your key → pick a model → start chatting</li>
-                                            </ol>
-                                            <div className="pt-2 border-t border-zinc-800/50 text-[10px] text-zinc-500 space-y-1">
-                                                <p>
-                                                    🚀 <span className="text-zinc-400">Groq</span>: Llama 3.3 70B @ 330
-                                                    tok/s — free
-                                                </p>
-                                                <p>
-                                                    🔥 <span className="text-zinc-400">OpenRouter</span>: 200+ models,
-                                                    pay-as-you-go
-                                                </p>
-                                                <p>Works with any OpenAI-compatible endpoint.</p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
-
-                                {/* Ollama setup guide — shown when Ollama provider is selected but not reachable */}
-                                {provider === "ollama" && !ollama.isSupported && (
-                                    <div className="flex flex-col items-center gap-3 pt-4 max-w-sm mx-auto">
-                                        <div className="w-full rounded-xl bg-orange-500/5 border border-orange-500/15 p-4 space-y-3 text-left">
-                                            <div className="flex items-center gap-2 text-orange-300 text-xs font-semibold">
-                                                <Download className="w-3.5 h-3.5" />
-                                                Ollama not found — quick setup:
-                                            </div>
-                                            <ol className="text-[11px] text-zinc-400 space-y-1.5 list-decimal list-inside leading-relaxed">
-                                                <li>
-                                                    Download from{" "}
-                                                    <a
-                                                        href="https://ollama.com/download"
-                                                        target="_blank"
-                                                        rel="noopener noreferrer"
-                                                        className="text-orange-300 underline underline-offset-2 hover:text-orange-200"
-                                                    >
-                                                        ollama.com/download
-                                                    </a>
-                                                </li>
-                                                <li>
-                                                    Install and run:{" "}
-                                                    <code className="bg-zinc-800 px-1.5 py-0.5 rounded text-[10px] text-zinc-300 font-mono">
-                                                        ollama serve
-                                                    </code>
-                                                </li>
-                                                <li>
-                                                    Pull a model:{" "}
-                                                    <code className="bg-zinc-800 px-1.5 py-0.5 rounded text-[10px] text-zinc-300 font-mono">
-                                                        ollama pull llama3.2
-                                                    </code>
-                                                </li>
-                                            </ol>
-                                            <p className="text-[10px] text-zinc-500">
-                                                n0x auto-detects when Ollama starts — no refresh needed.
-                                            </p>
-                                            {ollama.error && (
-                                                <div className="flex items-start gap-1.5 text-[10px] text-red-400/80 pt-1 border-t border-zinc-800">
-                                                    <AlertTriangle className="w-3 h-3 mt-0.5 shrink-0" />
-                                                    <span>{ollama.error}</span>
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-                                )}
-
-                                {/* Suggestion Chips — always visible for image gen, web search, etc. */}
-                                <div className="grid grid-cols-2 gap-2 pt-6 max-w-sm mx-auto">
-                                    <button
-                                        onClick={() => {
-                                            setInput("generate an image of ");
-                                        }}
-                                        className="flex items-center gap-2 p-3 rounded-xl bg-zinc-900/50 border border-zinc-800/50 hover:border-pink-500/30 hover:bg-zinc-900/80 transition-all text-left group"
-                                    >
-                                        <ImageIcon className="w-4 h-4 text-pink-400" />
-                                        <div>
-                                            <div className="text-xs text-zinc-300 font-medium">Generate Image</div>
-                                            <div className="text-[10px] text-zinc-600">AI-powered, free</div>
-                                        </div>
-                                    </button>
-                                    <button
-                                        onClick={() => {
-                                            setDeepSearchEnabled(true);
-                                            setInput("search the web for ");
-                                        }}
-                                        className="flex items-center gap-2 p-3 rounded-xl bg-zinc-900/50 border border-zinc-800/50 hover:border-blue-500/30 hover:bg-zinc-900/80 transition-all text-left group"
-                                    >
-                                        <Search className="w-4 h-4 text-blue-400" />
-                                        <div>
-                                            <div className="text-xs text-zinc-300 font-medium">Web Search</div>
-                                            <div className="text-[10px] text-zinc-600">DDG + Wikipedia</div>
-                                        </div>
-                                    </button>
-                                    <button
-                                        onClick={() => {
-                                            agent.toggle();
-                                            setInput("");
-                                        }}
-                                        className="flex items-center gap-2 p-3 rounded-xl bg-zinc-900/50 border border-zinc-800/50 hover:border-emerald-500/30 hover:bg-zinc-900/80 transition-all text-left group"
-                                    >
-                                        <Bot className="w-4 h-4 text-emerald-400" />
-                                        <div>
-                                            <div className="text-xs text-zinc-300 font-medium">Agent Mode</div>
-                                            <div className="text-[10px] text-zinc-600">Autonomous tools</div>
-                                        </div>
-                                    </button>
-                                    <button
-                                        onClick={() =>
-                                            document.querySelector<HTMLInputElement>('input[type="file"]')?.click()
-                                        }
-                                        className="flex items-center gap-2 p-3 rounded-xl bg-zinc-900/50 border border-zinc-800/50 hover:border-amber-500/30 hover:bg-zinc-900/80 transition-all text-left group"
-                                    >
-                                        <FileText className="w-4 h-4 text-amber-400" />
-                                        <div>
-                                            <div className="text-xs text-zinc-300 font-medium">Upload Docs</div>
-                                            <div className="text-[10px] text-zinc-600">PDF, DOCX, CSV</div>
-                                        </div>
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
+                    {emptyWorkbenchVisible ? (
+                        <WorkbenchEmptyState
+                            provider={provider}
+                            recommendedLabel={localModelRecommendation.label}
+                            recommendedReason={localModelRecommendation.reason}
+                            localModelDisabled={!webllm.isSupported}
+                            onAttachDocs={openAttachPicker}
+                            onBestLocalModel={loadBestLocalModel}
+                            onSampleDocDemo={handleSampleDocDemo}
+                            onSearchWeb={startWebSearch}
+                            onPrivacyInspector={openPrivacyInspector}
+                        />
                     ) : (
                         <div
                             className={cn(
@@ -1232,19 +1581,40 @@ function ChatPageInner() {
                                 isExploding && "opacity-0 scale-95"
                             )}
                         >
-                            {chatStore.messages.map(msg => (
-                                <MessageBubble
-                                    key={msg.id}
-                                    role={msg.role}
-                                    content={msg.content}
-                                    image={msg.image}
-                                    onRunCode={pyodide.isReady && pyEnabled ? handlePythonRun : undefined}
-                                    onBranch={() => {
-                                        const newId = chatStore.branchFrom(msg.id);
-                                        if (newId) chatStore.switchConversation(newId);
-                                    }}
-                                />
-                            ))}
+                            {chatStore.messages.map((msg, index) => {
+                                const previousPrompt =
+                                    msg.role === "assistant"
+                                        ? [...chatStore.messages]
+                                              .slice(0, index)
+                                              .reverse()
+                                              .find(m => m.role === "user")?.content
+                                        : undefined;
+                                const messageMeta =
+                                    msg.meta ||
+                                    ({
+                                        provider: "browser",
+                                        providerLabel: "Saved message",
+                                        modelName: "provider not recorded",
+                                        privacy: "unknown",
+                                    } as const);
+
+                                return (
+                                    <MessageBubble
+                                        key={msg.id}
+                                        role={msg.role}
+                                        content={msg.content}
+                                        image={msg.image}
+                                        meta={messageMeta}
+                                        timestamp={msg.timestamp}
+                                        previousPrompt={previousPrompt}
+                                        onRunCode={pyodide.isReady && pyEnabled ? handlePythonRun : undefined}
+                                        onBranch={() => {
+                                            const newId = chatStore.branchFrom(msg.id);
+                                            if (newId) chatStore.switchConversation(newId);
+                                        }}
+                                    />
+                                );
+                            })}
 
                             {deepSearch.isActive && (
                                 <AgentThinking
@@ -1254,6 +1624,7 @@ function ChatPageInner() {
                                     readingUrl={deepSearch.currentUrl}
                                     streamingText={deepSearch.streamingText}
                                     isActive={deepSearch.isActive}
+                                    providerStatus={deepSearch.providerStatus}
                                 />
                             )}
 
@@ -1269,7 +1640,9 @@ function ChatPageInner() {
                                 </div>
                             )}
 
-                            {streamingContent && <MessageBubble role="assistant" content={streamingContent} />}
+                            {streamingContent && (
+                                <MessageBubble role="assistant" content={streamingContent} meta={liveMessageMeta} />
+                            )}
 
                             {/* Agent Trace */}
                             {agent.enabled && (agent.steps.length > 0 || agent.status !== "idle") && (
@@ -1288,7 +1661,16 @@ function ChatPageInner() {
 
                 {/* Input */}
                 <div className="max-w-3xl mx-auto w-full">
+                    <StartHereStrip
+                        show={showStartHereStrip}
+                        localModelDisabled={!webllm.isSupported}
+                        onBestLocalModel={loadBestLocalModel}
+                        onAttachDocs={openAttachPicker}
+                        onCloudSetup={openCloudSetup}
+                        onPrivacyInspector={openPrivacyInspector}
+                    />
                     <ChatInput
+                        fileInputId={ATTACH_INPUT_ID}
                         input={input}
                         setInput={setInput}
                         onSend={() => {

@@ -21,7 +21,7 @@
 
 <br />
 
-<img width="1657" height="923" alt="n0x — the full AI stack in one browser tab" src="https://github.com/user-attachments/assets/ba7d17e8-b26f-4cf7-a072-cf39cfb37ab4" />
+<img width="1440" height="960" alt="n0x private docs workflow" src="public/screenshots/chat-workspace.png" />
 
 <br />
 
@@ -47,13 +47,10 @@ Everything runs **client-side**. Your prompts, files, and model weights never le
 
 ## Demo
 
-| Feature                       | Preview                                                                                                                        |
-| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| Chat interface                | <img width="900" alt="Chat interface" src="https://github.com/user-attachments/assets/db3d0c98-f56b-4464-b8ab-fe0836fc2dfe" /> |
-| Agent trace view              | <img width="900" alt="Agent trace" src="https://github.com/user-attachments/assets/2fb8a22e-e96b-4497-8bd2-3cb5ea88a758" />    |
-| Document Q&A                  | <img width="900" alt="Document Q&A" src="https://github.com/user-attachments/assets/bb812ae6-2f06-4e7b-b93a-0715c52699de" />   |
-| Web search (Perplexity-style) | <img width="900" alt="Deep search" src="https://github.com/user-attachments/assets/dad81977-dd49-4d48-84b4-fd655825e3c2" />    |
-| Model picker                  | <img width="900" alt="Model picker" src="https://github.com/user-attachments/assets/99f66f62-b9d6-4374-92e4-3920ba60aaf4" />   |
+| Feature                          | Preview                                                                                      |
+| -------------------------------- | -------------------------------------------------------------------------------------------- |
+| Private docs first run           | <img width="900" alt="Private docs first run" src="public/screenshots/chat-workspace.png" /> |
+| Landing page product positioning | <img width="900" alt="Landing page" src="public/screenshots/home-page.png" />                |
 
 ---
 
@@ -314,7 +311,7 @@ Full details: [Privacy Policy](https://n0xth.vercel.app/privacy) · [Security](h
 
 | Layer          | Tech                                                             |
 | -------------- | ---------------------------------------------------------------- |
-| Framework      | Next.js 14 · React 18 · TypeScript                               |
+| Framework      | Next.js 15 · React 18 · TypeScript                               |
 | Styling        | Tailwind CSS · Framer Motion                                     |
 | LLM runtime    | WebLLM (WebGPU) · Chrome Prompt API · Ollama · OpenAI-compatible |
 | Embeddings     | Transformers.js · MiniLM-L6 (Web Worker)                         |

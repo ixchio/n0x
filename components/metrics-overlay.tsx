@@ -34,7 +34,7 @@ export function MetricsOverlay({
         return `${mins}m ${secs}s`;
     };
     return (
-        <div className="absolute top-4 right-4 z-50">
+        <div className="absolute right-4 top-4 z-50 hidden sm:block">
             <AnimatePresence>
                 {!isOpen ? (
                     <motion.button

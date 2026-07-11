@@ -2,15 +2,31 @@
 
 import { useState, useCallback, useEffect, useRef } from "react";
 
-interface ChatMessage {
+export type ChatProvider = "browser" | "ollama" | "cloud" | "chrome-ai" | "image";
+export type ChatPrivacyPath = "local" | "cloud" | "mixed" | "unknown";
+
+export interface ChatMessageMeta {
+    provider?: ChatProvider;
+    providerLabel?: string;
+    modelName?: string;
+    privacy?: ChatPrivacyPath;
+    route?: "local" | "cloud" | "default";
+    usedSearch?: boolean;
+    usedDocs?: boolean;
+    usedMemory?: boolean;
+    agent?: boolean;
+}
+
+export interface ChatMessage {
     id: string;
     role: "user" | "assistant";
     content: string;
     image?: string;
     timestamp: number;
+    meta?: ChatMessageMeta;
 }
 
-interface Conversation {
+export interface Conversation {
     id: string;
     title: string;
     messages: ChatMessage[];

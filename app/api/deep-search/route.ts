@@ -24,6 +24,13 @@ interface SearchResponse {
     answer?: string;
     error?: string;
     noUsefulResults?: boolean;
+    providerStatus?: SearchProviderStatus[];
+}
+
+interface SearchProviderStatus {
+    name: string;
+    status: "ok" | "failed" | "disabled" | "skipped";
+    detail?: string;
 }
 
 // ── Free Search Engines (no auth needed) ──
@@ -755,6 +762,8 @@ export async function POST(request: NextRequest) {
         const seenUrls = new Set<string>();
         const allContent: string[] = [];
         const allSources: string[] = [];
+        let jinaAttempted = false;
+        let jinaHits = 0;
 
         // 1. Tavily (best quality, but requires API key)
         if (tavilyResult) {
@@ -822,9 +831,11 @@ export async function POST(request: NextRequest) {
                 .map(r => r.url);
 
             if (jinaUrls.length > 0) {
+                jinaAttempted = true;
                 const extracts = await Promise.all(jinaUrls.map(extractWithJina));
                 for (let i = 0; i < extracts.length; i++) {
                     if (extracts[i].length > 100 && allContent.length < 8) {
+                        jinaHits++;
                         allContent.push(`[Source: ${jinaUrls[i]}]\n${extracts[i]}`);
                         if (!allSources.includes(jinaUrls[i])) {
                             allSources.push(jinaUrls[i]);
@@ -857,6 +868,42 @@ export async function POST(request: NextRequest) {
         const rankedContentSources = rankedContent
             .map(sourceFromContent)
             .filter((source): source is string => Boolean(source));
+        const providerStatus: SearchProviderStatus[] = [
+            {
+                name: "Tavily",
+                status: process.env.TAVILY_API_KEY ? (tavilyResult ? "ok" : "failed") : "disabled",
+                detail: process.env.TAVILY_API_KEY ? "server key configured" : "optional server key missing",
+            },
+            {
+                name: "Brave",
+                status: process.env.BRAVE_API_KEY ? (braveResult ? "ok" : "failed") : "disabled",
+                detail: process.env.BRAVE_API_KEY ? "server key configured" : "optional server key missing",
+            },
+            {
+                name: "SearXNG",
+                status: searxResult.results.length > 0 || searxResult.content.length > 0 ? "ok" : "failed",
+                detail: `${SEARXNG_INSTANCES.length} public instance(s) tried`,
+            },
+            {
+                name: "DuckDuckGo",
+                status: ddgResult.summary || ddgResult.results.length > 0 ? "ok" : "failed",
+                detail: "instant answer API",
+            },
+            {
+                name: "Wikipedia",
+                status: aiModelSearch
+                    ? "skipped"
+                    : wikiResult.results.length > 0 || wikiResult.content.length > 0
+                      ? "ok"
+                      : "failed",
+                detail: aiModelSearch ? "skipped for model leaderboard query" : "encyclopedic fallback",
+            },
+            {
+                name: "Jina Reader",
+                status: jinaAttempted ? (jinaHits > 0 ? "ok" : "failed") : "skipped",
+                detail: jinaAttempted ? `${jinaHits} readable page extract(s)` : "only used when snippets are thin",
+            },
+        ];
 
         if (rankedResults.length === 0 && rankedContent.length === 0) {
             return NextResponse.json({
@@ -867,6 +914,7 @@ export async function POST(request: NextRequest) {
                 content: [],
                 sources: [],
                 noUsefulResults: true,
+                providerStatus,
             } satisfies SearchResponse);
         }
 
@@ -884,6 +932,7 @@ export async function POST(request: NextRequest) {
             sources: Array.from(new Set([...rankedContentSources, ...allSources, ...rankedResultSources])),
             summary: finalAnswer,
             answer: finalAnswer,
+            providerStatus,
         };
 
         return NextResponse.json(response);
@@ -895,6 +944,13 @@ export async function POST(request: NextRequest) {
             content: [],
             sources: [],
             error: "Search temporarily unavailable. The AI will answer from its own knowledge.",
+            providerStatus: [
+                {
+                    name: "Deep Search",
+                    status: "failed",
+                    detail: "route handler failed before provider status could be collected",
+                },
+            ],
         });
     }
 }

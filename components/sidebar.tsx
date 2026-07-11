@@ -1,14 +1,16 @@
 "use client";
 
-import React from "react";
-import { Plus, Trash2, MessageSquare, Box, TrendingDown } from "lucide-react";
+import React, { useMemo, useState } from "react";
+import { Plus, Trash2, MessageSquare, TrendingDown, Search } from "lucide-react";
 import { WEBLLM_MODELS, getTotalTokens } from "@/lib/useWebLLM";
 import { cn } from "@/lib/utils";
 import { StorageManager } from "./storage-manager";
+import { PixelNoxMark } from "./pixel-nox-mark";
 
 interface Conversation {
     id: string;
     title: string;
+    messages?: Array<{ content: string; role: string }>;
     createdAt: number;
     updatedAt: number;
 }
@@ -48,6 +50,16 @@ export function Sidebar({
     onSwitch,
     onDelete,
 }: SidebarProps) {
+    const [query, setQuery] = useState("");
+    const filteredConversations = useMemo(() => {
+        const q = query.trim().toLowerCase();
+        if (!q) return conversations;
+        return conversations.filter(conv => {
+            if (conv.title.toLowerCase().includes(q)) return true;
+            return conv.messages?.some(msg => msg.content.toLowerCase().includes(q));
+        });
+    }, [conversations, query]);
+
     if (!isOpen) return null;
 
     return (
@@ -57,7 +69,7 @@ export function Sidebar({
             <aside className="fixed md:relative z-40 w-64 h-full bg-[#0a0a0a] border-r border-zinc-900 flex flex-col shrink-0 font-sans">
                 {/* Header */}
                 <div className="p-4 border-b border-zinc-900 flex items-center gap-2">
-                    <Box className="w-4 h-4 text-white" />
+                    <PixelNoxMark className="h-4 w-8 text-zinc-100" />
                     <span className="font-bold tracking-tight text-sm text-white">N0X Workspace</span>
                 </div>
 
@@ -70,17 +82,28 @@ export function Sidebar({
                         <Plus className="w-3.5 h-3.5" />
                         New Session
                     </button>
+                    <div className="mt-3 flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-950/80 px-3 py-2">
+                        <Search className="h-3.5 w-3.5 shrink-0 text-zinc-600" />
+                        <input
+                            value={query}
+                            onChange={e => setQuery(e.target.value)}
+                            placeholder="Search conversations"
+                            className="min-w-0 flex-1 bg-transparent text-xs text-zinc-300 outline-none placeholder:text-zinc-600"
+                        />
+                    </div>
                 </div>
 
                 {/* Conversation history */}
                 <div className="flex-1 px-3 py-2 overflow-y-auto no-scrollbar space-y-1">
                     {conversations.length > 0 && (
                         <div className="text-[10px] text-zinc-500 font-medium px-1 mb-2 uppercase tracking-wider">
-                            Recent
+                            {query.trim()
+                                ? `${filteredConversations.length} match${filteredConversations.length === 1 ? "" : "es"}`
+                                : "Recent"}
                         </div>
                     )}
 
-                    {conversations.map(conv => (
+                    {filteredConversations.map(conv => (
                         <div
                             key={conv.id}
                             className={cn(
@@ -112,6 +135,9 @@ export function Sidebar({
 
                     {conversations.length === 0 && (
                         <div className="text-xs text-zinc-500 px-2 py-4 text-center">No conversations yet</div>
+                    )}
+                    {conversations.length > 0 && filteredConversations.length === 0 && (
+                        <div className="text-xs text-zinc-500 px-2 py-4 text-center">No matching conversations</div>
                     )}
                 </div>
 

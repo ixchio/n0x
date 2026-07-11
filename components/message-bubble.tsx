@@ -23,8 +23,15 @@ import {
     ChevronDown,
     ChevronRight,
     GitBranch,
+    Cloud,
+    Monitor,
+    Server,
+    Sparkles,
+    Search,
+    FileText,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import type { ChatMessageMeta } from "@/lib/useChatStore";
 
 interface MessageBubbleProps {
     role: "user" | "assistant";
@@ -32,6 +39,9 @@ interface MessageBubbleProps {
     image?: string;
     onRunCode?: (code: string) => Promise<{ output: string; error: string | null; duration: number }>;
     onBranch?: () => void;
+    meta?: ChatMessageMeta;
+    timestamp?: number;
+    previousPrompt?: string;
 }
 
 const PY_BLOCKLIST = [
@@ -319,12 +329,123 @@ const CodeBlock = ({ children, className, onRunCode, codeResults, runningCode, h
     );
 };
 
+function MessageMetaBadge({ meta, align = "left" }: { meta?: ChatMessageMeta; align?: "left" | "right" }) {
+    if (!meta) return null;
+
+    const privacy = meta.privacy || "unknown";
+    const label =
+        privacy === "cloud"
+            ? "CLOUD"
+            : privacy === "mixed"
+              ? "LOCAL + NETWORK"
+              : privacy === "local"
+                ? "LOCAL"
+                : "UNKNOWN";
+    const Icon =
+        meta.provider === "cloud"
+            ? Cloud
+            : meta.provider === "ollama"
+              ? Server
+              : meta.provider === "chrome-ai"
+                ? Sparkles
+                : Monitor;
+
+    return (
+        <div className={cn("mb-1 flex flex-wrap items-center gap-1.5", align === "right" && "justify-end")}>
+            <span
+                className={cn(
+                    "inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide",
+                    privacy === "cloud"
+                        ? "border-blue-500/25 bg-blue-500/10 text-blue-300"
+                        : privacy === "mixed"
+                          ? "border-amber-500/25 bg-amber-500/10 text-amber-300"
+                          : "border-emerald-500/20 bg-emerald-500/10 text-emerald-300"
+                )}
+            >
+                <Icon className="h-2.5 w-2.5" />
+                {label} · {meta.providerLabel || "Provider"}
+            </span>
+            {meta.modelName && (
+                <span className="rounded-md border border-zinc-800 bg-zinc-900/60 px-1.5 py-0.5 text-[9px] text-zinc-500">
+                    {meta.modelName}
+                </span>
+            )}
+            {meta.usedDocs && (
+                <span className="inline-flex items-center gap-1 rounded-md border border-zinc-800 bg-zinc-900/60 px-1.5 py-0.5 text-[9px] text-zinc-500">
+                    <FileText className="h-2.5 w-2.5" />
+                    docs
+                </span>
+            )}
+            {meta.usedSearch && (
+                <span className="inline-flex items-center gap-1 rounded-md border border-zinc-800 bg-zinc-900/60 px-1.5 py-0.5 text-[9px] text-zinc-500">
+                    <Search className="h-2.5 w-2.5" />
+                    search
+                </span>
+            )}
+        </div>
+    );
+}
+
+function buildAnswerCard(content: string, meta?: ChatMessageMeta, timestamp?: number, previousPrompt?: string): string {
+    const generatedAt = new Date(timestamp || Date.now()).toISOString();
+    const privacy =
+        meta?.privacy === "cloud"
+            ? "Cloud provider"
+            : meta?.privacy === "mixed"
+              ? "Local model with network context"
+              : meta?.privacy === "local"
+                ? "Local device"
+                : "Unknown";
+
+    return [
+        "# N0X Answer Card",
+        "",
+        `Generated: ${generatedAt}`,
+        `Provider: ${meta?.providerLabel || "Unknown"}`,
+        `Model: ${meta?.modelName || "Unknown"}`,
+        `Privacy path: ${privacy}`,
+        `Context: ${
+            [
+                meta?.usedDocs ? "uploaded docs" : "",
+                meta?.usedSearch ? "web search" : "",
+                meta?.usedMemory ? "memory" : "",
+                meta?.agent ? "agent mode" : "",
+            ]
+                .filter(Boolean)
+                .join(", ") || "chat only"
+        }`,
+        "",
+        "## Question",
+        "",
+        previousPrompt || "(question not captured)",
+        "",
+        "## Answer",
+        "",
+        content,
+    ].join("\n");
+}
+
+function downloadText(filename: string, text: string) {
+    const blob = new Blob([text], { type: "text/markdown;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
 export const MessageBubble = React.memo(function MessageBubble({
     role,
     content,
     image,
     onRunCode,
     onBranch,
+    meta,
+    timestamp,
+    previousPrompt,
 }: MessageBubbleProps) {
     const [runningCode, setRunningCode] = useState<string | null>(null);
     const [codeResults, setCodeResults] = useState<
@@ -334,6 +455,7 @@ export const MessageBubble = React.memo(function MessageBubble({
     const [imageLoading, setImageLoading] = useState(true);
     const [imageError, setImageError] = useState(false);
     const [showThinking, setShowThinking] = useState(false);
+    const [answerCopied, setAnswerCopied] = useState(false);
 
     let thinking = "";
     let finalContent = content;
@@ -364,6 +486,7 @@ export const MessageBubble = React.memo(function MessageBubble({
         return (
             <div className="flex justify-end animate-slide-up group">
                 <div className="relative max-w-[75%]">
+                    <MessageMetaBadge meta={meta} align="right" />
                     <div className="bg-zinc-800 text-white px-5 py-3.5 rounded-2xl rounded-tr-sm text-[15px] shadow-sm leading-relaxed">
                         <div className="whitespace-pre-wrap">{content}</div>
                     </div>
@@ -381,6 +504,22 @@ export const MessageBubble = React.memo(function MessageBubble({
         );
     }
 
+    const answerCard = buildAnswerCard(finalContent || content, meta, timestamp, previousPrompt);
+    const handleCopyAnswerCard = async () => {
+        try {
+            await navigator.clipboard.writeText(answerCard);
+        } catch {
+            const el = document.createElement("textarea");
+            el.value = answerCard;
+            document.body.appendChild(el);
+            el.select();
+            document.execCommand("copy");
+            document.body.removeChild(el);
+        }
+        setAnswerCopied(true);
+        setTimeout(() => setAnswerCopied(false), 1800);
+    };
+
     return (
         <div className="flex gap-4 animate-slide-up group">
             <div className="shrink-0 w-8 h-8 rounded-full bg-white text-black flex items-center justify-center mt-1 shadow-sm">
@@ -397,6 +536,7 @@ export const MessageBubble = React.memo(function MessageBubble({
                         <GitBranch className="w-3.5 h-3.5" />
                     </button>
                 )}
+                <MessageMetaBadge meta={meta} />
                 {image && (
                     <div className="relative inline-block">
                         {/* Loading skeleton */}
@@ -531,6 +671,26 @@ export const MessageBubble = React.memo(function MessageBubble({
                         >
                             {finalContent}
                         </ReactMarkdown>
+                    </div>
+                )}
+                {finalContent && (
+                    <div className="flex flex-wrap items-center gap-2 border-t border-zinc-900/80 pt-2 text-[10px] font-mono text-zinc-500">
+                        <button
+                            onClick={handleCopyAnswerCard}
+                            className="inline-flex items-center gap-1 rounded-md px-2 py-1 transition-colors hover:bg-zinc-900 hover:text-zinc-200"
+                            title="Copy reproducible answer card"
+                        >
+                            {answerCopied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                            {answerCopied ? "Copied card" : "Copy card"}
+                        </button>
+                        <button
+                            onClick={() => downloadText(`n0x-answer-${timestamp || Date.now()}.md`, answerCard)}
+                            className="inline-flex items-center gap-1 rounded-md px-2 py-1 transition-colors hover:bg-zinc-900 hover:text-zinc-200"
+                            title="Export this answer as Markdown"
+                        >
+                            <Download className="h-3 w-3" />
+                            Export
+                        </button>
                     </div>
                 )}
             </div>

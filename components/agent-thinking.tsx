@@ -3,6 +3,7 @@
 import React from "react";
 import { Search, Globe, BookOpen, Brain, CheckCircle, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import type { SearchProviderStatus } from "@/lib/useDeepSearch";
 
 interface AgentThinkingProps {
     phase: "idle" | "planning" | "searching" | "reading" | "analyzing" | "complete" | "error";
@@ -11,6 +12,7 @@ interface AgentThinkingProps {
     readingUrl: string;
     streamingText: string;
     isActive: boolean;
+    providerStatus?: SearchProviderStatus[];
 }
 
 const phases = [
@@ -20,7 +22,15 @@ const phases = [
     { key: "analyzing", icon: Globe, label: "analyzing" },
 ];
 
-export function AgentThinking({ phase, query, results, readingUrl, streamingText, isActive }: AgentThinkingProps) {
+export function AgentThinking({
+    phase,
+    query,
+    results,
+    readingUrl,
+    streamingText,
+    isActive,
+    providerStatus = [],
+}: AgentThinkingProps) {
     if (!isActive && phase === "idle") return null;
 
     const currentPhaseIndex = phases.findIndex(p => p.key === phase);
@@ -67,6 +77,27 @@ export function AgentThinking({ phase, query, results, readingUrl, streamingText
                         <div key={i} className="text-[11px] text-txt-secondary font-mono truncate">
                             <span className="text-phosphor-dim">[{i + 1}]</span> {r.title || r.url}
                         </div>
+                    ))}
+                </div>
+            )}
+
+            {providerStatus.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 border-t border-crt-border pt-2">
+                    {providerStatus.map(provider => (
+                        <span
+                            key={provider.name}
+                            title={provider.detail}
+                            className={cn(
+                                "rounded border px-1.5 py-0.5 text-[9px] font-mono uppercase",
+                                provider.status === "ok"
+                                    ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-300"
+                                    : provider.status === "failed"
+                                      ? "border-red-500/20 bg-red-500/10 text-red-300"
+                                      : "border-zinc-800 bg-zinc-900/60 text-zinc-500"
+                            )}
+                        >
+                            {provider.name}: {provider.status}
+                        </span>
                     ))}
                 </div>
             )}

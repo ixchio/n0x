@@ -46,6 +46,7 @@ interface ChatInputProps {
     onPyodideLoad?: () => void;
     onPyodideToggle?: (on: boolean) => void;
     onFileDrop?: (file: File) => void;
+    fileInputId?: string;
     attachedFiles?: AttachedFile[];
     onRemoveFile?: (id: string) => void;
     agentEnabled?: boolean;
@@ -85,6 +86,7 @@ export function ChatInput({
     onPyodideLoad,
     onPyodideToggle,
     onFileDrop,
+    fileInputId = "n0x-attach-input",
     attachedFiles = [],
     onRemoveFile,
     agentEnabled,
@@ -301,6 +303,7 @@ export function ChatInput({
                 </div>
             </div>
             <input
+                id={fileInputId}
                 type="file"
                 ref={fileInputRef}
                 onChange={handleFileSelect}

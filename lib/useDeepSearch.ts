@@ -50,6 +50,12 @@ interface SearchResult {
     source?: string;
 }
 
+export interface SearchProviderStatus {
+    name: string;
+    status: "ok" | "failed" | "disabled" | "skipped";
+    detail?: string;
+}
+
 interface DeepSearchState {
     phase: SearchPhase;
     query: string;
@@ -62,6 +68,7 @@ interface DeepSearchState {
     summary: string;
     error: string | null;
     noUsefulResults: boolean;
+    providerStatus: SearchProviderStatus[];
 }
 
 export function useDeepSearch() {
@@ -77,6 +84,7 @@ export function useDeepSearch() {
         summary: "",
         error: null,
         noUsefulResults: false,
+        providerStatus: [],
     });
 
     const abortRef = useRef<AbortController | null>(null);
@@ -101,6 +109,7 @@ export function useDeepSearch() {
                 summary: cached.summary || "",
                 error: null,
                 noUsefulResults: cached.noUsefulResults || false,
+                providerStatus: cached.providerStatus || [],
             });
             return cached;
         }
@@ -118,6 +127,7 @@ export function useDeepSearch() {
             summary: "",
             error: null,
             noUsefulResults: false,
+            providerStatus: [],
         });
 
         try {
@@ -158,6 +168,7 @@ export function useDeepSearch() {
                     streamingText: "No relevant web sources found. Answering without search context.",
                     summary: "",
                     noUsefulResults: true,
+                    providerStatus: data.providerStatus || [],
                 }));
                 return {
                     results: [],
@@ -167,6 +178,7 @@ export function useDeepSearch() {
                     query: data.query || query,
                     refinedQuery: data.refinedQuery || "",
                     noUsefulResults: true,
+                    providerStatus: data.providerStatus || [],
                 };
             }
 
@@ -178,6 +190,7 @@ export function useDeepSearch() {
                 refinedQuery: data.refinedQuery || "",
                 results: data.results || [],
                 streamingText: `Found ${data.results?.length || 0} results. Extracting content...`,
+                providerStatus: data.providerStatus || [],
             }));
 
             // Stream the content progressively
@@ -238,6 +251,7 @@ export function useDeepSearch() {
                 query: data.query || query,
                 refinedQuery: data.refinedQuery || "",
                 noUsefulResults: false,
+                providerStatus: data.providerStatus || [],
             };
 
             // Cache the successful result
@@ -251,6 +265,7 @@ export function useDeepSearch() {
                 ...prev,
                 phase: "error",
                 error: error.message || "Search failed",
+                providerStatus: [],
             }));
             return null;
         }
@@ -275,6 +290,7 @@ export function useDeepSearch() {
             summary: "",
             error: null,
             noUsefulResults: false,
+            providerStatus: [],
         });
     }, [stop]);
 

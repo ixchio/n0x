@@ -1,13 +1,13 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { useWebLLM } from "@/lib/useWebLLM";
+import { WEBLLM_MODELS, useWebLLM } from "@/lib/useWebLLM";
 import { useDeepSearch } from "@/lib/useDeepSearch";
 import { useMemory } from "@/lib/useMemory";
 import { usePyodide } from "@/lib/usePyodide";
 import { useTTS } from "@/lib/useTTS";
 import { useRAG } from "@/lib/useRAG";
-import { createChatMessageId, useChatStore } from "@/lib/useChatStore";
+import { createChatMessageId, type ChatMessageMeta, type ChatProvider, useChatStore } from "@/lib/useChatStore";
 import { useSystemPrompt } from "@/lib/useSystemPrompt";
 import { tick as keySoundTick } from "@/lib/useKeySound";
 import { useAgent, AgentToolkit } from "@/lib/useAgent";
@@ -75,6 +75,66 @@ export function useChat(providerCtx?: {
     const persona = useSystemPrompt();
     const agent = useAgent();
 
+    const getProviderMeta = useCallback(
+        (route: RouteDecision = "default", flags: Partial<ChatMessageMeta> = {}): ChatMessageMeta => {
+            const resolveProvider = (): ChatProvider => {
+                if (route === "cloud") return "cloud";
+                if (route === "local") {
+                    if (providerCtx?.provider === "ollama" && providerCtx.ollama?.isSupported) return "ollama";
+                    if (providerCtx?.provider === "chrome-ai" && providerCtx.chromeAI?.status === "ready") {
+                        return "chrome-ai";
+                    }
+                    return "browser";
+                }
+                return providerCtx?.provider || "browser";
+            };
+
+            const resolvedProvider = resolveProvider();
+            const modelName =
+                resolvedProvider === "browser"
+                    ? WEBLLM_MODELS.find(m => m.id === webllm.loadedModel)?.label || webllm.loadedModel || "No model"
+                    : resolvedProvider === "ollama"
+                      ? providerCtx?.ollama?.loadedModel || "Ollama"
+                      : resolvedProvider === "cloud"
+                        ? providerCtx?.cloudAI?.loadedModel || "Cloud API"
+                        : resolvedProvider === "chrome-ai"
+                          ? "Gemini Nano"
+                          : "Image API";
+
+            const providerLabel =
+                resolvedProvider === "browser"
+                    ? "WebGPU"
+                    : resolvedProvider === "ollama"
+                      ? "Ollama"
+                      : resolvedProvider === "cloud"
+                        ? "Cloud API"
+                        : resolvedProvider === "chrome-ai"
+                          ? "Chrome AI"
+                          : "Image API";
+
+            let privacy: ChatMessageMeta["privacy"] =
+                resolvedProvider === "cloud" || resolvedProvider === "image" ? "cloud" : "local";
+            if (privacy === "local" && flags.usedSearch) privacy = "mixed";
+
+            return {
+                provider: resolvedProvider,
+                providerLabel,
+                modelName,
+                privacy,
+                route,
+                ...flags,
+            };
+        },
+        [
+            providerCtx?.provider,
+            providerCtx?.ollama?.isSupported,
+            providerCtx?.ollama?.loadedModel,
+            providerCtx?.cloudAI?.loadedModel,
+            providerCtx?.chromeAI?.status,
+            webllm.loadedModel,
+        ]
+    );
+
     // Determine current provider status for UI
     let activeProviderReady = false;
     if (providerCtx?.provider === "chrome-ai") activeProviderReady = providerCtx?.chromeAI?.status === "ready";
@@ -119,9 +179,15 @@ export function useChat(providerCtx?: {
             setGeneratingImage(true);
             setImageProgress({ active: true, phase: "sending to Pollinations..." });
 
-            chatStore.addMessage({ role: "user", content: prompt });
+            const meta: ChatMessageMeta = {
+                provider: "image",
+                providerLabel: "Image API",
+                modelName: "Pollinations / AI Horde",
+                privacy: "cloud",
+            };
+            chatStore.addMessage({ role: "user", content: prompt, meta });
             const msgId = createChatMessageId();
-            chatStore.addMessage({ id: msgId, role: "assistant", content: "🎨 Generating image…" });
+            chatStore.addMessage({ id: msgId, role: "assistant", content: "🎨 Generating image…", meta });
 
             try {
                 setImageProgress({ active: true, phase: "generating with Flux…" });
@@ -445,8 +511,15 @@ export function useChat(providerCtx?: {
                 return;
             }
 
+            const requestMeta = getProviderMeta("default", {
+                usedSearch: deepSearchEnabled,
+                usedDocs: rag.documents.length > 0,
+                usedMemory: memoryEnabled,
+                agent: agent.enabled,
+            });
+
             if (!activeProviderReady) {
-                chatStore.addMessage({ role: "user", content: message });
+                chatStore.addMessage({ role: "user", content: message, meta: requestMeta });
                 const hint =
                     providerCtx?.provider === "browser"
                         ? "Load a model first — pick one from the welcome screen or use the model selector."
@@ -457,10 +530,10 @@ export function useChat(providerCtx?: {
                             : providerCtx?.provider === "chrome-ai"
                               ? "Chrome AI is initializing. Please wait a moment and try again."
                               : "No AI provider is ready. Select a provider from the toolbar.";
-                chatStore.addMessage({ role: "assistant", content: `⚠️ ${hint}` });
+                chatStore.addMessage({ role: "assistant", content: `⚠️ ${hint}`, meta: requestMeta });
                 return;
             }
-            chatStore.addMessage({ role: "user", content: message });
+            chatStore.addMessage({ role: "user", content: message, meta: requestMeta });
 
             // Route: autonomous agent mode
             if (agent.enabled) {
@@ -494,13 +567,27 @@ export function useChat(providerCtx?: {
                         onThoughtToken,
                         agentBudget
                     );
-                    chatStore.addMessage({ role: "assistant", content: finalAnswer });
+                    const agentSteps = useAgent.getState().steps;
+                    chatStore.addMessage({
+                        role: "assistant",
+                        content: finalAnswer,
+                        meta: getProviderMeta("default", {
+                            usedDocs: rag.documents.length > 0 || agentSteps.some(s => s.tool === "ragSearch"),
+                            usedSearch: agentSteps.some(s => s.tool === "webSearch"),
+                            usedMemory: memoryEnabled || agentSteps.some(s => s.tool === "memoryRecall"),
+                            agent: true,
+                        }),
+                    });
                     setStreamingContent("");
                     if (tts.isEnabled) tts.speak(finalAnswer);
                 } catch (err: any) {
                     logger.error("Agent loop error:", err);
                     setStreamingContent("");
-                    chatStore.addMessage({ role: "assistant", content: `Agent failed: ${err.message}` });
+                    chatStore.addMessage({
+                        role: "assistant",
+                        content: `Agent failed: ${err.message}`,
+                        meta: getProviderMeta("default", { agent: true }),
+                    });
                     agent.reset();
                 }
                 return;
@@ -573,7 +660,15 @@ export function useChat(providerCtx?: {
                     });
 
                     // Success - save message and break retry loop
-                    chatStore.addMessage({ role: "assistant", content: full });
+                    chatStore.addMessage({
+                        role: "assistant",
+                        content: full,
+                        meta: getProviderMeta(routeUsed, {
+                            usedSearch: Boolean(searchCtx),
+                            usedDocs: hasDocuments,
+                            usedMemory: Boolean(memCtx),
+                        }),
+                    });
                     setStreamingContent("");
                     deepSearch.reset();
                     if (hasDocuments) rag.clearPending();
@@ -647,7 +742,15 @@ export function useChat(providerCtx?: {
                         errMsg = err?.message || "Generation failed. Please try again.";
                     }
 
-                    chatStore.addMessage({ role: "assistant", content: `⚠️ ${errMsg}` });
+                    chatStore.addMessage({
+                        role: "assistant",
+                        content: `⚠️ ${errMsg}`,
+                        meta: getProviderMeta(routeUsed, {
+                            usedSearch: Boolean(searchCtx),
+                            usedDocs: hasDocuments,
+                            usedMemory: Boolean(memCtx),
+                        }),
+                    });
                     setStreamingContent("");
                     deepSearch.reset();
                     break;
@@ -671,6 +774,7 @@ export function useChat(providerCtx?: {
             gatherContext,
             buildMessages,
             getGenerateFn,
+            getProviderMeta,
             autoRouteEnabled,
             getGenerateFnFor,
             deepSearchEnabled,
@@ -693,12 +797,28 @@ export function useChat(providerCtx?: {
                 chatStore.addMessage({
                     role: "assistant",
                     content: prev + "\n\n*[generation stopped]*",
+                    meta: getProviderMeta("default", {
+                        usedSearch: deepSearchEnabled,
+                        usedDocs: rag.documents.length > 0,
+                        usedMemory: memoryEnabled,
+                        agent: agent.enabled,
+                    }),
                 });
             }
             return "";
         });
         setGeneratingImage(false);
-    }, [webllm, deepSearch, chatStore, agent, providerCtx]);
+    }, [
+        webllm,
+        deepSearch,
+        chatStore,
+        agent,
+        providerCtx,
+        getProviderMeta,
+        deepSearchEnabled,
+        rag.documents.length,
+        memoryEnabled,
+    ]);
 
     const handleNewChat = useCallback(() => {
         chatStore.newConversation();

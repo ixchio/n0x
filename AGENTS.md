@@ -2,7 +2,7 @@
 
 ## What is this?
 
-In-browser AI workstation. Runs LLMs, autonomous agents, RAG, Python sandbox, image generation — all client-side via WebGPU/WASM. Next.js 14 + TypeScript + Tailwind.
+In-browser AI workstation. Runs LLMs, autonomous agents, RAG, Python sandbox, image generation — all client-side via WebGPU/WASM. Next.js 15 + TypeScript + Tailwind.
 
 ## Architecture
 
