@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Plus, Trash2, MessageSquare, TrendingDown, Search, X } from "lucide-react";
 import { WEBLLM_MODELS, getTotalTokens } from "@/lib/providers/useWebLLM";
 import { cn } from "@/lib/utils";
@@ -51,6 +51,10 @@ export function Sidebar({
     onDelete,
 }: SidebarProps) {
     const [query, setQuery] = useState("");
+    const [isDesktop, setIsDesktop] = useState<boolean | null>(null);
+    const asideRef = useRef<HTMLElement>(null);
+    const closeRef = useRef<HTMLButtonElement>(null);
+    const previousFocusRef = useRef<HTMLElement | null>(null);
     const filteredConversations = useMemo(() => {
         const q = query.trim().toLowerCase();
         if (!q) return conversations;
@@ -60,6 +64,72 @@ export function Sidebar({
         });
     }, [conversations, query]);
 
+    useEffect(() => {
+        const desktopQuery = window.matchMedia?.("(min-width: 1024px)");
+        if (!desktopQuery) {
+            setIsDesktop(false);
+            return;
+        }
+        const syncDesktop = () => setIsDesktop(desktopQuery.matches);
+        syncDesktop();
+        desktopQuery.addEventListener?.("change", syncDesktop);
+        return () => desktopQuery.removeEventListener?.("change", syncDesktop);
+    }, []);
+
+    useEffect(() => {
+        if (!isOpen || !onClose || isDesktop !== false) return;
+
+        previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+        const main = asideRef.current?.nextElementSibling as HTMLElement | null;
+        const previousInert = main?.inert;
+        const previousAriaHidden = main?.getAttribute("aria-hidden");
+        if (main) {
+            main.inert = true;
+            main.setAttribute("aria-hidden", "true");
+        }
+        const focusFrame = requestAnimationFrame(() => closeRef.current?.focus());
+
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key !== "Escape") return;
+            const hasHigherOverlay = Array.from(document.querySelectorAll('[role="dialog"], [role="menu"]')).some(
+                overlay => overlay !== asideRef.current
+            );
+            if (hasHigherOverlay) return;
+            event.preventDefault();
+            onClose();
+        };
+        document.addEventListener("keydown", handleKeyDown);
+        return () => {
+            cancelAnimationFrame(focusFrame);
+            document.removeEventListener("keydown", handleKeyDown);
+            if (main) {
+                main.inert = previousInert ?? false;
+                if (previousAriaHidden == null) main.removeAttribute("aria-hidden");
+                else main.setAttribute("aria-hidden", previousAriaHidden);
+            }
+            previousFocusRef.current?.focus();
+        };
+    }, [isDesktop, isOpen, onClose]);
+
+    const trapFocus = (event: React.KeyboardEvent<HTMLElement>) => {
+        if (isDesktop !== false || event.key !== "Tab" || !asideRef.current) return;
+        const focusable = Array.from(
+            asideRef.current.querySelectorAll<HTMLElement>(
+                'button:not([disabled]), input:not([disabled]), [href], [tabindex]:not([tabindex="-1"])'
+            )
+        );
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (!first || !last) return;
+        if (event.shiftKey && document.activeElement === first) {
+            event.preventDefault();
+            last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+            event.preventDefault();
+            first.focus();
+        }
+    };
+
     if (!isOpen) return null;
 
     return (
@@ -67,13 +137,15 @@ export function Sidebar({
             {/* Mobile backdrop */}
             <button
                 type="button"
-                className="fixed inset-0 z-30 bg-black/60 md:hidden"
+                className="fixed inset-0 z-30 bg-black/60 lg:hidden"
                 onClick={onClose}
                 aria-label="Close navigation sidebar"
             />
             <aside
+                ref={asideRef}
                 aria-label="Workspace navigation"
-                className="fixed z-40 flex h-full w-64 shrink-0 flex-col border-r border-zinc-900 bg-[#0a0a0a] font-sans md:relative"
+                onKeyDown={trapFocus}
+                className="fixed z-40 flex h-full w-64 shrink-0 flex-col border-r border-zinc-900 bg-[#0a0a0a] font-sans lg:relative"
             >
                 {/* Header */}
                 <div className="p-4 border-b border-zinc-900 flex items-center gap-2">
@@ -81,10 +153,11 @@ export function Sidebar({
                     <span className="font-bold tracking-tight text-sm text-white">N0X Workspace</span>
                     {onClose && (
                         <button
+                            ref={closeRef}
                             type="button"
                             onClick={onClose}
                             aria-label="Close navigation sidebar"
-                            className="ml-auto flex h-11 w-11 items-center justify-center rounded-lg text-zinc-300 hover:bg-zinc-800 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white md:hidden"
+                            className="ml-auto flex h-11 w-11 items-center justify-center rounded-lg text-zinc-300 hover:bg-zinc-800 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white lg:hidden"
                         >
                             <X className="h-4 w-4" />
                         </button>
@@ -152,7 +225,7 @@ export function Sidebar({
                                     type="button"
                                     onClick={() => onDelete(conv.id)}
                                     aria-label={`Delete conversation: ${conv.title}`}
-                                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-zinc-400 opacity-60 transition-all hover:bg-zinc-800 hover:text-red-300 focus:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white md:opacity-0 md:group-hover:opacity-100"
+                                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-zinc-400 opacity-60 transition-all hover:bg-zinc-800 hover:text-red-300 focus:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white lg:opacity-0 lg:group-hover:opacity-100"
                                 >
                                     <Trash2 className="w-3.5 h-3.5" />
                                 </button>

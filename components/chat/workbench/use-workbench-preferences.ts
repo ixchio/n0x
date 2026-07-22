@@ -42,7 +42,10 @@ export function useWorkbenchPreferences({ onProviderSelected }: WorkbenchPrefere
     }, []);
 
     useEffect(() => {
-        const mediaQuery = window.matchMedia("(min-width: 768px)");
+        // Keep the workspace full-width on tablets. The 256px dock leaves only
+        // 512px for the composer at 768px, so the sidebar stays an overlay
+        // until the desktop breakpoint.
+        const mediaQuery = window.matchMedia("(min-width: 1024px)");
         setSidebarOpen(mediaQuery.matches);
         const handleViewportChange = (event: MediaQueryListEvent) => setSidebarOpen(event.matches);
         mediaQuery.addEventListener("change", handleViewportChange);

@@ -25,13 +25,13 @@ import { MessageBubble } from "@/components/chat/message-bubble";
 import { ChatInput } from "@/components/chat/chat-input";
 import { AgentThinking } from "@/components/chat/agent-thinking";
 import { MemoryPanel } from "@/components/chat/memory-panel";
-import { WEBLLM_MODELS, MODEL_CATEGORIES } from "@/lib/providers/useWebLLM";
+import { WEBLLM_MODELS, MODEL_CATEGORIES, useWebLLM } from "@/lib/providers/useWebLLM";
 import { useOllama } from "@/lib/providers/useOllama";
 import { useCloudAI } from "@/lib/providers/useCloudAI";
 import { useChromeAI } from "@/lib/providers/useChromeAI";
 import { getTotalTokens } from "@/lib/providers/useWebLLM";
 import { cn } from "@/lib/utils";
-import { CommandMenu } from "@/components/chat/command-menu";
+import { CommandMenu, modelSizeInGB, shouldToggleShortcuts } from "@/components/chat/command-menu";
 import { ErrorBoundary } from "@/components/system/error-boundary";
 import { PersonaSelector } from "@/components/chat/persona-selector";
 import { ShareMenu } from "@/components/chat/share-menu";
@@ -51,6 +51,7 @@ import {
 import { ModelRuntimeStatus } from "@/components/chat/workbench/model-runtime-status";
 import { KeyboardShortcutsDialog } from "@/components/chat/workbench/keyboard-shortcuts-dialog";
 import { useWorkbenchPreferences } from "@/components/chat/workbench/use-workbench-preferences";
+import { waitForWebLLMGenerationToSettle } from "@/components/chat/workbench/model-switch";
 
 const ATTACH_INPUT_ID = "n0x-attach-input";
 
@@ -99,9 +100,14 @@ function ChatPageInner() {
     const onProviderSelected = useCallback((provider: AIProvider) => {
         trackFunnelEvent("provider_selected", { provider });
     }, []);
-    const { provider, setProvider, ollamaUrl, setOllamaUrl, sidebarOpen, setSidebarOpen } = useWorkbenchPreferences({
-        onProviderSelected,
-    });
+    const {
+        provider,
+        setProvider: setProviderPreference,
+        ollamaUrl,
+        setOllamaUrl,
+        sidebarOpen,
+        setSidebarOpen,
+    } = useWorkbenchPreferences({ onProviderSelected });
     const [cloudApiKey, setCloudApiKey] = useState("");
     const [cloudBaseUrl, setCloudBaseUrl] = useState("https://api.groq.com/openai/v1");
 
@@ -140,6 +146,15 @@ function ChatPageInner() {
     } = chat;
     const stt = useSTT();
 
+    const switchProvider = useCallback(
+        (nextProvider: AIProvider) => {
+            if (nextProvider === provider) return;
+            if (isStreaming) handleStop();
+            setProviderPreference(nextProvider);
+        },
+        [handleStop, isStreaming, provider, setProviderPreference]
+    );
+
     // Detect STT support on client side (after hydration)
     useEffect(() => {
         if (typeof window !== "undefined" && ("SpeechRecognition" in window || "webkitSpeechRecognition" in window)) {
@@ -156,7 +171,6 @@ function ChatPageInner() {
 
     const [showMemoryPanel, setShowMemoryPanel] = useState(false);
     const [showMetrics, setShowMetrics] = useState(false);
-    const [isExploding, setIsExploding] = useState(false);
     const [pyEnabled, setPyEnabled] = useState(false);
     const [providerMenuOpen, setProviderMenuOpen] = useState(false);
     const [showShortcuts, setShowShortcuts] = useState(false);
@@ -165,6 +179,8 @@ function ChatPageInner() {
 
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     const userScrolledUpRef = useRef(false);
+    const messageCountRef = useRef(chatStore.messages.length);
+    messageCountRef.current = chatStore.messages.length;
 
     const DEFAULT_MODEL = "Qwen2.5-1.5B-Instruct-q4f16_1-MLC";
 
@@ -221,33 +237,80 @@ function ChatPageInner() {
         return () => el.removeEventListener("scroll", handleScroll);
     }, []);
 
+    useEffect(() => {
+        userScrolledUpRef.current = false;
+        const frame = requestAnimationFrame(() => {
+            const el = scrollContainerRef.current;
+            if (!el) return;
+            el.scrollTop = messageCountRef.current === 0 ? 0 : el.scrollHeight;
+        });
+        return () => cancelAnimationFrame(frame);
+    }, [chatStore.activeId]);
+
+    const confirmLocalModelLoad = useCallback(
+        (modelId: string) => {
+            if (!webllm.isMobile || webllm.loadedModel === modelId) return true;
+            const model = WEBLLM_MODELS.find(m => m.id === modelId);
+            const sizeInGB = modelSizeInGB(model?.size);
+            if (sizeInGB <= 2) return true;
+            return window.confirm(
+                `⚠️ Mobile Device Warning\n\n` +
+                    `${model?.label} (${model?.size}) is large for mobile devices.\n\n` +
+                    `This may cause your browser to crash or freeze. Consider:\n` +
+                    `• Using a smaller model (< 2GB)\n` +
+                    `• Switching to Cloud API (free with Groq)\n\n` +
+                    `Continue loading this model anyway?`
+            );
+        },
+        [webllm.isMobile, webllm.loadedModel]
+    );
+
     const handleModelChange = useCallback(
-        async (modelId: string) => {
+        async (modelId: string, skipConfirmation = false) => {
             setHeaderModelOpen(false);
-
-            // Mobile warning for large models
-            if (webllm.isMobile && webllm.loadedModel !== modelId) {
-                const model = WEBLLM_MODELS.find(m => m.id === modelId);
-                const sizeInGB = parseFloat(model?.size?.replace(/[^0-9.]/g, "") || "0");
-
-                if (sizeInGB > 2) {
-                    const proceed = window.confirm(
-                        `⚠️ Mobile Device Warning\n\n` +
-                            `${model?.label} (${model?.size}) is large for mobile devices.\n\n` +
-                            `This may cause your browser to crash or freeze. Consider:\n` +
-                            `• Using a smaller model (< 2GB)\n` +
-                            `• Switching to Cloud API (free with Groq)\n\n` +
-                            `Continue loading this model anyway?`
-                    );
-                    if (!proceed) return;
-                }
-            }
+            if (!skipConfirmation && !confirmLocalModelLoad(modelId)) return;
 
             if (webllm.loadedModel !== modelId) {
+                if (isStreaming || useWebLLM.getState().status === "generating") {
+                    handleStop();
+                    const settled = await waitForWebLLMGenerationToSettle();
+                    if (!settled) return;
+                }
                 await webllm.loadModel(modelId);
             }
         },
-        [webllm]
+        [confirmLocalModelLoad, handleStop, isStreaming, webllm]
+    );
+
+    const handleCommandModelChange = useCallback(
+        async (modelId: string) => {
+            if (!webllm.isSupported || webllm.status === "loading") return;
+            if (!confirmLocalModelLoad(modelId)) return;
+            // Command-palette models are WebLLM models. Make that provider
+            // transition explicit so a local model is never loaded while the
+            // workspace badge still says Cloud, Ollama, or Chrome AI.
+            if (provider !== "browser") setProviderPreference("browser");
+            await handleModelChange(modelId, true);
+        },
+        [confirmLocalModelLoad, handleModelChange, provider, setProviderPreference, webllm]
+    );
+
+    const handleCloudModelChange = useCallback(
+        (modelId: string) => {
+            if (cloudAI.loadedModel === modelId) return;
+            if (isStreaming) handleStop();
+            cloudAI.loadModel(modelId);
+        },
+        [cloudAI, handleStop, isStreaming]
+    );
+
+    const handleOllamaModelChange = useCallback(
+        (modelId: string) => {
+            if (ollama.loadedModel === modelId) return;
+            if (isStreaming) handleStop();
+            ollama.loadModel(modelId);
+        },
+        [handleStop, isStreaming, ollama]
     );
 
     const handleSampleDocDemo = useCallback(async () => {
@@ -266,29 +329,33 @@ function ChatPageInner() {
     }, []);
 
     const openCloudSetup = useCallback(() => {
-        setProvider("cloud");
+        switchProvider("cloud");
         setHeaderModelOpen(false);
+        setMobileControlsOpen(false);
+        setShowPrivacyInspector(false);
         setProviderMenuOpen(true);
-    }, [setProvider]);
+    }, [switchProvider]);
 
     const openOllamaSetup = useCallback(() => {
-        setProvider("ollama");
+        switchProvider("ollama");
         ollama.setBaseUrl(ollamaUrl);
         setHeaderModelOpen(false);
+        setMobileControlsOpen(false);
+        setShowPrivacyInspector(false);
         setProviderMenuOpen(true);
-    }, [ollama, ollamaUrl, setProvider]);
+    }, [ollama, ollamaUrl, switchProvider]);
 
     const switchToWebGPU = useCallback(() => {
-        setProvider("browser");
+        switchProvider("browser");
         setHeaderModelOpen(false);
         setProviderMenuOpen(false);
-    }, [setProvider]);
+    }, [switchProvider]);
 
     const loadBestLocalModel = useCallback(() => {
         if (!webllm.isSupported) return;
-        setProvider("browser");
+        switchProvider("browser");
         void handleModelChange(localModelRecommendation.id);
-    }, [handleModelChange, localModelRecommendation.id, setProvider, webllm.isSupported]);
+    }, [handleModelChange, localModelRecommendation.id, switchProvider, webllm.isSupported]);
 
     const startWebSearch = useCallback(() => {
         setDeepSearchEnabled(true);
@@ -296,16 +363,30 @@ function ChatPageInner() {
     }, [setDeepSearchEnabled, setInput]);
 
     const openPrivacyInspector = useCallback(() => {
+        setHeaderModelOpen(false);
+        setProviderMenuOpen(false);
+        setMobileControlsOpen(false);
         setShowPrivacyInspector(true);
     }, []);
+    const closePrivacyInspector = useCallback(() => setShowPrivacyInspector(false), []);
+    const closeShortcuts = useCallback(() => setShowShortcuts(false), []);
+    const closeSidebar = useCallback(() => setSidebarOpen(false), [setSidebarOpen]);
 
     const onNewChat = useCallback(() => {
-        setIsExploding(true);
-        setTimeout(() => {
-            handleNewChat();
-            setIsExploding(false);
-        }, 400);
+        handleNewChat();
     }, [handleNewChat]);
+
+    useEffect(() => {
+        if (!headerModelOpen && !providerMenuOpen && !mobileControlsOpen) return;
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key !== "Escape") return;
+            setHeaderModelOpen(false);
+            setProviderMenuOpen(false);
+            setMobileControlsOpen(false);
+        };
+        document.addEventListener("keydown", handleKeyDown);
+        return () => document.removeEventListener("keydown", handleKeyDown);
+    }, [headerModelOpen, mobileControlsOpen, providerMenuOpen]);
 
     // Global keyboard shortcuts
     useEffect(() => {
@@ -314,6 +395,7 @@ function ChatPageInner() {
             const tag = (e.target as HTMLElement).tagName;
             if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
             if (e.key === "?" && !e.metaKey && !e.ctrlKey) {
+                if (!shouldToggleShortcuts(showShortcuts)) return;
                 e.preventDefault();
                 setShowShortcuts(s => !s);
             }
@@ -324,7 +406,7 @@ function ChatPageInner() {
         };
         document.addEventListener("keydown", handler);
         return () => document.removeEventListener("keydown", handler);
-    }, [onNewChat]);
+    }, [onNewChat, showShortcuts]);
 
     const activeModelName =
         provider === "ollama"
@@ -416,7 +498,8 @@ function ChatPageInner() {
         <div className="h-screen flex bg-background font-sans overflow-hidden text-foreground selection:bg-white/20">
             <Onboarding onComplete={() => {}} chromeAIAvailable={chromeAI.isSupported} />
             <CommandMenu
-                onLoadModel={handleModelChange}
+                onLoadModel={handleCommandModelChange}
+                browserModelsAvailable={webllm.isSupported && webllm.status !== "loading"}
                 onNewChat={onNewChat}
                 ttsEnabled={tts.isEnabled}
                 onToggleTTS={() => tts.setEnabled(!tts.isEnabled)}
@@ -427,7 +510,7 @@ function ChatPageInner() {
                 isOpen={sidebarOpen}
                 currentModel={webllm.loadedModel}
                 provider={provider}
-                onClose={() => setSidebarOpen(false)}
+                onClose={closeSidebar}
                 onNewChat={onNewChat}
                 conversations={chatStore.conversations}
                 activeId={chatStore.activeId}
@@ -435,7 +518,10 @@ function ChatPageInner() {
                     if (isStreaming) handleStop();
                     chatStore.switchConversation(id);
                 }}
-                onDelete={chatStore.deleteConversation}
+                onDelete={id => {
+                    if (isStreaming && id === chatStore.activeId) handleStop();
+                    void chatStore.deleteConversation(id);
+                }}
             />
 
             <main className="flex-1 flex flex-col min-w-0 relative">
@@ -488,11 +574,27 @@ function ChatPageInner() {
                     {/* Model selector */}
                     <div className="relative min-w-0 flex-1 lg:max-w-[240px] lg:flex-none">
                         <button
-                            onClick={() => setHeaderModelOpen(!headerModelOpen)}
+                            onClick={() => {
+                                if (
+                                    provider !== "chrome-ai" &&
+                                    !(provider === "browser" && webllm.status === "loading")
+                                ) {
+                                    const nextOpen = !headerModelOpen;
+                                    setHeaderModelOpen(nextOpen);
+                                    if (nextOpen) {
+                                        setProviderMenuOpen(false);
+                                        setMobileControlsOpen(false);
+                                        setShowPrivacyInspector(false);
+                                    }
+                                }
+                            }}
+                            disabled={
+                                provider === "chrome-ai" || (provider === "browser" && webllm.status === "loading")
+                            }
                             aria-label={`Select model. Current model: ${activeModelName}`}
                             aria-haspopup="menu"
                             aria-expanded={headerModelOpen}
-                            className="flex h-11 w-full min-w-0 items-center gap-2 rounded-md px-2 text-xs font-mono text-zinc-300 transition-colors hover:bg-zinc-900 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white lg:w-auto"
+                            className="flex h-11 w-full min-w-0 items-center gap-2 rounded-md px-2 text-xs font-mono text-zinc-300 transition-colors hover:bg-zinc-900 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white disabled:cursor-default disabled:hover:bg-transparent disabled:hover:text-zinc-300 lg:w-auto"
                         >
                             <Cpu className="h-3.5 w-3.5 shrink-0" />
                             <span className="truncate">
@@ -537,7 +639,7 @@ function ChatPageInner() {
                                                 <button
                                                     key={m}
                                                     onClick={() => {
-                                                        cloudAI.loadModel(m);
+                                                        handleCloudModelChange(m);
                                                         setHeaderModelOpen(false);
                                                     }}
                                                     className={cn(
@@ -563,7 +665,7 @@ function ChatPageInner() {
                                                 <button
                                                     key={m.name}
                                                     onClick={() => {
-                                                        ollama.loadModel(m.name);
+                                                        handleOllamaModelChange(m.name);
                                                         setHeaderModelOpen(false);
                                                     }}
                                                     className={cn(
@@ -580,7 +682,7 @@ function ChatPageInner() {
                                                 </button>
                                             ))}
                                             {ollama.models.length === 0 && (
-                                                <div className="px-2 py-3 text-xs text-zinc-500 text-center">
+                                                <div className="px-2 py-3 text-center text-xs text-zinc-400">
                                                     No models found
                                                 </div>
                                             )}
@@ -611,7 +713,9 @@ function ChatPageInner() {
                                                         <button
                                                             key={m.id}
                                                             onClick={() => handleModelChange(m.id)}
-                                                            disabled={!webllm.isSupported}
+                                                            disabled={
+                                                                !webllm.isSupported || webllm.status === "loading"
+                                                            }
                                                             className={cn(
                                                                 "flex min-h-11 w-full items-center justify-between rounded px-2 py-2 text-left text-xs font-mono transition-all",
                                                                 webllm.loadedModel === m.id
@@ -640,7 +744,15 @@ function ChatPageInner() {
                     {/* Provider switcher */}
                     <div className="relative shrink-0 lg:ml-1">
                         <button
-                            onClick={() => setProviderMenuOpen(!providerMenuOpen)}
+                            onClick={() => {
+                                const nextOpen = !providerMenuOpen;
+                                setProviderMenuOpen(nextOpen);
+                                if (nextOpen) {
+                                    setHeaderModelOpen(false);
+                                    setMobileControlsOpen(false);
+                                    setShowPrivacyInspector(false);
+                                }
+                            }}
                             aria-label={`Select provider. Current provider: ${provider}`}
                             aria-haspopup="menu"
                             aria-expanded={providerMenuOpen}
@@ -680,7 +792,7 @@ function ChatPageInner() {
                                 >
                                     <button
                                         onClick={() => {
-                                            setProvider("browser");
+                                            switchProvider("browser");
                                             setProviderMenuOpen(false);
                                         }}
                                         className={cn(
@@ -693,7 +805,7 @@ function ChatPageInner() {
                                         <Monitor className="w-4 h-4 text-emerald-400 shrink-0" />
                                         <div>
                                             <div className="font-semibold">Browser (WebGPU)</div>
-                                            <div className="text-xs text-zinc-500">
+                                            <div className="text-xs text-zinc-400">
                                                 Runs in your browser — zero server, max privacy
                                             </div>
                                         </div>
@@ -701,7 +813,7 @@ function ChatPageInner() {
                                     {chromeAI.isSupported && (
                                         <button
                                             onClick={() => {
-                                                setProvider("chrome-ai");
+                                                switchProvider("chrome-ai");
                                                 setProviderMenuOpen(false);
                                             }}
                                             className={cn(
@@ -719,7 +831,7 @@ function ChatPageInner() {
                                                         INSTANT
                                                     </span>
                                                 </div>
-                                                <div className="text-xs text-zinc-500">
+                                                <div className="text-xs text-zinc-400">
                                                     Gemini Nano — zero download, on-device
                                                 </div>
                                                 {chromeAI.status === "ready" && (
@@ -730,7 +842,7 @@ function ChatPageInner() {
                                     )}
                                     <button
                                         onClick={() => {
-                                            setProvider("ollama");
+                                            switchProvider("ollama");
                                             setProviderMenuOpen(false);
                                             ollama.setBaseUrl(ollamaUrl);
                                         }}
@@ -744,7 +856,7 @@ function ChatPageInner() {
                                         <Server className="w-4 h-4 text-orange-400 shrink-0" />
                                         <div>
                                             <div className="font-semibold">Ollama (Local)</div>
-                                            <div className="text-xs text-zinc-500">
+                                            <div className="text-xs text-zinc-400">
                                                 Use any model from your Ollama server
                                             </div>
                                             {provider === "ollama" && ollama.isSupported && (
@@ -759,7 +871,7 @@ function ChatPageInner() {
                                     </button>
                                     <button
                                         onClick={() => {
-                                            setProvider("cloud");
+                                            switchProvider("cloud");
                                             setProviderMenuOpen(false);
                                         }}
                                         className={cn(
@@ -772,7 +884,7 @@ function ChatPageInner() {
                                         <Cloud className="w-4 h-4 text-blue-400 shrink-0" />
                                         <div>
                                             <div className="font-semibold">Cloud API</div>
-                                            <div className="text-xs text-zinc-500">
+                                            <div className="text-xs text-zinc-400">
                                                 Sends selected prompt/context to your configured provider
                                             </div>
                                         </div>
@@ -798,7 +910,7 @@ function ChatPageInner() {
                                                         localStorage.setItem("n0x-ollama-url", e.target.value);
                                                     } catch {}
                                                 }}
-                                                className="w-full mt-1 px-2 py-1.5 rounded-md bg-zinc-900 border border-zinc-800 text-xs font-mono text-zinc-300 focus:border-orange-500/30 outline-none"
+                                                className="mt-1 min-h-11 w-full rounded-md border border-zinc-800 bg-zinc-900 px-2 py-2 text-xs font-mono text-zinc-300 outline-none focus:border-orange-500/30 focus-visible:ring-2 focus-visible:ring-white"
                                                 placeholder="http://localhost:11434"
                                             />
                                         </div>
@@ -819,7 +931,7 @@ function ChatPageInner() {
                                                         href="https://console.groq.com/keys"
                                                         target="_blank"
                                                         rel="noopener noreferrer"
-                                                        className="text-xs text-blue-400 hover:text-blue-300 font-mono px-1 underline underline-offset-2"
+                                                        className="inline-flex min-h-11 items-center px-1 text-xs font-mono text-blue-400 underline underline-offset-2 hover:text-blue-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
                                                     >
                                                         Get free key (Groq) →
                                                     </a>
@@ -832,7 +944,7 @@ function ChatPageInner() {
                                                         setCloudApiKey(e.target.value);
                                                         cloudAI.setCredentials(cloudBaseUrl, e.target.value);
                                                     }}
-                                                    className="w-full mt-1 px-2 py-1.5 rounded-md bg-zinc-900 border border-zinc-800 text-xs font-mono text-zinc-300 focus:border-blue-500/30 outline-none"
+                                                    className="mt-1 min-h-11 w-full rounded-md border border-zinc-800 bg-zinc-900 px-2 py-2 text-xs font-mono text-zinc-300 outline-none focus:border-blue-500/30 focus-visible:ring-2 focus-visible:ring-white"
                                                     placeholder="sk-..."
                                                 />
                                             </div>
@@ -851,7 +963,7 @@ function ChatPageInner() {
                                                         setCloudBaseUrl(e.target.value);
                                                         cloudAI.setCredentials(e.target.value, cloudApiKey);
                                                     }}
-                                                    className="w-full mt-1 px-2 py-1.5 rounded-md bg-zinc-900 border border-zinc-800 text-xs font-mono text-zinc-300 focus:border-blue-500/30 outline-none"
+                                                    className="mt-1 min-h-11 w-full rounded-md border border-zinc-800 bg-zinc-900 px-2 py-2 text-xs font-mono text-zinc-300 outline-none focus:border-blue-500/30 focus-visible:ring-2 focus-visible:ring-white"
                                                     placeholder="https://api.groq.com/openai/v1"
                                                 />
                                             </div>
@@ -868,8 +980,8 @@ function ChatPageInner() {
                                                 <select
                                                     id="cloud-model"
                                                     value={cloudAI.loadedModel || ""}
-                                                    onChange={e => cloudAI.loadModel(e.target.value)}
-                                                    className="w-full mt-1 px-2 py-1.5 rounded-md bg-zinc-900 border border-zinc-800 text-xs font-mono text-zinc-300 focus:border-blue-500/30 outline-none appearance-none cursor-pointer"
+                                                    onChange={e => handleCloudModelChange(e.target.value)}
+                                                    className="mt-1 min-h-11 w-full cursor-pointer appearance-none rounded-md border border-zinc-800 bg-zinc-900 px-2 py-2 text-xs font-mono text-zinc-300 outline-none focus:border-blue-500/30 focus-visible:ring-2 focus-visible:ring-white"
                                                 >
                                                     {cloudAI.models.map(m => (
                                                         <option key={m} value={m}>
@@ -882,7 +994,7 @@ function ChatPageInner() {
                                                 <button
                                                     onClick={() => cloudAI.fetchModels()}
                                                     disabled={cloudAI.fetchingModels}
-                                                    className="w-full mt-1 px-2 py-1.5 rounded-md bg-blue-500/10 border border-blue-500/20 text-xs font-mono text-blue-300 hover:bg-blue-500/20 transition-all disabled:opacity-50"
+                                                    className="mt-1 min-h-11 w-full rounded-md border border-blue-500/20 bg-blue-500/10 px-2 py-2 text-xs font-mono text-blue-300 transition-all hover:bg-blue-500/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white disabled:opacity-50"
                                                 >
                                                     {cloudAI.fetchingModels ? "Fetching…" : "Refresh Models"}
                                                 </button>
@@ -897,7 +1009,15 @@ function ChatPageInner() {
                     {!(provider === "browser" && webllm.status === "loading") && (
                         <div className="relative shrink-0 lg:hidden">
                             <button
-                                onClick={() => setMobileControlsOpen(open => !open)}
+                                onClick={() => {
+                                    const nextOpen = !mobileControlsOpen;
+                                    setMobileControlsOpen(nextOpen);
+                                    if (nextOpen) {
+                                        setHeaderModelOpen(false);
+                                        setProviderMenuOpen(false);
+                                        setShowPrivacyInspector(false);
+                                    }
+                                }}
                                 aria-label="More workspace controls"
                                 aria-haspopup="menu"
                                 aria-expanded={mobileControlsOpen}
@@ -934,10 +1054,7 @@ function ChatPageInner() {
                                             Text to speech {tts.isEnabled ? "on" : "off"}
                                         </button>
                                         <button
-                                            onClick={() => {
-                                                setMobileControlsOpen(false);
-                                                setShowPrivacyInspector(true);
-                                            }}
+                                            onClick={openPrivacyInspector}
                                             className="flex min-h-11 w-full items-center gap-3 rounded-md px-3 py-2 text-left text-xs text-zinc-300 transition-colors hover:bg-zinc-900 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
                                         >
                                             <Shield className="h-4 w-4 text-emerald-300" />
@@ -980,7 +1097,7 @@ function ChatPageInner() {
                             </button>
 
                             <button
-                                onClick={() => setShowPrivacyInspector(open => !open)}
+                                onClick={showPrivacyInspector ? closePrivacyInspector : openPrivacyInspector}
                                 title="Privacy inspector"
                                 aria-label="Open privacy inspector"
                                 aria-expanded={showPrivacyInspector}
@@ -1053,7 +1170,7 @@ function ChatPageInner() {
 
                 <PrivacyInspector
                     open={showPrivacyInspector}
-                    onClose={() => setShowPrivacyInspector(false)}
+                    onClose={closePrivacyInspector}
                     ragCount={rag.documents.length}
                     cloudKeySet={Boolean(cloudAI.apiKey)}
                     deepSearchEnabled={deepSearchEnabled}
@@ -1069,7 +1186,7 @@ function ChatPageInner() {
                 <ProviderSetupBanner setup={providerSetup} />
 
                 {/* Messages */}
-                <div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-6">
+                <div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-3 sm:p-6">
                     {/* WebGPU unsupported hint is now integrated into the welcome screen */}
 
                     <ModelRuntimeStatus
@@ -1078,7 +1195,7 @@ function ChatPageInner() {
                         messageCount={chatStore.messages.length}
                         defaultModel={DEFAULT_MODEL}
                         onModelChange={handleModelChange}
-                        onUseCloud={() => setProvider("cloud")}
+                        onUseCloud={() => switchProvider("cloud")}
                     />
                     {emptyWorkbenchVisible ? (
                         <WorkbenchEmptyState
@@ -1093,12 +1210,7 @@ function ChatPageInner() {
                             onPrivacyInspector={openPrivacyInspector}
                         />
                     ) : (
-                        <div
-                            className={cn(
-                                "max-w-3xl mx-auto space-y-5 transition-all",
-                                isExploding && "opacity-0 scale-95"
-                            )}
-                        >
+                        <div className="max-w-3xl mx-auto space-y-5 transition-all">
                             {chatStore.messages.map((msg, index) => {
                                 const previousPrompt =
                                     msg.role === "assistant"
@@ -1127,6 +1239,7 @@ function ChatPageInner() {
                                         previousPrompt={previousPrompt}
                                         onRunCode={pyodide.isReady && pyEnabled ? handlePythonRun : undefined}
                                         onBranch={() => {
+                                            if (isStreaming) handleStop();
                                             const newId = chatStore.branchFrom(msg.id);
                                             if (newId) chatStore.switchConversation(newId);
                                         }}
@@ -1253,7 +1366,7 @@ function ChatPageInner() {
                 onSearch={memory.searchMemories}
             />
 
-            <KeyboardShortcutsDialog open={showShortcuts} onClose={() => setShowShortcuts(false)} />
+            <KeyboardShortcutsDialog open={showShortcuts} onClose={closeShortcuts} />
         </div>
     );
 }

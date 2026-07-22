@@ -1,13 +1,29 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Command } from "cmdk";
 import { Terminal, Volume2, VolumeX, Database, Cpu, Keyboard } from "lucide-react";
 import { WEBLLM_MODELS } from "@/lib/providers/useWebLLM";
 import { getKeySoundEnabled, setKeySoundEnabled } from "@/lib/media/useKeySound";
 
+export function modelSizeInGB(size?: string): number {
+    const match = size?.match(/([\d.]+)\s*(MB|GB)/i);
+    if (!match) return 0;
+    const value = Number.parseFloat(match[1]);
+    return match[2].toUpperCase() === "MB" ? value / 1024 : value;
+}
+
+export function hasOpenOverlay(): boolean {
+    return Boolean(document.querySelector('[role="dialog"], [role="menu"]'));
+}
+
+export function shouldToggleShortcuts(shortcutsOpen: boolean): boolean {
+    return shortcutsOpen || !hasOpenOverlay();
+}
+
 interface CommandMenuProps {
     onLoadModel: (modelId: string) => void;
+    browserModelsAvailable: boolean;
     onNewChat: () => void;
     ttsEnabled: boolean;
     onToggleTTS: () => void;
@@ -17,6 +33,7 @@ interface CommandMenuProps {
 
 export function CommandMenu({
     onLoadModel,
+    browserModelsAvailable,
     onNewChat,
     ttsEnabled,
     onToggleTTS,
@@ -25,6 +42,8 @@ export function CommandMenu({
 }: CommandMenuProps) {
     const [open, setOpen] = useState(false);
     const [keySounds, setKeySounds] = useState(false);
+    const paletteRef = useRef<HTMLDivElement>(null);
+    const previousFocusRef = useRef<HTMLElement | null>(null);
 
     useEffect(() => {
         setKeySounds(getKeySoundEnabled());
@@ -33,28 +52,69 @@ export function CommandMenu({
     useEffect(() => {
         const handler = (e: KeyboardEvent) => {
             if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
+                if (!open && hasOpenOverlay()) {
+                    e.preventDefault();
+                    return;
+                }
                 e.preventDefault();
-                setOpen(prev => !prev);
+                if (!open) {
+                    previousFocusRef.current =
+                        document.activeElement instanceof HTMLElement ? document.activeElement : null;
+                }
+                setOpen(!open);
+                return;
             }
-            if (e.key === "Escape") setOpen(false);
+            if (e.key === "Escape" && open) {
+                e.preventDefault();
+                e.stopPropagation();
+                e.stopImmediatePropagation();
+                setOpen(false);
+            }
         };
-        document.addEventListener("keydown", handler);
-        return () => document.removeEventListener("keydown", handler);
-    }, []);
+        document.addEventListener("keydown", handler, true);
+        return () => document.removeEventListener("keydown", handler, true);
+    }, [open]);
+
+    useEffect(() => {
+        if (!open) return;
+        return () => previousFocusRef.current?.focus();
+    }, [open]);
+
+    const trapFocus = (event: React.KeyboardEvent<HTMLDivElement>) => {
+        if (event.key !== "Tab" || !paletteRef.current) return;
+        const focusable = Array.from(
+            paletteRef.current.querySelectorAll<HTMLElement>(
+                'input:not([disabled]), button:not([disabled]), [href], [tabindex]:not([tabindex="-1"])'
+            )
+        );
+        if (focusable.length === 0) return;
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (event.shiftKey && document.activeElement === first) {
+            event.preventDefault();
+            last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+            event.preventDefault();
+            first.focus();
+        }
+    };
 
     if (!open) return null;
 
     return (
-        <div className="fixed inset-0 z-50 flex items-start justify-center pt-[20vh]">
+        <div className="fixed inset-0 z-50 flex items-start justify-center px-3 pt-[12vh] sm:px-4 sm:pt-[20vh]">
             {/* Backdrop */}
             <div className="absolute inset-0 bg-black/80" onClick={() => setOpen(false)} aria-hidden="true" />
 
             {/* Command palette */}
             <Command
+                ref={paletteRef}
+                label="Search commands"
                 role="dialog"
                 aria-modal="true"
                 aria-label="Command palette"
-                className="relative w-full max-w-md bg-crt-surface border border-crt-border rounded overflow-hidden font-mono text-sm"
+                onKeyDown={trapFocus}
+                className="relative max-h-[calc(100dvh-4rem)] w-full max-w-md overflow-hidden rounded border border-crt-border bg-crt-surface font-mono text-sm shadow-2xl"
             >
                 {/* Input */}
                 <div className="flex items-center gap-2 px-3 py-2.5 border-b border-crt-border">
@@ -120,27 +180,30 @@ export function CommandMenu({
                         </Command.Item>
                     </Command.Group>
 
-                    {/* Models */}
-                    <Command.Group
-                        heading={
-                            <span className="mt-2 px-1 text-xs uppercase tracking-wider text-zinc-400">models</span>
-                        }
-                    >
-                        {WEBLLM_MODELS.map(model => (
-                            <Command.Item
-                                key={model.id}
-                                onSelect={() => {
-                                    onLoadModel(model.id);
-                                    setOpen(false);
-                                }}
-                                className="flex min-h-11 cursor-pointer items-center gap-2 rounded px-2 py-2 text-xs text-zinc-300 hover:bg-crt-hover hover:text-phosphor data-[selected=true]:bg-crt-hover data-[selected=true]:text-phosphor"
-                            >
-                                <Cpu className="w-3 h-3" />
-                                <span className="flex-1">{model.label}</span>
-                                <span className="text-xs text-zinc-400">{model.size}</span>
-                            </Command.Item>
-                        ))}
-                    </Command.Group>
+                    {browserModelsAvailable && (
+                        <Command.Group
+                            heading={
+                                <span className="mt-2 px-1 text-xs uppercase tracking-wider text-zinc-400">
+                                    browser models
+                                </span>
+                            }
+                        >
+                            {WEBLLM_MODELS.map(model => (
+                                <Command.Item
+                                    key={model.id}
+                                    onSelect={() => {
+                                        onLoadModel(model.id);
+                                        setOpen(false);
+                                    }}
+                                    className="flex min-h-11 cursor-pointer items-center gap-2 rounded px-2 py-2 text-xs text-zinc-300 hover:bg-crt-hover hover:text-phosphor data-[selected=true]:bg-crt-hover data-[selected=true]:text-phosphor"
+                                >
+                                    <Cpu className="w-3 h-3" />
+                                    <span className="flex-1">{model.label}</span>
+                                    <span className="text-xs text-zinc-400">{model.size}</span>
+                                </Command.Item>
+                            ))}
+                        </Command.Group>
+                    )}
                 </Command.List>
 
                 {/* Footer */}

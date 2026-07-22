@@ -117,6 +117,7 @@ export function ChatInput({
     }, [input]);
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
+        if (e.nativeEvent.isComposing || e.keyCode === 229) return;
         if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault();
             onSend();
@@ -250,7 +251,7 @@ export function ChatInput({
                         aria-label="Message n0x"
                         disabled={isStreaming}
                         rows={1}
-                        className="min-h-9 w-full resize-none overflow-y-auto bg-transparent text-sm leading-relaxed text-zinc-100 outline-none placeholder:text-zinc-400 disabled:cursor-not-allowed disabled:opacity-60 sm:min-h-10"
+                        className="min-h-11 w-full resize-none overflow-y-auto bg-transparent text-sm leading-relaxed text-zinc-100 outline-none placeholder:text-zinc-400 disabled:cursor-not-allowed disabled:opacity-60"
                         style={{ height: "auto" }}
                     />
                 </div>

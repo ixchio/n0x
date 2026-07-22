@@ -1,6 +1,6 @@
 "use client";
 
-import type { ElementType } from "react";
+import React, { type ElementType, useEffect, useRef } from "react";
 import {
     AlertTriangle,
     Database,
@@ -83,10 +83,10 @@ export function ProviderSetupBanner({ setup }: { setup: ProviderSetup | null }) 
     if (!setup) return null;
 
     return (
-        <div className="border-b border-zinc-900 bg-background/80 px-4 py-2 backdrop-blur">
+        <div className="border-b border-zinc-900 bg-background/80 px-2 py-1 backdrop-blur sm:px-4 sm:py-2">
             <div
                 className={cn(
-                    "mx-auto flex max-w-5xl flex-col gap-2 rounded-lg border px-3 py-2 text-xs sm:flex-row sm:items-center sm:justify-between",
+                    "mx-auto flex max-w-5xl flex-col gap-1.5 rounded-lg border px-2 py-1.5 text-xs sm:flex-row sm:items-center sm:justify-between sm:px-3 sm:py-2",
                     setupToneClasses(setup.tone)
                 )}
             >
@@ -98,13 +98,13 @@ export function ProviderSetupBanner({ setup }: { setup: ProviderSetup | null }) 
                         <span className="text-zinc-400">{setup.detail}</span>
                     </div>
                 </div>
-                <div className="flex flex-wrap gap-1.5 sm:justify-end">
+                <div className="flex flex-nowrap gap-1.5 overflow-x-auto no-scrollbar sm:flex-wrap sm:justify-end sm:overflow-visible">
                     {setup.actions.map(action => (
                         <button
                             key={action.label}
                             onClick={action.onClick}
                             className={cn(
-                                "min-h-11 rounded-md border px-3 py-2 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white",
+                                "h-11 shrink-0 whitespace-nowrap rounded-md border px-3 py-2 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white",
                                 action.primary
                                     ? "border-zinc-200 bg-zinc-100 text-black hover:bg-white"
                                     : "border-zinc-800 bg-black/20 text-zinc-300 hover:border-zinc-700 hover:text-white"
@@ -263,17 +263,17 @@ export function StartHereStrip({
     ];
 
     return (
-        <div className="px-4 pb-1">
-            <div className="mx-auto flex max-w-4xl flex-col gap-2 rounded-lg border border-zinc-900 bg-zinc-950/70 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
-                <span className="text-xs font-semibold text-zinc-400">Start here</span>
-                <div className="flex flex-wrap gap-1.5">
+        <div className="px-2 pb-1 sm:px-4">
+            <div className="mx-auto flex max-w-4xl items-center gap-2 overflow-hidden rounded-lg border border-zinc-900 bg-zinc-950/70 px-2 py-1.5 sm:justify-between sm:px-3">
+                <span className="sr-only text-xs font-semibold text-zinc-400 sm:not-sr-only">Start here</span>
+                <div className="flex min-w-0 flex-1 gap-1.5 overflow-x-auto no-scrollbar sm:flex-none sm:overflow-visible">
                     {actions.map(action => (
                         <button
                             key={action.label}
                             onClick={action.onClick}
                             disabled={action.disabled}
                             className={cn(
-                                "min-h-11 rounded-md border border-zinc-800 px-3 py-2 text-xs font-medium text-zinc-300 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white",
+                                "h-11 shrink-0 whitespace-nowrap rounded-md border border-zinc-800 px-3 py-2 text-xs font-medium text-zinc-300 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white",
                                 action.disabled
                                     ? "cursor-not-allowed opacity-45"
                                     : "hover:border-zinc-700 hover:bg-zinc-900 hover:text-white"
@@ -382,6 +382,40 @@ export function PrivacyInspector({
     cloudAI,
     searchError,
 }: PrivacyInspectorProps) {
+    const dialogRef = useRef<HTMLDivElement>(null);
+    const closeRef = useRef<HTMLButtonElement>(null);
+    const previousFocusRef = useRef<HTMLElement | null>(null);
+    const shouldRestoreFocusRef = useRef(true);
+
+    useEffect(() => {
+        if (!open) return;
+
+        previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+        shouldRestoreFocusRef.current = true;
+        const focusFrame = requestAnimationFrame(() => closeRef.current?.focus());
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key === "Escape") {
+                event.preventDefault();
+                shouldRestoreFocusRef.current = true;
+                onClose();
+            }
+        };
+        const handleOutsideClick = (event: MouseEvent) => {
+            if (!dialogRef.current?.contains(event.target as Node)) {
+                shouldRestoreFocusRef.current = false;
+                onClose();
+            }
+        };
+        document.addEventListener("keydown", handleKeyDown);
+        document.addEventListener("click", handleOutsideClick);
+        return () => {
+            cancelAnimationFrame(focusFrame);
+            document.removeEventListener("keydown", handleKeyDown);
+            document.removeEventListener("click", handleOutsideClick);
+            if (shouldRestoreFocusRef.current) previousFocusRef.current?.focus();
+        };
+    }, [onClose, open]);
+
     if (!open) return null;
 
     const rows = [
@@ -414,6 +448,7 @@ export function PrivacyInspector({
 
     return (
         <div
+            ref={dialogRef}
             role="dialog"
             aria-label="Privacy inspector"
             className="fixed right-4 top-16 z-50 max-h-[calc(100dvh-5rem)] w-[min(360px,calc(100vw-2rem))] overflow-y-auto rounded-xl border border-zinc-700 bg-[#0b0b0b] p-4 shadow-2xl"
@@ -429,7 +464,11 @@ export function PrivacyInspector({
                     </p>
                 </div>
                 <button
-                    onClick={onClose}
+                    ref={closeRef}
+                    onClick={() => {
+                        shouldRestoreFocusRef.current = true;
+                        onClose();
+                    }}
                     aria-label="Close privacy inspector"
                     className="flex min-h-11 items-center rounded-md px-3 py-2 text-xs text-zinc-300 hover:bg-zinc-900 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
                 >
@@ -451,10 +490,16 @@ export function PrivacyInspector({
                 ))}
             </div>
             <div className="mt-3 flex items-center gap-3 text-xs text-zinc-400">
-                <a href="/security" className="inline-flex items-center gap-1 hover:text-white">
+                <a
+                    href="/security"
+                    className="inline-flex min-h-11 items-center gap-1 rounded-md px-2 hover:bg-zinc-900 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                >
                     Security <ExternalLink className="h-3 w-3" />
                 </a>
-                <a href="/privacy" className="inline-flex items-center gap-1 hover:text-white">
+                <a
+                    href="/privacy"
+                    className="inline-flex min-h-11 items-center gap-1 rounded-md px-2 hover:bg-zinc-900 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                >
                     Privacy <ExternalLink className="h-3 w-3" />
                 </a>
             </div>

@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import { AlertTriangle, Cloud, Zap } from "lucide-react";
 
 import { WEBLLM_MODELS } from "@/lib/providers/useWebLLM";
@@ -36,21 +37,25 @@ export function ModelRuntimeStatus({
 
     if (webllm.error && webllm.status === "error") {
         return (
-            <div className="mx-auto mb-6 mt-12 max-w-lg">
-                <div className="space-y-4 rounded-xl border border-red-500/30 bg-red-500/10 p-5 text-center">
-                    <AlertTriangle className="mx-auto h-7 w-7 text-red-400" />
+            <div className="mx-auto mb-6 mt-8 max-w-lg sm:mt-12">
+                <div
+                    role="alert"
+                    aria-live="assertive"
+                    className="space-y-4 rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-center sm:p-5"
+                >
+                    <AlertTriangle className="mx-auto h-7 w-7 text-red-400" aria-hidden="true" />
                     <h3 className="text-sm font-bold text-red-400">Model load failed</h3>
                     <p className="mx-auto max-w-sm text-xs leading-relaxed text-red-300">{webllm.error}</p>
                     <div className="flex flex-col gap-2 pt-2">
                         <button
                             onClick={() => void onModelChange("SmolLM2-360M-Instruct-q4f16_1-MLC")}
-                            className="flex w-full items-center justify-center gap-2 rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2.5 text-xs text-zinc-200 transition-colors hover:bg-zinc-700"
+                            className="flex min-h-11 w-full items-center justify-center gap-2 rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2.5 text-xs text-zinc-200 transition-colors hover:bg-zinc-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
                         >
                             <Zap className="h-3.5 w-3.5 text-neon-amber" /> Try SmolLM2 360M (tiny, works everywhere)
                         </button>
                         <button
                             onClick={onUseCloud}
-                            className="flex w-full items-center justify-center gap-2 rounded-lg border border-blue-500/30 bg-blue-500/15 px-4 py-2.5 text-xs font-bold text-blue-300 transition-colors hover:bg-blue-500/25"
+                            className="flex min-h-11 w-full items-center justify-center gap-2 rounded-lg border border-blue-500/30 bg-blue-500/15 px-4 py-2.5 text-xs font-bold text-blue-300 transition-colors hover:bg-blue-500/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
                         >
                             <Cloud className="h-3.5 w-3.5" /> Use Cloud API for this session
                         </button>
@@ -60,7 +65,7 @@ export function ModelRuntimeStatus({
                                     const modelToForce = webllm.loadingModel || webllm.loadedModel || defaultModel;
                                     void webllm.loadModel(modelToForce, true);
                                 }}
-                                className="px-4 py-2 text-xs text-red-300 transition-colors hover:text-red-200"
+                                className="min-h-11 rounded-md px-4 py-2 text-xs text-red-300 transition-colors hover:bg-red-500/10 hover:text-red-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
                             >
                                 Force load anyway (may crash)
                             </button>
@@ -78,12 +83,17 @@ export function ModelRuntimeStatus({
         "model";
 
     return (
-        <div className="flex h-full flex-col items-center justify-center">
-            <div className="max-w-sm space-y-6 text-center">
+        <div role="status" aria-live="polite" className="flex h-full flex-col items-center justify-center">
+            <div className="w-full max-w-sm space-y-6 px-4 text-center">
                 <h2 className="text-xl font-bold tracking-tight text-white">N0X Engine</h2>
-                <div className="mx-auto w-64">
+                <div className="mx-auto w-[min(16rem,calc(100vw-2rem))]">
                     <div className="h-1.5 overflow-hidden rounded-full border border-crt-border bg-crt-surface">
                         <div
+                            role="progressbar"
+                            aria-label={`Downloading ${loadingLabel}`}
+                            aria-valuemin={0}
+                            aria-valuemax={100}
+                            aria-valuenow={Math.round(webllm.loadProgress * 100)}
                             className="h-full rounded-full bg-phosphor shadow-glow-sm transition-all duration-300"
                             style={{ width: `${Math.round(webllm.loadProgress * 100)}%` }}
                         />
@@ -97,16 +107,10 @@ export function ModelRuntimeStatus({
                     {webllm.error ? (
                         <>
                             <p className="text-xs text-amber-300">⚠ {webllm.error}</p>
-                            <div className="flex justify-center gap-2 pt-1">
-                                <button
-                                    onClick={() => void onModelChange("SmolLM2-360M-Instruct-q4f16_1-MLC")}
-                                    className="rounded border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-xs text-zinc-300 transition-colors hover:bg-zinc-700"
-                                >
-                                    Try smaller model
-                                </button>
+                            <div className="flex justify-center pt-1">
                                 <button
                                     onClick={onUseCloud}
-                                    className="rounded border border-blue-500/25 bg-blue-500/15 px-3 py-1.5 text-xs font-bold text-blue-300 transition-colors hover:bg-blue-500/25"
+                                    className="min-h-11 rounded border border-blue-500/25 bg-blue-500/15 px-3 py-2 text-xs font-bold text-blue-300 transition-colors hover:bg-blue-500/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
                                 >
                                     Use Cloud API
                                 </button>
