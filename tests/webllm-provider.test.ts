@@ -12,30 +12,34 @@ const runtime = vi.hoisted(() => {
         interruptGenerate,
         unload,
     };
-    const createEngine = vi.fn(async (_model: string, options: { initProgressCallback?: (value: unknown) => void }) => {
+    const createEngine = async (_model: string, options: { initProgressCallback?: (value: unknown) => void }) => {
         options.initProgressCallback?.({ progress: 1 });
         return engine;
-    });
-    return { createCompletion, interruptGenerate, unload, engine, createEngine };
+    };
+    const createWorkerEngine = vi.fn(createEngine);
+    const createMainThreadEngine = vi.fn(createEngine);
+    return { createCompletion, interruptGenerate, unload, engine, createWorkerEngine, createMainThreadEngine };
 });
 
 vi.mock("@mlc-ai/web-llm", () => ({
-    CreateWebWorkerMLCEngine: runtime.createEngine,
-    CreateMLCEngine: runtime.createEngine,
+    CreateWebWorkerMLCEngine: runtime.createWorkerEngine,
+    CreateMLCEngine: runtime.createMainThreadEngine,
 }));
 
 import { WEBLLM_MODELS, useWebLLM } from "@/lib/providers/useWebLLM";
 
-class WorkerMock {
-    terminate = vi.fn();
-}
-
 describe("browser WebLLM provider generation", () => {
     beforeAll(async () => {
-        vi.stubGlobal("Worker", WorkerMock);
+        // GitHub Actions runs this suite in Node versions where browser globals
+        // do not exist. Loading should skip optional hardware checks and use the
+        // main-thread runtime rather than throwing a ReferenceError.
+        vi.stubGlobal("navigator", undefined);
+        vi.stubGlobal("Worker", undefined);
         useWebLLM.setState({ status: "unloaded", isSupported: true, error: null });
         await useWebLLM.getState().loadModel(WEBLLM_MODELS[0].id, true);
         expect(useWebLLM.getState().status).toBe("ready");
+        expect(runtime.createMainThreadEngine).toHaveBeenCalledOnce();
+        expect(runtime.createWorkerEngine).not.toHaveBeenCalled();
     });
 
     beforeEach(() => {

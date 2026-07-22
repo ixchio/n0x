@@ -367,8 +367,12 @@ export const useWebLLM = create<WebLLMState>((set, get) => ({
         // Allow retry from error state
         if (status !== "unloaded" && status !== "ready" && status !== "error") return;
 
-        // OOM Protection: Check navigator.deviceMemory and block heavy models on constrained devices
-        const deviceMemory = (navigator as any).deviceMemory;
+        // OOM protection is an optional browser hint. Keep model loading usable
+        // in SSR, tests, and browsers that do not expose deviceMemory.
+        const deviceMemory =
+            typeof navigator !== "undefined"
+                ? (navigator as Navigator & { deviceMemory?: number }).deviceMemory
+                : undefined;
         if (deviceMemory && !force) {
             const model = WEBLLM_MODELS.find(m => m.id === modelId);
             if (model) {
@@ -466,29 +470,33 @@ export const useWebLLM = create<WebLLMState>((set, get) => ({
                         set({ loadProgress: progress.progress });
                     },
                 };
-                try {
-                    const worker = new Worker(new URL("./webllm.worker.ts", import.meta.url), { type: "module" });
-                    // Race against a timeout — if the Worker hangs, fall back
-                    let workerInitTimeout: ReturnType<typeof setTimeout> | undefined;
-                    try {
-                        engine = await Promise.race([
-                            webllm.CreateWebWorkerMLCEngine(worker, modelId, initOpts),
-                            new Promise<never>((_, reject) => {
-                                workerInitTimeout = setTimeout(() => {
-                                    // Only reject if still at 0% (Worker never responded)
-                                    if (get().loadProgress === 0) {
-                                        worker.terminate();
-                                        reject(new Error("Worker init timeout"));
-                                    }
-                                }, 5000);
-                            }),
-                        ]);
-                    } finally {
-                        if (workerInitTimeout) clearTimeout(workerInitTimeout);
-                    }
-                } catch {
-                    // Worker failed — fall back to main thread engine
+                if (typeof Worker === "undefined") {
                     engine = await webllm.CreateMLCEngine(modelId, initOpts);
+                } else {
+                    try {
+                        const worker = new Worker(new URL("./webllm.worker.ts", import.meta.url), { type: "module" });
+                        // Race against a timeout — if the Worker hangs, fall back
+                        let workerInitTimeout: ReturnType<typeof setTimeout> | undefined;
+                        try {
+                            engine = await Promise.race([
+                                webllm.CreateWebWorkerMLCEngine(worker, modelId, initOpts),
+                                new Promise<never>((_, reject) => {
+                                    workerInitTimeout = setTimeout(() => {
+                                        // Only reject if still at 0% (Worker never responded)
+                                        if (get().loadProgress === 0) {
+                                            worker.terminate();
+                                            reject(new Error("Worker init timeout"));
+                                        }
+                                    }, 5000);
+                                }),
+                            ]);
+                        } finally {
+                            if (workerInitTimeout) clearTimeout(workerInitTimeout);
+                        }
+                    } catch {
+                        // Worker failed — fall back to main thread engine
+                        engine = await webllm.CreateMLCEngine(modelId, initOpts);
+                    }
                 }
             } finally {
                 clearInterval(stallWatchdog); // Always cleanup
