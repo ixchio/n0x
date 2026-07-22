@@ -6,10 +6,14 @@ export const metadata = {
 };
 
 const limits = [
-    "Large WebGPU models can fail on low-memory GPUs or mobile browsers.",
-    "First model download can be slow because model weights are large.",
+    "The Browser provider exposes 21 curated WebLLM models; a model can still fail on unsupported drivers, low-memory GPUs, or mobile browsers.",
+    "First-use model and runtime downloads are large. App updates preserve separate WebLLM caches, but browser eviction, site-data clearing, or clearing Model Weights requires a download again.",
+    "Chrome AI depends on the browser's Prompt API and Gemini Nano availability; a Chrome version alone does not guarantee access.",
     "Deep Search depends on third-party search/extraction providers and can degrade when providers rate limit or fail.",
-    "RAG currently extracts text, not full visual understanding of scanned images or diagrams.",
+    "Image generation depends on Pollinations and, on the configured authenticated fallback path, AI Horde. Free URLs can be slow, rate-limited, watermarked, or unavailable.",
+    "Web Speech recognition and some voices may use online browser or operating-system services; offline voice is not guaranteed.",
+    "RAG accepts supported text/document formats up to 25 MB, caps expanded DOCX content at 32 MB and extracted text at 750,000 characters, and reads only the first 100 PDF pages. Corrupt binary files are rejected.",
+    "RAG extracts text, not full visual understanding of scanned images or diagrams.",
     "In-memory serverless rate limits are best-effort and reset per deployment instance.",
     "Generated code and HTML previews should be reviewed before trusting their behavior.",
     "Opt-in telemetry records funnel events only; it is not a full analytics warehouse.",
@@ -23,6 +27,7 @@ export default function KnownLimitationsPage() {
                     n0x
                 </Link>
                 <h1 className="text-4xl font-bold tracking-tight text-white">Known Limitations</h1>
+                <p className="text-zinc-400">Local by default. Search, image and cloud paths are explicit.</p>
                 <ul className="space-y-3 text-zinc-400">
                     {limits.map(limit => (
                         <li key={limit} className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-4">

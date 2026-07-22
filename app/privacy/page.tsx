@@ -15,28 +15,54 @@ export default function PrivacyPage() {
                 <section className="space-y-3">
                     <h1 className="text-4xl font-bold tracking-tight text-white">Privacy</h1>
                     <p className="text-zinc-400">
-                        N0X is built for local-first AI. The default browser provider runs model inference, document
-                        search, memory, and Python execution in your browser.
+                        Local by default. Search, image and cloud paths are explicit. The Browser provider runs model
+                        inference, document retrieval, enabled memory, and Python execution in your browser.
                     </p>
                 </section>
 
                 <section className="space-y-3">
                     <h2 className="text-xl font-semibold text-white">What stays local</h2>
                     <p className="text-zinc-400">
-                        Browser model weights, conversations, memories, and RAG vector cache are stored in browser
-                        storage on your device. Cloud API keys are stored in sessionStorage, not localStorage, so they
-                        clear when the browser session ends.
+                        Browser-provider prompts and responses, conversation history, document indexes, and RAG vectors
+                        stay under the app&apos;s browser origin. N0X saves and retrieves semantic memories only while
+                        Memory is enabled. Turning Memory off leaves existing entries stored until you delete them.
+                    </p>
+                    <p className="text-zinc-400">
+                        Model weights use browser-managed caches. App-shell updates preserve separately named WebLLM
+                        caches, although the browser can evict them and clearing site data or Model Weights removes
+                        them. Cloud API keys use sessionStorage rather than localStorage or IndexedDB; browser crash and
+                        session restore behavior can vary.
                     </p>
                 </section>
 
                 <section className="space-y-3">
                     <h2 className="text-xl font-semibold text-white">When data can leave your device</h2>
-                    <p className="text-zinc-400">
-                        Data leaves your device only when you explicitly use a network feature: Cloud API, Ollama on
-                        another host, Deep Search, image generation, Pyodide CDN loading, or external model downloads.
-                        Uploaded documents are sent to Cloud API only if you choose that provider and ask a question
-                        that includes document context.
-                    </p>
+                    <ul className="list-disc space-y-2 pl-5 text-zinc-400">
+                        <li>
+                            Deep Search sends the query through the N0X API route to available search and extraction
+                            providers.
+                        </li>
+                        <li>
+                            Image generation sends the prompt through the N0X API route and then to Pollinations or, on
+                            the configured fallback path, AI Horde.
+                        </li>
+                        <li>
+                            Cloud API requests go to the OpenAI-compatible endpoint you configure. Relevant document
+                            excerpts and enabled-memory context can be included in that prompt; N0X does not upload the
+                            original file as a separate attachment.
+                        </li>
+                        <li>
+                            A remote Ollama URL sends prompts to that host. A loopback Ollama URL stays on your device.
+                        </li>
+                        <li>
+                            Model, embedding, Pyodide, and Python-package assets download from external hosts on first
+                            use or after cache eviction.
+                        </li>
+                        <li>
+                            Web Speech recognition and some speech-synthesis voices may use an online browser or
+                            operating-system service. Offline speech is not guaranteed.
+                        </li>
+                    </ul>
                 </section>
 
                 <section className="space-y-3">

@@ -8,12 +8,20 @@ export const metadata = {
 const rows = [
     [
         "Browser WebGPU",
-        "Chrome 113+ and Edge 113+ are the primary targets. Safari and Firefox support varies by platform.",
+        "The 21 curated WebLLM models primarily target Chrome 113+ and Edge 113+. Safari and Firefox WebGPU support varies by platform.",
     ],
-    ["Chrome AI", "Requires a Chrome build with the Prompt API / Gemini Nano availability enabled."],
-    ["Ollama", "Requires a local Ollama server and CORS configured for browser access."],
-    ["Cloud API", "Works with OpenAI-compatible chat completion endpoints that support streaming."],
-    ["Documents", "PDF, DOCX, TXT, Markdown, CSV, HTML, JSON, XML, YAML, logs, and config files."],
+    [
+        "Chrome AI",
+        "Requires a Chrome build where the Prompt API reports Gemini Nano as available; browser version alone is not sufficient.",
+    ],
+    ["Ollama", "Requires a reachable Ollama server with CORS configured for the N0X browser origin."],
+    ["Cloud API", "Requires a CORS-enabled, OpenAI-compatible chat-completion endpoint with streaming support."],
+    [
+        "Documents",
+        "PDF, DOCX, TXT, Markdown, CSV, HTML, JSON, XML, YAML, TOML, INI, CFG, CONF, LOG, RST, and TEX. Input is capped at 25 MB, expanded DOCX at 32 MB, extracted text at 750,000 characters, and PDFs at 100 pages.",
+    ],
+    ["Python", "Pyodide requires WebAssembly and downloads its runtime and requested packages from jsDelivr."],
+    ["Voice", "Uses browser Web Speech APIs. Recognition and some voices may depend on online browser or OS services."],
     ["Mobile", "Mobile browsers are treated as low-memory devices. Tiny models or Cloud API are recommended."],
 ];
 
@@ -25,6 +33,7 @@ export default function CompatibilityPage() {
                     n0x
                 </Link>
                 <h1 className="text-4xl font-bold tracking-tight text-white">Compatibility</h1>
+                <p className="text-zinc-400">Local by default. Search, image and cloud paths are explicit.</p>
                 <div className="overflow-hidden rounded-xl border border-zinc-800">
                     {rows.map(([label, value]) => (
                         <div

@@ -17,7 +17,7 @@ npm install
 npm run dev
 ```
 
-Requires Node 18+ and Chrome/Edge 113+ with WebGPU enabled.
+Use Node 20 (the CI version) and Chrome/Edge 113+ with WebGPU enabled for local-model testing.
 
 ## Development workflow
 
@@ -25,6 +25,7 @@ Requires Node 18+ and Chrome/Edge 113+ with WebGPU enabled.
 npm run dev          # dev server on :3000
 npm run lint         # ESLint
 npm run typecheck    # tsc --noEmit
+npm test             # behavior and contract tests
 npm run format       # Prettier write
 npm run format:check # Prettier check (what CI runs)
 npm run build        # production build
@@ -33,10 +34,10 @@ npm run build        # production build
 **Before submitting a PR, run:**
 
 ```bash
-npm run lint && npm run typecheck && npm run format:check
+npm run lint && npm run typecheck && npm test && npm run format:check && npm run build
 ```
 
-CI runs all three — a failing check blocks merge.
+CI runs all five checks — a failing check blocks merge.
 
 ## Branch naming
 
@@ -67,27 +68,37 @@ chore: changes
 
 - [ ] `npm run lint` passes
 - [ ] `npm run typecheck` passes
+- [ ] `npm test` passes
 - [ ] `npm run format:check` passes
+- [ ] `npm run build` passes
 - [ ] Tested in Chrome/Edge with WebGPU
 - [ ] No `console.log` left in production paths
 - [ ] PR description explains _why_, not just _what_
 
 ## Project structure
 
-```
-app/              Next.js app router pages + API routes
-components/       React components
-lib/              Hooks, stores, workers (useChat, useAgent, useRAG, etc.)
-public/           Static assets
-docs/             Project documentation
+```text
+app/             Next.js routes, metadata, and API routes
+components/      React UI grouped by brand, chat, layout, system, and primitives
+lib/chat/        Chat orchestration, routing, and conversation state
+lib/providers/   WebGPU, Chrome AI, Ollama, and cloud providers
+lib/retrieval/   Document policy, RAG worker, and Deep Search
+lib/runtime/     Agent, Pyodide, and WebContainer runtimes
+lib/memory/      Origin-scoped semantic memory
+lib/server/      Server-route utilities such as best-effort rate limiting
+public/          Static assets, screenshots, manifest, and service worker
 ```
 
 Key files to know:
 
-- `lib/useChat.ts` — main orchestrator (routes between image/agent/direct)
-- `lib/useAgent.ts` — ReAct agent loop
-- `lib/rag.worker.ts` — RAG pipeline (runs in Web Worker)
+- `lib/chat/useChat.ts` — main orchestrator (routes between image, agent, and direct modes)
+- `lib/chat/useChatStore.ts` — conversation state and IndexedDB persistence
+- `lib/runtime/useAgent.ts` — ReAct agent loop
+- `lib/retrieval/rag.worker.ts` — hybrid RAG pipeline (runs in a Web Worker)
+- `lib/retrieval/file-policy.ts` — accepted document types and resource limits
 - `app/api/deep-search/route.ts` — multi-engine search API route
+- `app/api/image-gen/route.ts` — Pollinations/AI Horde image routing
+- `next.config.mjs` — CSP, COOP/COEP, and other response headers
 
 ## Architecture notes
 

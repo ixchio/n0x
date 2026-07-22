@@ -1,7 +1,7 @@
 {
     "name": "N0X — AI in Your Browser",
     "short_name": "N0X",
-    "description": "The full AI stack in one browser tab. LLMs, agents, RAG, code exec, image gen — all local via WebGPU.",
+    "description": "An in-browser AI workstation with local WebGPU models, RAG and Python, plus optional Chrome AI, Ollama and cloud providers. Local by default. Search, image and cloud paths are explicit.",
     "start_url": "/chat",
     "display": "standalone",
     "background_color": "#0a0a0a",

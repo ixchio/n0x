@@ -11,12 +11,12 @@ Only the current `main` branch receives security fixes.
 
 ## Threat model
 
-n0x runs almost entirely in the browser. Understanding what's in scope:
+n0x is local by default, with explicit search, image, and cloud paths plus first-use runtime downloads. Its security boundary includes browser storage, generated content, client-side runtimes, configured providers, and the optional server routes.
 
 **In scope:**
 
 - XSS via user-supplied content rendered in chat or code blocks
-- Sandbox escape in the Pyodide execution environment
+- Abuse of the Pyodide execution environment or its browser-accessible capabilities
 - Exposure of API keys stored in `sessionStorage`
 - Server-side vulnerabilities in API routes (`/api/deep-search`, `/api/image-gen`, `/api/analytics`)
 - Content injection via malicious documents uploaded to RAG
@@ -31,7 +31,7 @@ n0x runs almost entirely in the browser. Understanding what's in scope:
 
 **Do not open a public issue for security vulnerabilities.**
 
-Email: open a [private security advisory](https://github.com/ixchio/n0x/security/advisories/new) via GitHub.
+Open a [private security advisory](https://github.com/ixchio/n0x/security/advisories/new) on GitHub.
 
 Include:
 
@@ -40,15 +40,16 @@ Include:
 - Potential impact
 - Any suggested fix (optional but appreciated)
 
-You'll get a response within 72 hours. If the issue is confirmed, a fix will be shipped and you'll be credited in the release notes (unless you prefer to stay anonymous).
+If the issue is confirmed, maintainers will coordinate a fix and credit you in the release notes unless you prefer to stay anonymous.
 
 ## Known security properties
 
-- **API keys** — Cloud API keys are stored in `sessionStorage` only (cleared on tab close, never persisted to disk)
-- **IndexedDB** — Conversations, memories, uploaded document chunks, and vector cache are stored under the app origin
+- **API keys** — Cloud API keys are stored in `sessionStorage`, not `localStorage` or IndexedDB. They remain readable to same-origin JavaScript during the tab session, and exact retention on crash/session restore depends on the browser.
+- **IndexedDB** — Conversations and RAG cache data are stored under the app origin. Semantic memories are saved and retrieved only while Memory is enabled; disabling it does not erase existing entries.
+- **Model cache** — WebLLM weights use browser-managed caches. N0X app-shell updates preserve separately named model caches, but browser eviction, site-data clearing, or the Storage Manager's Model Weights action removes them.
 - **Artifacts** — Full HTML code blocks are rendered in sandboxed iframes without same-origin access
-- **Pyodide** — Python runs in a WebAssembly runtime inside the browser tab; CPU-heavy or memory-heavy code can still freeze the tab
-- **API routes** — `/api/deep-search`, `/api/image-gen`, and `/api/analytics` are optional network surfaces with server-side rate limiting
+- **Pyodide** — Python runs in WebAssembly inside the browser tab, not in a hardened security sandbox. Untrusted code can consume tab resources and may use browser-permitted network APIs.
+- **API routes** — `/api/deep-search`, `/api/image-gen`, and opt-in `/api/analytics` are network surfaces. Their in-memory, per-client rate limits are best-effort and reset independently across serverless instances.
 - **RAG content** — Sanitized before indexing to strip null bytes and control characters
-- **CSP** — See `next.config.mjs` for the Content Security Policy headers
-- **Rate limiting** — API routes have server-side rate limiting (see `lib/server/rate-limit.ts`)
+- **CSP** — `next.config.mjs` sends a Content Security Policy with restrictive defaults and framing/object protections. Required WASM and runtime support still permits inline/eval script modes and broad configured connection targets, so CSP is defense in depth rather than an isolation guarantee.
+- **Network providers** — Deep Search queries, image prompts, remote Ollama requests, and Cloud API prompts go to the selected service. Model, embedding, and Pyodide assets download from external hosts. Browser speech recognition may use an online browser or OS service.

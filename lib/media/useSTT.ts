@@ -2,8 +2,8 @@
 
 import { create } from "zustand";
 
-// Browser-native Speech-to-Text using SpeechRecognition API
-// 100% local on Chrome/Edge, no data leaves the browser
+// Browser-native speech-to-text using the Web Speech API.
+// Recognition may use an online service depending on the browser and OS.
 
 interface STTState {
     isListening: boolean;

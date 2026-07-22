@@ -1,8 +1,8 @@
 <div align="center">
   <img src="https://raw.githubusercontent.com/ixchio/n0x/main/public/icon.png" width="80" alt="n0x logo" />
   <h1>n0x</h1>
-  <p><strong>Run LLMs, agents, RAG, Python, and image generation — entirely in your browser.</strong></p>
-  <p>No server. No account. No API keys. Just open a tab.</p>
+  <p><strong>Run local LLMs, agents, document retrieval, and Python in your browser.</strong></p>
+  <p>Local by default. Search, image and cloud paths are explicit.</p>
 
   <p>
     <a href="https://n0xth.vercel.app"><img src="https://img.shields.io/badge/Try%20it%20live-→-6366f1?style=for-the-badge&labelColor=0f0f0f" alt="Live demo" /></a>
@@ -29,19 +29,19 @@
 
 ## What is n0x?
 
-n0x is a complete AI workstation that runs 100% inside your browser using **WebGPU** and **WebAssembly**. No installation, no server, no subscription.
+n0x is a local-first AI workstation. Its Browser provider uses **WebGPU** and **WebAssembly** for inference, document retrieval, and Python execution without a hosted inference account.
 
 You get:
 
-- **Local LLM inference** at 35–80 tok/s on your GPU (via WebLLM + MLC)
+- **Local LLM inference** with 21 verified WebLLM models
 - **Autonomous agent** with a real ReAct loop and live tool use
 - **Document Q&A** with hybrid RAG (vector + BM25 + MMR reranking)
 - **Python runtime** via Pyodide WASM — runs `import numpy` in the browser
 - **Multi-engine web search** (SearXNG · DDG · Wikipedia · Brave · Tavily)
-- **Image generation** via Pollinations and AI Horde — free tier, no key needed
-- **Persistent memory** stored in IndexedDB, recalled across sessions
+- **Image generation** through an explicit Pollinations/AI Horde network route
+- **Optional persistent memory** saved and recalled only when Memory is enabled
 
-Everything runs **client-side**. Your prompts, files, and model weights never leave your machine unless you explicitly flip to cloud mode.
+Local chat, RAG, conversation history, enabled memory, and Python execution run client-side. First-time model, embedding, and Pyodide downloads use the network. Deep Search, image generation, browser speech services, remote Ollama hosts, and Cloud API providers can also send relevant input off-device when you choose them.
 
 ---
 
@@ -56,7 +56,7 @@ Everything runs **client-side**. Your prompts, files, and model weights never le
 
 ## Quickstart
 
-**Requirements:** Chrome or Edge 113+ (WebGPU). Node 18+.
+**Requirements:** Chrome or Edge 113+ (WebGPU). Node 20 is recommended and used by CI.
 
 ```bash
 git clone https://github.com/ixchio/n0x.git
@@ -65,16 +65,17 @@ npm install
 npm run dev
 ```
 
-Open `http://localhost:3000`. Pick a model. First load downloads it (~1GB). After that — instant from cache.
+Open `http://localhost:3000` and pick a model. The first load downloads the size shown in the selector (roughly 360MB–5.5GB); later loads reuse the browser cache unless the browser evicts it or you clear Model Weights. App shell updates preserve separately cached WebLLM downloads.
 
 > **Just want to try it?** → [n0xth.vercel.app](https://n0xth.vercel.app) — no install needed.
 
 ### Optional env vars
 
 ```env
-# All optional. n0x works 100% free without any of these.
-TAVILY_API_KEY=tvly-xxxxx      # Research-grade search
-BRAVE_API_KEY=BSA-xxxxx        # Better search quality
+# All optional; local chat does not need them.
+TAVILY_API_KEY=tvly-xxxxx       # Research-grade search
+BRAVE_API_KEY=BSA-xxxxx         # Additional search provider
+POLLINATIONS_API_KEY=your-key   # Authenticated image route; kept server-side
 ```
 
 ---
@@ -103,31 +104,30 @@ public/screenshots/   Current product screenshots
 
 ## Provider support
 
-Four backends. Switch mid-conversation. Chat history stays.
+Four backends. You can switch mid-conversation without replacing chat history.
 
-| Provider             | What runs                                        | Setup                          | Speed       |
-| -------------------- | ------------------------------------------------ | ------------------------------ | ----------- |
-| **Browser (WebGPU)** | 50+ open-source models via WebLLM                | Zero — pick a model            | 10–80 t/s   |
-| **Ollama**           | Any model from your local server                 | `ollama serve` — auto-detected | Varies      |
-| **Cloud API**        | Groq, OpenRouter, any OpenAI-compatible endpoint | Paste key + base URL           | 100–500 t/s |
-| **Chrome AI**        | Built-in Gemini Nano                             | Chrome 127+ with flags         | 20–40 t/s   |
+| Provider             | What runs                                             | Setup                                       |
+| -------------------- | ----------------------------------------------------- | ------------------------------------------- |
+| **Browser (WebGPU)** | 21 curated, verified open-source models via WebLLM    | Pick a model; weights download on first use |
+| **Ollama**           | Models exposed by your configured Ollama server       | Start Ollama and allow browser CORS         |
+| **Cloud API**        | OpenAI-compatible streaming chat-completion endpoints | Paste a trusted endpoint, key, and model    |
+| **Chrome AI**        | Gemini Nano through Chrome's built-in Prompt API      | Requires Prompt API availability in Chrome  |
 
-**Auto-routing** classifies each message and routes simple queries local, complex ones to cloud. Configurable per-session.
+When enabled and both paths are available, **auto-routing** classifies each message and can send more complex queries to the configured cloud provider.
 
 ---
 
 ## Models
 
-50+ MLC-compiled models, quantized, cached in the browser after first download.
+The selector exposes 21 MLC-compiled models verified against the installed WebLLM app config. They are quantized and cached after the first download.
 
-| Tier             | Models                                               | Size        | Speed     | Good for         |
-| ---------------- | ---------------------------------------------------- | ----------- | --------- | ---------------- |
-| ⚡ **Tiny**      | SmolLM2 360M · Qwen 0.5B · TinyLlama 1.1B            | 360MB–900MB | 60–80 t/s | Any device       |
-| ⚖️ **Balanced**  | Qwen 2.5 1.5B _(default)_ · Phi-3.5 · Llama 3.2 3B   | 700MB–2.2GB | 35–50 t/s | Daily use        |
-| 🚀 **Capable**   | Mistral 7B · Qwen 2.5 7B · Llama 3.1 8B · Gemma 2 9B | 4–10GB      | 15–25 t/s | High quality     |
-| 🧠 **Reasoning** | DeepSeek R1 distills (1.5B → 70B)                    | 1GB–30GB    | 10–20 t/s | Chain-of-thought |
-| 💻 **Code**      | Qwen Coder 1.5B/7B/32B · DeepSeek Coder              | 800MB–20GB  | Varies    | Code & math      |
-| 🔥 **Flagship**  | Qwen 2.5 32B · Llama 3.3 70B · R1 Llama 70B          | 10–30GB     | 8–15 t/s  | Near GPT-4       |
+| Tier                   | Verified models                                                           | Approx. download |
+| ---------------------- | ------------------------------------------------------------------------- | ---------------- |
+| ⚡ **Tiny (4)**        | SmolLM2 360M/1.7B · Qwen 2.5 0.5B · TinyLlama 1.1B                        | 360MB–900MB      |
+| ⚖️ **Balanced (6)**    | Llama 3.2 1B/3B · Qwen 2.5 1.5B · Gemma 2 2B · Phi-3 Mini · Phi-3.5 Mini  | 700MB–2.2GB      |
+| 🚀 **Powerful (6)**    | Qwen 2.5 3B/7B · Mistral 7B · Llama 3.1 8B · Gemma 2 9B · Hermes 2 Pro 8B | 2GB–5.5GB        |
+| 🧠 **Reasoning (2)**   | DeepSeek R1 Distill Qwen 7B · DeepSeek R1 Distill Llama 8B                | 4.5GB–4.8GB      |
+| 💻 **Code & math (3)** | Qwen 2.5 Coder 1.5B/7B · Qwen 2.5 Math 1.5B                               | 1GB–4GB          |
 
 **Recommended start:** Qwen 2.5 1.5B (~1GB). Loads fast, handles most tasks well.
 
@@ -142,18 +142,19 @@ The LLM plans, calls tools, observes results, and repeats — you watch every st
 
 **Tools available:**
 
-- Multi-engine web search (5 parallel sources)
+- Multi-engine web search when Deep Search is enabled for the request
 - Hybrid document RAG (Vector + BM25 + MMR)
-- Python execution (Pyodide WASM sandbox)
-- Persistent memory read/write (IndexedDB)
-- Image generation
+- Python execution (Pyodide WASM runtime)
+- Persistent memory read/write when Memory is enabled (IndexedDB)
+
+Image generation uses its own explicit network request path rather than being invoked implicitly by the agent loop.
 
 **Reliability features:**
 
 - Multi-strategy JSON parser — handles malformed tool calls
 - Loop detection — stops if the same tool is called 3× with the same args
 - Per-tool timeout (45s)
-- Context budget management — prevents OOM mid-run
+- Provider-aware context budget management
 - Max 12 iterations per run
 
 </details>
@@ -161,19 +162,20 @@ The LLM plans, calls tools, observes results, and repeats — you watch every st
 <details>
 <summary><strong>📄 Document Q&A — hybrid local RAG</strong></summary>
 
-Drop a PDF, DOCX, TXT, CSV, HTML, or Markdown file into chat.
+Drop a supported text document into chat.
 
 **Pipeline:**
 
-1. Text extraction with fallback chain (PDF.js → WASM decompression → raw text)
+1. Local text extraction for PDF, DOCX, and text-based formats
 2. Sentence-boundary-aware chunking (50% overlap)
-3. MiniLM-L6 embeddings in a Web Worker (UI never blocks)
+3. MiniLM-L6 embeddings in a Web Worker
 4. Dual index: **Voy** (vector) + **BM25** (keyword)
 5. RRF fusion (Reciprocal Rank Fusion) + MMR reranking for diversity
-6. Versioned vector cache in IndexedDB — instant re-upload
+6. Versioned vector cache in IndexedDB for faster re-upload
 
-**Formats:** PDF · DOCX · TXT · MD · CSV · HTML
-**Limit:** 100 pages max (OOM guard)
+**Formats:** PDF · DOCX · TXT · MD · CSV · HTML · JSON · XML · YAML · TOML · INI · CFG · CONF · LOG · RST · TEX
+
+**Limits:** 25MB per file, 32MB expanded DOCX content, 750,000 extracted characters, and the first 100 pages of a PDF. Corrupt or unsupported binary files are rejected rather than attached as text placeholders.
 
 </details>
 
@@ -182,22 +184,23 @@ Drop a PDF, DOCX, TXT, CSV, HTML, or Markdown file into chat.
 
 Toggle "Deep Search" and get synthesized answers with source cards, not a wall of text.
 
-**Engines (all run in parallel):**
+**Sources (used according to availability and query type):**
 
 - 🔍 SearXNG — privacy-respecting, self-hosted pool
 - 🦆 DuckDuckGo — instant answers
 - 📖 Wikipedia — authoritative
 - 🦁 Brave Search — optional API key
 - 🔬 Tavily — optional API key, research-grade
+- 📄 Jina Reader — conditional page extraction when snippets are thin
 
 **Output:** Perplexity-style source cards with favicons, progress bar, expandable full content. No raw dumps.
 
 </details>
 
 <details>
-<summary><strong>🐍 Python runtime — Pyodide WASM sandbox</strong></summary>
+<summary><strong>🐍 Python runtime — Pyodide WASM</strong></summary>
 
-Full CPython in the browser. `import numpy`, `import pandas`, `import matplotlib` — just works.
+Full CPython runs in the browser. The Pyodide runtime and requested packages download from jsDelivr on first use.
 
 - Output feeds back into the conversation automatically
 - Execution errors go to the LLM for a self-healing retry
@@ -208,11 +211,11 @@ Full CPython in the browser. `import numpy`, `import pandas`, `import matplotlib
 <details>
 <summary><strong>🧠 Persistent memory</strong></summary>
 
-Every conversation is summarized and stored in IndexedDB. On the next session, relevant memories are retrieved and injected into context automatically.
+When Memory is enabled, successful exchanges can be summarized into IndexedDB and relevant saved memories can be added to later prompts. When it is disabled, N0X neither automatically saves nor retrieves semantic memories; existing entries remain stored until you delete them.
 
 - Hybrid retrieval: TF-IDF weighted n-grams + vector similarity
 - Tags: `chat` · `search` · `rag` · `cloud` · `local`
-- Toggle memory retrieval on/off per session
+- Toggle memory saving and retrieval together per session
 - Storage managed via built-in Storage Manager
 
 </details>
@@ -220,19 +223,20 @@ Every conversation is summarized and stored in IndexedDB. On the next session, r
 <details>
 <summary><strong>🎨 Image generation</strong></summary>
 
-Say "generate an image of..." — no API key required.
+Say "generate an image of..." to use the explicit image network route.
 
-- **Pollinations** (Flux, z-image-turbo, klein, qwen-image) — free, fast
-- **AI Horde** (Stable Diffusion) — community-powered
+- With no server key, the route returns a client-loadable free Pollinations URL.
+- With `POLLINATIONS_API_KEY`, the server tries authenticated Pollinations models, then AI Horde if those attempts fail.
+- If configured providers fail, the final fallback is the free Pollinations URL; generation can still fail or be rate-limited.
 
-Smart fallback: Pollinations → free tier → Horde.
+Image prompts leave the device and are subject to third-party terms and availability.
 
 </details>
 
 <details>
 <summary><strong>🎤 Voice — STT + TTS</strong></summary>
 
-Web Speech API. Works offline.
+N0X uses the browser Web Speech APIs. Speech recognition and some voices may use an online browser or operating-system service; offline operation is not guaranteed.
 
 - Mic button → speak → auto-submit
 - TTS toggle → responses read aloud
@@ -279,51 +283,35 @@ Click any message → Branch → create an alternate timeline from that point. B
   PDF/DOCX → chunks → MiniLM embeds → Voy + BM25 → RRF → MMR → context
 ```
 
-Network calls happen only when you use: search, image gen, or cloud API. Disable all three → **fully air-gapped**.
+Local by default. Search, image and cloud paths are explicit. Other network-dependent paths are first-time model/embedding downloads, Pyodide and package downloads, remote Ollama servers, optional telemetry, and browser speech implementations that use an online service.
 
 ---
 
-## Performance
+## Performance and storage
 
-### Local inference (WebGPU)
+Inference speed and usable model size depend on the model, GPU, drivers, browser, available memory, thermals, and prompt length. Mobile devices are treated as low-memory and should start with the smallest model.
 
-| Model         | Speed     | VRAM | Quality    |
-| ------------- | --------- | ---- | ---------- |
-| Qwen 2.5 1.5B | 40–50 t/s | 1GB  | Good       |
-| Qwen 2.5 7B   | 15–25 t/s | 4GB  | Excellent  |
-| Llama 3.3 70B | 8–12 t/s  | 30GB | GPT-4 tier |
-
-### Cloud (Groq free tier)
-
-| Model         | Speed       |
-| ------------- | ----------- |
-| Llama 3.3 70B | 200–300 t/s |
-| Llama 3.1 8B  | 500+ t/s    |
-
-### RAG
-
-| Operation           | Time    |
-| ------------------- | ------- |
-| Index 100-page PDF  | ~1s     |
-| Re-upload (cached)  | Instant |
-| Hybrid search query | <100ms  |
+Model weights and RAG vectors are cached for reuse. Browsers can evict either cache under storage pressure, and clearing site data or the corresponding Storage Manager entry removes it. N0X service-worker upgrades remove only old app-shell caches and preserve separately named WebLLM model caches.
 
 ---
 
 ## Privacy
 
-**Your data stays in your browser.**
+**Local by default. Search, image and cloud paths are explicit.**
 
-| What                | Where it goes                                 |
-| ------------------- | --------------------------------------------- |
-| Prompts & responses | Nowhere (local IndexedDB)                     |
-| Uploaded documents  | Nowhere (local IndexedDB)                     |
-| Model weights       | Nowhere (local Cache API)                     |
-| Search queries      | SearXNG / DDG / Wikipedia (if search enabled) |
-| Image prompts       | Pollinations API (if image gen used)          |
-| Cloud API prompts   | Your chosen provider (if cloud enabled)       |
+| What                       | Where it goes                                                              |
+| -------------------------- | -------------------------------------------------------------------------- |
+| Local prompts & responses  | Conversation history in origin-scoped IndexedDB                            |
+| Uploaded documents         | Extracted/indexed locally; relevant excerpts can enter a prompt you send   |
+| Enabled semantic memory    | Origin-scoped IndexedDB; automatic saving and retrieval stop when disabled |
+| Model and embedding assets | Downloaded from their hosts, then reused from browser-managed caches       |
+| Search queries             | N0X API route, then enabled search/extraction providers                    |
+| Image prompts              | N0X API route, then Pollinations and, on the configured path, AI Horde     |
+| Cloud API prompts          | The OpenAI-compatible endpoint you configure                               |
+| Voice input/output         | Browser Web Speech implementation; it may use an online vendor service     |
+| Funnel telemetry           | N0X analytics route only after explicit opt-in                             |
 
-Turn off search + images + cloud = **100% air-gapped**. No telemetry, no tracking, no accounts.
+After dependencies are cached, local chat and document retrieval can work without enabling search, images, cloud, or telemetry. That is not an air-gap guarantee: uncached assets, Pyodide packages, remote Ollama, and some browser speech implementations still use the network.
 
 Full details: [Privacy Policy](https://n0xth.vercel.app/privacy) · [Security](https://n0xth.vercel.app/security) · [Known Limitations](https://n0xth.vercel.app/known-limitations)
 
@@ -340,7 +328,7 @@ Full details: [Privacy Policy](https://n0xth.vercel.app/privacy) · [Security](h
 | Vector search  | Voy                                                              |
 | Keyword search | BM25 (custom implementation)                                     |
 | Python         | Pyodide WASM                                                     |
-| Storage        | IndexedDB · Zustand · localStorage                               |
+| Storage        | IndexedDB · Cache API · localStorage · sessionStorage            |
 | Search         | SearXNG · DuckDuckGo · Wikipedia · Brave · Tavily · Jina Reader  |
 | Image gen      | Pollinations · AI Horde                                          |
 | CI             | GitHub Actions · ESLint · Prettier · TypeScript                  |
@@ -360,7 +348,7 @@ Planned and in progress:
 - [ ] 🎥 Video understanding (upload + Q&A)
 - [ ] 🌐 WebRTC collaboration (shared sessions)
 
-Full roadmap: [docs/ROADMAP.md](docs/ROADMAP.md) · [Vote on features →](https://github.com/ixchio/n0x/discussions)
+[Discuss and vote on features →](https://github.com/ixchio/n0x/discussions)
 
 ---
 
@@ -384,7 +372,7 @@ git checkout -b fix/your-thing
 npm run dev
 
 # 5. Verify
-npm run lint && npm run typecheck
+npm run lint && npm run typecheck && npm test && npm run format:check && npm run build
 
 # 6. PR
 git push origin fix/your-thing
@@ -417,7 +405,7 @@ MIT © [ixchio](https://github.com/ixchio)
 <div align="center">
   <strong>Free. Local. Private. Powerful.</strong>
   <br />
-  No sign-up. No API keys. No data collection.
+  No sign-up. Local chat needs no API key. Telemetry is opt-in.
   <br /><br />
   <a href="https://n0xth.vercel.app"><strong>Try n0x →</strong></a>
   &nbsp;·&nbsp;

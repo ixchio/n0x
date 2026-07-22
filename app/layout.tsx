@@ -20,7 +20,7 @@ export const metadata: Metadata = {
     metadataBase: new URL("https://n0xth.vercel.app"),
     title: "N0X — The Full AI Stack in One Browser Tab",
     description:
-        "LLM inference, web search, RAG, code execution, image generation, memory, and TTS — all running in your browser via WebGPU. No install, no server, no account.",
+        "In-browser AI workstation for local models, documents, code, and memory. Local by default. Search, image and cloud paths are explicit.",
     manifest: "/manifest.json",
     appleWebApp: {
         capable: true,
@@ -37,7 +37,7 @@ export const metadata: Metadata = {
     openGraph: {
         title: "N0X — The Full AI Stack in One Browser Tab",
         description:
-            "Run LLMs, agents, RAG, code execution, and image generation entirely in your browser. No server. No API keys. 100% private.",
+            "In-browser AI workstation for local models, documents, code, and memory. Local by default. Search, image and cloud paths are explicit.",
         type: "website",
         url: "https://n0xth.vercel.app",
         images: [
@@ -53,7 +53,7 @@ export const metadata: Metadata = {
     twitter: {
         card: "summary_large_image",
         title: "N0X — The Full AI Stack in One Browser Tab",
-        description: "LLMs, agents, RAG, code execution, image gen — all local via WebGPU. Zero backend.",
+        description: "Local by default. Search, image and cloud paths are explicit.",
         images: ["/og-image.png"],
         creator: "@ixchio",
     },
@@ -82,7 +82,7 @@ export default function RootLayout({
             priceCurrency: "USD",
         },
         description:
-            "The full AI stack in one browser tab. LLM inference, web search, RAG, code execution, image generation, memory, and TTS — all running in your browser via WebGPU. No install, no server, no account.",
+            "In-browser AI workstation for local models, document retrieval, code execution, and memory. Local by default. Search, image and cloud paths are explicit.",
         featureList: [
             "Local LLM inference via WebGPU",
             "Multi-source web search",
