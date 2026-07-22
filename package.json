@@ -8,6 +8,9 @@
         "type": "git",
         "url": "https://github.com/ixchio/n0x"
     },
+    "engines": {
+        "node": ">=20.9.0"
+    },
     "private": true,
     "scripts": {
         "dev": "next dev -p 3000",
@@ -71,6 +74,7 @@
         "next": {
             "postcss": "^8.5.15"
         },
-        "protobufjs": "^7.6.5"
+        "protobufjs": "^7.6.5",
+        "sharp": "0.35.3"
     }
 }
