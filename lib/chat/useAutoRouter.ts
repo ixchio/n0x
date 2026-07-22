@@ -1,5 +1,3 @@
-"use client";
-
 // Hybrid Local-Cloud Auto-Router
 // Classifies prompt complexity and routes to the optimal provider.
 // Simple tasks → fast local model (private, instant)
@@ -9,13 +7,18 @@
 export type RouteDecision = "local" | "cloud" | "default";
 export type TaskComplexity = "simple" | "moderate" | "complex";
 
-interface RouteContext {
+export interface RouteContext {
     message: string;
     hasDocuments: boolean; // RAG documents attached
     deepSearchEnabled: boolean; // Web search will run
     conversationLength: number; // messages in current thread
     localModelLoaded: boolean; // WebGPU/ChromeAI model available
     cloudConfigured: boolean; // Cloud API key + model set
+}
+
+export interface RouteResult {
+    decision: RouteDecision;
+    reason: string;
 }
 
 // Keyword patterns that indicate complexity
@@ -68,7 +71,7 @@ export function classifyComplexity(message: string): TaskComplexity {
     return "simple";
 }
 
-export function routeMessage(ctx: RouteContext): { decision: RouteDecision; reason: string } {
+export function routeMessage(ctx: RouteContext): RouteResult {
     // Can't route if only one option exists
     if (!ctx.localModelLoaded && !ctx.cloudConfigured) {
         return { decision: "default", reason: "no provider available" };

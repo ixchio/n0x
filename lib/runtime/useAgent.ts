@@ -4,9 +4,9 @@ import { create } from "zustand";
 import { contextCharsLimit } from "@/lib/providers/useWebLLM";
 
 // ─── ReAct Agent Loop v2 ──────────────────────────────────────────────
-// The first fully in-browser autonomous agent.
+// Autonomous ReAct loop that uses only the toolkit captured for this request.
 // Thought → Action → Observation → repeat until solved.
-// Zero backend. Zero API keys. 100% WebGPU.
+// The selected provider and enabled tools determine whether a run stays local.
 //
 // Engineering:
 // • AbortController-based cancellation (stop button kills everything)
@@ -86,6 +86,32 @@ function buildAgentPrompt(base: string, availableTools: string[]): string {
         .filter(t => toolDocs[t])
         .map(t => toolDocs[t])
         .join("\n");
+    const examples = [
+        availableTools.includes("webSearch")
+            ? `User: "what is the population of France?"
+I need to find the current population.
+{"tool": "webSearch", "args": {"query": "population of France 2025"}}`
+            : "",
+        availableTools.includes("python")
+            ? `User: "calculate 17 * 23 + 5"
+{"tool": "python", "args": {"code": "print(17 * 23 + 5)"}}`
+            : "",
+        availableTools.includes("imageGen")
+            ? `User: "generate a picture of a sunset over mountains"
+{"tool": "imageGen", "args": {"prompt": "breathtaking sunset over mountain range, golden hour, dramatic clouds, photorealistic"}}`
+            : "",
+    ]
+        .filter(Boolean)
+        .join("\n\n");
+    const toolRules = [
+        availableTools.includes("python") ? "6. For math, use python when calculation is needed" : "",
+        availableTools.includes("imageGen") ? "7. For images, use imageGen with a detailed prompt" : "",
+        availableTools.includes("python")
+            ? "8. Python runs in Pyodide WASM. Do not make network requests from Python; use webSearch only when it is available"
+            : "",
+    ]
+        .filter(Boolean)
+        .join("\n");
 
     return `${base}
 
@@ -101,15 +127,7 @@ ${relevantDocs}
 
 EXAMPLES:
 
-User: "what is the population of France?"
-I need to find the current population.
-{"tool": "webSearch", "args": {"query": "population of France 2025"}}
-
-User: "calculate 17 * 23 + 5"
-{"tool": "python", "args": {"code": "print(17 * 23 + 5)"}}
-
-User: "generate a picture of a sunset over mountains"
-{"tool": "imageGen", "args": {"prompt": "breathtaking sunset over mountain range, golden hour, dramatic clouds, photorealistic"}}
+${examples || "No tools are enabled for this request; answer directly."}
 
 RULES:
 1. Think first, then call ONE tool per turn
@@ -117,10 +135,8 @@ RULES:
 3. FINAL answer = plain text, NO JSON
 4. Use tools when available — don't skip them
 5. If a tool errors, try a different approach
-6. For math, ALWAYS use python
-7. For images, use imageGen with a detailed, descriptive prompt
-8. IMPORTANT: Output the JSON on its own line with no extra text around it
-9. Python runs in Pyodide WASM — use \`pyodide.http.pyfetch(url)\` for HTTP, not \`requests\``;
+${toolRules}
+9. IMPORTANT: Output tool JSON on its own line with no extra text around it`;
 }
 
 // ─── JSON Parser (multi-strategy) ───────────────────────────────────
