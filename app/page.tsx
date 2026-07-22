@@ -164,6 +164,7 @@ export default function HomePage() {
                         </a>
                         <Link
                             href="/chat"
+                            prefetch={false}
                             className="inline-flex h-9 items-center gap-2 rounded-md bg-white px-3 text-sm font-semibold text-black transition hover:bg-zinc-200 sm:h-10 sm:px-4"
                         >
                             Open app
@@ -184,17 +185,20 @@ export default function HomePage() {
                                 <HeroPill>Cloud optional</HeroPill>
                             </div>
                             <p className="text-sm font-semibold text-orange-300">Private AI workstation</p>
-                            <h1 className="mt-3 text-5xl font-semibold text-white sm:text-7xl">N0X</h1>
-                            <p className="mt-4 max-w-2xl text-2xl font-semibold leading-tight text-zinc-100 sm:text-3xl">
-                                AI over your files without uploading the workspace to a SaaS account.
+                            <p className="mt-3 text-5xl font-semibold text-white sm:text-7xl" aria-label="N0X">
+                                N0X
                             </p>
+                            <h1 className="mt-4 max-w-2xl text-2xl font-semibold leading-tight text-zinc-100 sm:text-3xl">
+                                AI over your files without uploading the workspace to a SaaS account.
+                            </h1>
                             <p className="mt-4 max-w-2xl text-base leading-7 text-zinc-300">
-                                Drop docs, pick the best local model, search when you choose, and export answer cards
-                                with the provider path attached. Cloud is a deliberate switch, not the default.
+                                Local by default. Search, image and cloud paths are explicit. Drop docs, pick a local
+                                model, and export answer cards with the provider path attached.
                             </p>
                             <div className="mt-6 flex flex-col gap-3 sm:flex-row">
                                 <Link
                                     href="/chat"
+                                    prefetch={false}
                                     className="inline-flex h-11 items-center justify-center gap-2 rounded-md bg-white px-5 text-sm font-semibold text-black transition hover:bg-zinc-200"
                                 >
                                     Launch workspace
@@ -330,9 +334,9 @@ export default function HomePage() {
                             </div>
                         </div>
 
-                        <div className="overflow-x-auto rounded-lg border border-zinc-700">
-                            <div className="min-w-[760px]">
-                                <div className="grid grid-cols-[0.9fr_1.15fr_1.15fr] bg-zinc-900 text-xs font-semibold text-zinc-400">
+                        <div className="overflow-hidden rounded-lg border border-zinc-700">
+                            <div>
+                                <div className="hidden grid-cols-[0.9fr_1.15fr_1.15fr] bg-zinc-900 text-xs font-semibold text-zinc-400 md:grid">
                                     <div className="px-4 py-3">Data</div>
                                     <div className="px-4 py-3">Stored in</div>
                                     <div className="px-4 py-3">Boundary</div>
@@ -340,11 +344,26 @@ export default function HomePage() {
                                 {boundaryRows.map(([data, storage, boundary]) => (
                                     <div
                                         key={data}
-                                        className="grid grid-cols-[0.9fr_1.15fr_1.15fr] border-t border-zinc-800 bg-zinc-950/70 text-sm"
+                                        className="grid gap-3 border-t border-zinc-800 bg-zinc-950/70 p-4 text-sm md:grid-cols-[0.9fr_1.15fr_1.15fr] md:gap-0 md:p-0"
                                     >
-                                        <div className="px-4 py-3 font-medium text-zinc-100">{data}</div>
-                                        <div className="px-4 py-3 text-zinc-400">{storage}</div>
-                                        <div className="px-4 py-3 text-zinc-400">{boundary}</div>
+                                        <div className="font-medium text-zinc-100 md:px-4 md:py-3">
+                                            <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-zinc-500 md:hidden">
+                                                Data
+                                            </span>
+                                            {data}
+                                        </div>
+                                        <div className="text-zinc-300 md:px-4 md:py-3 md:text-zinc-400">
+                                            <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-zinc-500 md:hidden">
+                                                Stored in
+                                            </span>
+                                            {storage}
+                                        </div>
+                                        <div className="text-zinc-300 md:px-4 md:py-3 md:text-zinc-400">
+                                            <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-zinc-500 md:hidden">
+                                                Boundary
+                                            </span>
+                                            {boundary}
+                                        </div>
                                     </div>
                                 ))}
                             </div>
@@ -358,7 +377,7 @@ export default function HomePage() {
                             <div>
                                 <SectionKicker>Provider matrix</SectionKicker>
                                 <h2 className="mt-3 text-3xl font-semibold text-zinc-950">
-                                    Local first. Fallbacks are explicit.
+                                    Local by default. Search, image and cloud paths are explicit.
                                 </h2>
                             </div>
                             <Link
@@ -370,9 +389,9 @@ export default function HomePage() {
                             </Link>
                         </div>
 
-                        <div className="overflow-x-auto rounded-lg border border-zinc-200">
-                            <div className="min-w-[860px]">
-                                <div className="grid grid-cols-[0.8fr_0.52fr_1.15fr_1fr] bg-zinc-100 text-xs font-semibold text-zinc-500">
+                        <div className="overflow-hidden rounded-lg border border-zinc-200">
+                            <div>
+                                <div className="hidden grid-cols-[0.8fr_0.52fr_1.15fr_1fr] bg-zinc-100 text-xs font-semibold text-zinc-500 md:grid">
                                     <div className="px-4 py-3">Provider</div>
                                     <div className="px-4 py-3">Status</div>
                                     <div className="px-4 py-3">Data path</div>
@@ -381,15 +400,35 @@ export default function HomePage() {
                                 {providerRows.map(({ provider, icon: Icon, status, data, bestFor }) => (
                                     <div
                                         key={provider}
-                                        className="grid grid-cols-[0.8fr_0.52fr_1.15fr_1fr] border-t border-zinc-200 bg-white text-sm"
+                                        className="grid gap-3 border-t border-zinc-200 bg-white p-4 text-sm md:grid-cols-[0.8fr_0.52fr_1.15fr_1fr] md:gap-0 md:p-0"
                                     >
-                                        <div className="flex items-center gap-3 px-4 py-4 font-semibold text-zinc-950">
+                                        <div className="flex items-center gap-3 font-semibold text-zinc-950 md:px-4 md:py-4">
                                             <Icon className="h-4 w-4 text-zinc-500" />
-                                            {provider}
+                                            <span>
+                                                <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-zinc-500 md:hidden">
+                                                    Provider
+                                                </span>
+                                                {provider}
+                                            </span>
                                         </div>
-                                        <div className="px-4 py-4 text-zinc-600">{status}</div>
-                                        <div className="px-4 py-4 leading-6 text-zinc-600">{data}</div>
-                                        <div className="px-4 py-4 leading-6 text-zinc-600">{bestFor}</div>
+                                        <div className="text-zinc-600 md:px-4 md:py-4">
+                                            <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-zinc-500 md:hidden">
+                                                Status
+                                            </span>
+                                            {status}
+                                        </div>
+                                        <div className="leading-6 text-zinc-600 md:px-4 md:py-4">
+                                            <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-zinc-500 md:hidden">
+                                                Data path
+                                            </span>
+                                            {data}
+                                        </div>
+                                        <div className="leading-6 text-zinc-600 md:px-4 md:py-4">
+                                            <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-zinc-500 md:hidden">
+                                                Best for
+                                            </span>
+                                            {bestFor}
+                                        </div>
                                     </div>
                                 ))}
                             </div>
@@ -412,6 +451,7 @@ export default function HomePage() {
                         <div className="flex flex-col gap-3 sm:flex-row lg:justify-end">
                             <Link
                                 href="/chat"
+                                prefetch={false}
                                 className="inline-flex h-12 items-center justify-center gap-2 rounded-md bg-zinc-950 px-6 text-sm font-semibold text-white transition hover:bg-zinc-800"
                             >
                                 Launch n0x

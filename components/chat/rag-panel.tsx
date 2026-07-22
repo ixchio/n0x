@@ -17,25 +17,33 @@ export function RAGPanel() {
     if (!rag.ragEnabled) return null;
 
     return (
-        <div className="absolute bottom-20 right-6 w-72 bg-crt-surface border border-crt-border rounded overflow-hidden z-20 animate-slide-up">
+        <section
+            aria-label="Knowledge base"
+            className="absolute bottom-20 right-6 z-20 w-72 overflow-hidden rounded border border-crt-border bg-crt-surface animate-slide-up"
+        >
             {/* Header */}
             <div className="flex items-center justify-between px-3 py-2.5 border-b border-crt-border">
                 <div className="flex items-center gap-2 text-xs font-mono">
                     <Database className="w-3.5 h-3.5 text-neon-cyan" />
                     <span className="text-neon-cyan">knowledge base</span>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1">
                     <button
                         onClick={async () => {
                             await rag.clearCache();
                             rag.clear();
                         }}
-                        className="text-txt-tertiary hover:text-red-400 transition-colors"
+                        aria-label="Clear all documents and vector cache"
+                        className="flex h-11 w-11 items-center justify-center rounded text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-red-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
                         title="Clear Vector Cache"
                     >
                         <Database className="w-3.5 h-3.5" />
                     </button>
-                    <button onClick={rag.toggle} className="text-txt-tertiary hover:text-txt-primary">
+                    <button
+                        onClick={rag.toggle}
+                        aria-label="Close knowledge base"
+                        className="flex h-11 w-11 items-center justify-center rounded text-zinc-300 hover:bg-zinc-800 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                    >
                         <X className="w-3.5 h-3.5" />
                     </button>
                 </div>
@@ -44,7 +52,7 @@ export function RAGPanel() {
             {/* Documents */}
             <div className="p-2 max-h-48 overflow-y-auto no-scrollbar">
                 {rag.documents.length === 0 ? (
-                    <div className="text-center py-6 text-txt-tertiary text-[10px] font-mono space-y-1">
+                    <div className="space-y-1 py-6 text-center text-xs font-mono text-zinc-400">
                         <Upload className="w-5 h-5 mx-auto opacity-30" />
                         <p>drop pdf/txt/md files</p>
                     </div>
@@ -58,7 +66,7 @@ export function RAGPanel() {
                                 <FileText className="w-3.5 h-3.5 text-phosphor-dim shrink-0" />
                                 <div className="flex-1 min-w-0">
                                     <div className="truncate text-txt-primary">{doc.name}</div>
-                                    <div className="text-[10px] text-txt-tertiary">
+                                    <div className="text-xs text-zinc-400">
                                         {doc.chunks} chunks · {Math.round(doc.size / 1024)}kb
                                     </div>
                                 </div>
@@ -71,14 +79,17 @@ export function RAGPanel() {
             {/* Add button */}
             <div className="p-2 border-t border-crt-border">
                 {rag.isIndexing ? (
-                    <div className="flex items-center justify-center gap-2 text-[11px] text-phosphor font-mono py-1.5">
+                    <div
+                        role="status"
+                        className="flex min-h-11 items-center justify-center gap-2 py-1.5 text-xs font-mono text-phosphor"
+                    >
                         <Loader2 className="w-3 h-3 animate-spin" />
                         {rag.status}
                     </div>
                 ) : (
                     <button
                         onClick={() => fileInputRef.current?.click()}
-                        className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded text-[11px] font-mono border border-crt-border text-txt-secondary hover:text-phosphor hover:border-phosphor-dim transition-all"
+                        className="flex min-h-11 w-full items-center justify-center gap-1.5 rounded border border-crt-border px-3 py-2 text-xs font-mono text-zinc-300 transition-all hover:border-phosphor-dim hover:text-phosphor focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
                     >
                         <Plus className="w-3 h-3" />
                         add document
@@ -92,6 +103,6 @@ export function RAGPanel() {
                     accept=".pdf,.txt,.md,.json"
                 />
             </div>
-        </div>
+        </section>
     );
 }

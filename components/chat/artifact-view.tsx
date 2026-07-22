@@ -59,7 +59,8 @@ export function ArtifactView({ code, language }: ArtifactViewProps) {
             <div className="absolute top-2 right-2 z-10">
                 <button
                     onClick={() => setKey(k => k + 1)}
-                    className="p-2 bg-void-item/80 backdrop-blur text-txt-secondary hover:text-white rounded-lg border border-void-border transition-colors"
+                    aria-label="Reload artifact preview"
+                    className="flex h-11 w-11 items-center justify-center rounded-lg border border-void-border bg-void-item/80 text-zinc-300 backdrop-blur transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
                     title="Reload Preview"
                 >
                     <RefreshCw className="w-4 h-4" />

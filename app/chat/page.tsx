@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useRef, useEffect, useCallback, useState } from "react";
+import { useRef, useEffect, useCallback, useState } from "react";
 import {
     ChevronDown,
     Loader2,
@@ -16,15 +16,8 @@ import {
     Cloud,
     Server,
     Monitor,
-    Search,
-    FileText,
     Sparkles,
-    Database,
-    KeyRound,
-    Lock,
-    Wifi,
-    HardDrive,
-    ExternalLink,
+    MoreHorizontal,
 } from "lucide-react";
 import { MetricsOverlay } from "@/components/chat/metrics-overlay";
 import { Sidebar } from "@/components/layout/sidebar";
@@ -47,9 +40,17 @@ import { useSTT } from "@/lib/media/useSTT";
 import { AgentTrace } from "@/components/chat/agent-trace";
 import { Onboarding } from "@/components/system/onboarding";
 import { trackFunnelEvent } from "@/lib/core/analytics";
-import { PixelNoxMark } from "@/components/brand/pixel-nox-mark";
-
-type AIProvider = "browser" | "ollama" | "cloud" | "chrome-ai";
+import {
+    PrivacyInspector,
+    ProviderSetupBanner,
+    StartHereStrip,
+    WorkbenchEmptyState,
+    type AIProvider,
+    type ProviderSetup,
+} from "@/components/chat/workbench/workbench-panels";
+import { ModelRuntimeStatus } from "@/components/chat/workbench/model-runtime-status";
+import { KeyboardShortcutsDialog } from "@/components/chat/workbench/keyboard-shortcuts-dialog";
+import { useWorkbenchPreferences } from "@/components/chat/workbench/use-workbench-preferences";
 
 const ATTACH_INPUT_ID = "n0x-attach-input";
 
@@ -62,7 +63,7 @@ The privacy-first path uses WebGPU for model inference and IndexedDB for convers
 Best-fit workflows:
 - Ask questions over PDFs or notes without creating an account.
 - Search and summarize public web information with citations.
-- Run small Python snippets in a WASM sandbox.
+- Run small Python snippets in a WASM runtime.
 - Keep sensitive documents local by using the Browser provider and leaving Cloud API disabled.
 
 Known tradeoffs:
@@ -94,457 +95,15 @@ function recommendedModelForDevice(gpuTier: string, isMobile: boolean) {
     };
 }
 
-function statusTone(status: "ready" | "issue" | "optional" | "checking") {
-    if (status === "ready") return "border-emerald-500/20 bg-emerald-500/10 text-emerald-300";
-    if (status === "issue") return "border-red-500/20 bg-red-500/10 text-red-300";
-    if (status === "checking") return "border-amber-500/20 bg-amber-500/10 text-amber-300";
-    return "border-zinc-700 bg-zinc-900/70 text-zinc-400";
-}
-
-type BannerTone = "blue" | "amber" | "red" | "zinc";
-
-interface BannerAction {
-    label: string;
-    onClick: () => void;
-    primary?: boolean;
-}
-
-interface ProviderSetup {
-    title: string;
-    detail: string;
-    tone: BannerTone;
-    actions: BannerAction[];
-}
-
-function setupToneClasses(tone: BannerTone) {
-    if (tone === "blue") return "border-blue-500/20 bg-blue-500/5 text-blue-200";
-    if (tone === "amber") return "border-amber-500/20 bg-amber-500/5 text-amber-200";
-    if (tone === "red") return "border-red-500/20 bg-red-500/5 text-red-200";
-    return "border-zinc-800 bg-zinc-950/70 text-zinc-200";
-}
-
-function ProviderSetupBanner({ setup }: { setup: ProviderSetup | null }) {
-    if (!setup) return null;
-
-    return (
-        <div className="border-b border-zinc-900 bg-background/80 px-4 py-2 backdrop-blur">
-            <div
-                className={cn(
-                    "mx-auto flex max-w-5xl flex-col gap-2 rounded-lg border px-3 py-2 text-xs sm:flex-row sm:items-center sm:justify-between",
-                    setupToneClasses(setup.tone)
-                )}
-            >
-                <div className="flex min-w-0 items-center gap-2">
-                    <AlertTriangle className="h-3.5 w-3.5 shrink-0 opacity-80" />
-                    <div className="min-w-0">
-                        <span className="font-semibold text-zinc-100">{setup.title}</span>
-                        <span className="mx-2 text-zinc-600">·</span>
-                        <span className="text-zinc-400">{setup.detail}</span>
-                    </div>
-                </div>
-                <div className="flex flex-wrap gap-1.5 sm:justify-end">
-                    {setup.actions.map(action => (
-                        <button
-                            key={action.label}
-                            onClick={action.onClick}
-                            className={cn(
-                                "rounded-md border px-2.5 py-1.5 text-[11px] font-medium transition-colors",
-                                action.primary
-                                    ? "border-zinc-200 bg-zinc-100 text-black hover:bg-white"
-                                    : "border-zinc-800 bg-black/20 text-zinc-300 hover:border-zinc-700 hover:text-white"
-                            )}
-                        >
-                            {action.label}
-                        </button>
-                    ))}
-                </div>
-            </div>
-        </div>
-    );
-}
-
-function EmptyStateCard({
-    icon: Icon,
-    title,
-    detail,
-    onClick,
-    disabled,
-}: {
-    icon: React.ElementType;
-    title: string;
-    detail: string;
-    onClick: () => void;
-    disabled?: boolean;
-}) {
-    return (
-        <button
-            onClick={onClick}
-            disabled={disabled}
-            className={cn(
-                "group flex min-h-[86px] items-start gap-3 rounded-lg border border-zinc-900 bg-zinc-950/45 p-3 text-left transition-colors",
-                disabled
-                    ? "cursor-not-allowed opacity-45"
-                    : "hover:border-zinc-700 hover:bg-zinc-900/70 focus:outline-none focus:ring-1 focus:ring-zinc-700"
-            )}
-        >
-            <Icon className="mt-0.5 h-4 w-4 shrink-0 text-zinc-500 transition-colors group-hover:text-zinc-200" />
-            <span className="min-w-0">
-                <span className="block text-sm font-semibold text-zinc-200">{title}</span>
-                <span className="mt-1 block text-[11px] leading-relaxed text-zinc-500">{detail}</span>
-            </span>
-        </button>
-    );
-}
-
-function WorkbenchEmptyState({
-    provider,
-    recommendedLabel,
-    recommendedReason,
-    localModelDisabled,
-    onAttachDocs,
-    onBestLocalModel,
-    onSampleDocDemo,
-    onSearchWeb,
-    onPrivacyInspector,
-}: {
-    provider: AIProvider;
-    recommendedLabel: string;
-    recommendedReason: string;
-    localModelDisabled: boolean;
-    onAttachDocs: () => void;
-    onBestLocalModel: () => void;
-    onSampleDocDemo: () => void;
-    onSearchWeb: () => void;
-    onPrivacyInspector: () => void;
-}) {
-    const providerNote =
-        provider === "cloud"
-            ? "Cloud only runs after you add a key. Local paths stay available."
-            : provider === "ollama"
-              ? "Ollama stays on your machine when the local server is reachable."
-              : provider === "chrome-ai"
-                ? "Chrome AI is local when Gemini Nano is ready in this browser."
-                : "Browser mode keeps docs and prompts on this machine.";
-
-    return (
-        <div className="min-h-full px-1 py-8 sm:px-4">
-            <div className="mx-auto flex w-full max-w-3xl flex-col gap-5">
-                <div className="flex items-start gap-3">
-                    <PixelNoxMark className="mt-1 h-5 w-10 text-zinc-300" />
-                    <div className="min-w-0">
-                        <h2 className="text-xl font-semibold text-zinc-100">Drop files or ask a question</h2>
-                        <p className="mt-1 max-w-xl text-sm leading-relaxed text-zinc-500">
-                            Start with docs, notes, logs, or a plain question. The provider badge tells you when context
-                            stays local or goes to a configured cloud endpoint.
-                        </p>
-                    </div>
-                </div>
-
-                <div className="grid gap-2 sm:grid-cols-2">
-                    <EmptyStateCard
-                        icon={FileText}
-                        title="Attach docs"
-                        detail="PDFs, notes, CSVs, logs. Build context before you ask."
-                        onClick={onAttachDocs}
-                    />
-                    <EmptyStateCard
-                        icon={HardDrive}
-                        title="Best local model"
-                        detail={`${recommendedLabel}. ${recommendedReason}.`}
-                        onClick={onBestLocalModel}
-                        disabled={localModelDisabled}
-                    />
-                    <EmptyStateCard
-                        icon={FileText}
-                        title="Private docs demo"
-                        detail="Load a sample brief and get a useful first prompt."
-                        onClick={onSampleDocDemo}
-                    />
-                    <EmptyStateCard
-                        icon={Search}
-                        title="Search web"
-                        detail="Turn on web context when local docs are not enough."
-                        onClick={onSearchWeb}
-                    />
-                </div>
-
-                <div className="flex flex-wrap items-center gap-2 text-[11px] text-zinc-600">
-                    <span>{providerNote}</span>
-                    <button
-                        onClick={onPrivacyInspector}
-                        className="rounded-md border border-zinc-900 px-2 py-1 text-zinc-400 transition hover:border-zinc-700 hover:text-white"
-                    >
-                        Open privacy inspector
-                    </button>
-                </div>
-            </div>
-        </div>
-    );
-}
-
-function StartHereStrip({
-    show,
-    localModelDisabled,
-    onBestLocalModel,
-    onAttachDocs,
-    onCloudSetup,
-    onPrivacyInspector,
-}: {
-    show: boolean;
-    localModelDisabled: boolean;
-    onBestLocalModel: () => void;
-    onAttachDocs: () => void;
-    onCloudSetup: () => void;
-    onPrivacyInspector: () => void;
-}) {
-    if (!show) return null;
-
-    const actions = [
-        { label: "Best local model", onClick: onBestLocalModel, disabled: localModelDisabled },
-        { label: "Attach docs", onClick: onAttachDocs },
-        { label: "Configure cloud", onClick: onCloudSetup },
-        { label: "Open privacy inspector", onClick: onPrivacyInspector },
-    ];
-
-    return (
-        <div className="px-4 pb-1">
-            <div className="mx-auto flex max-w-4xl flex-col gap-2 rounded-lg border border-zinc-900 bg-zinc-950/70 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
-                <span className="text-[11px] font-semibold text-zinc-400">Start here</span>
-                <div className="flex flex-wrap gap-1.5">
-                    {actions.map(action => (
-                        <button
-                            key={action.label}
-                            onClick={action.onClick}
-                            disabled={action.disabled}
-                            className={cn(
-                                "rounded-md border border-zinc-800 px-2.5 py-1.5 text-[11px] font-medium text-zinc-300 transition-colors",
-                                action.disabled
-                                    ? "cursor-not-allowed opacity-45"
-                                    : "hover:border-zinc-700 hover:bg-zinc-900 hover:text-white"
-                            )}
-                        >
-                            {action.label}
-                        </button>
-                    ))}
-                </div>
-            </div>
-        </div>
-    );
-}
-
-function DependencyFallbackPanel({
-    provider,
-    webllm,
-    chromeAI,
-    ollama,
-    cloudAI,
-    searchError,
-}: {
-    provider: AIProvider;
-    webllm: any;
-    chromeAI: any;
-    ollama: any;
-    cloudAI: any;
-    searchError?: string | null;
-}) {
-    const rows = [
-        {
-            name: "WebGPU",
-            status: !webllm.isSupported ? "issue" : webllm.gpuTier === "unknown" ? "checking" : "ready",
-            detail: !webllm.isSupported
-                ? webllm.error || "Unavailable in this browser"
-                : `Detected ${webllm.gpuTier} tier`,
-            fallback: "Use Chrome AI, Ollama, or Cloud API.",
-        },
-        {
-            name: "Chrome AI",
-            status: chromeAI.status === "ready" ? "ready" : provider === "chrome-ai" ? "issue" : "optional",
-            detail:
-                chromeAI.status === "ready"
-                    ? "Gemini Nano ready"
-                    : chromeAI.error || "Requires Chrome Prompt API and local model availability",
-            fallback: "Use WebGPU, Ollama, or Cloud API.",
-        },
-        {
-            name: "Ollama",
-            status: ollama.isSupported ? "ready" : provider === "ollama" ? "issue" : "optional",
-            detail: ollama.isSupported
-                ? `${ollama.models.length} local model(s)`
-                : ollama.error || "Local server not reachable",
-            fallback: "Run ollama serve, or use WebGPU/Cloud.",
-        },
-        {
-            name: "Cloud key",
-            status: cloudAI.apiKey ? (cloudAI.error ? "issue" : "ready") : "optional",
-            detail: cloudAI.apiKey ? cloudAI.error || "Configured for this browser session" : "No key stored",
-            fallback: "Stay local, or paste a valid OpenAI-compatible key.",
-        },
-        {
-            name: "Search",
-            status: searchError ? "issue" : "ready",
-            detail: searchError || "DDG, SearXNG, Wikipedia; Brave/Tavily if server keys exist",
-            fallback: "Answer from local model and uploaded docs.",
-        },
-    ] as const;
-
-    return (
-        <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-3 text-left">
-            <div className="mb-2 flex items-center gap-2 text-xs font-semibold text-zinc-300">
-                <AlertTriangle className="h-3.5 w-3.5 text-zinc-500" />
-                Dependency fallbacks
-            </div>
-            <div className="space-y-1.5">
-                {rows.map(row => (
-                    <div key={row.name} className="rounded-lg bg-zinc-900/40 p-2 text-[10px]">
-                        <div className="flex flex-wrap items-center gap-1.5">
-                            <span
-                                className={cn(
-                                    "rounded border px-1.5 py-0.5 font-semibold uppercase",
-                                    statusTone(row.status)
-                                )}
-                            >
-                                {row.status}
-                            </span>
-                            <span className="font-semibold text-zinc-300">{row.name}</span>
-                        </div>
-                        <div className="mt-1 leading-relaxed text-zinc-500">
-                            {row.detail} <span className="text-zinc-600">{row.fallback}</span>
-                        </div>
-                    </div>
-                ))}
-            </div>
-        </div>
-    );
-}
-
-function PrivacyInspector({
-    open,
-    onClose,
-    ragCount,
-    cloudKeySet,
-    deepSearchEnabled,
-    memoryEnabled,
-    provider,
-    webllm,
-    chromeAI,
-    ollama,
-    cloudAI,
-    searchError,
-}: {
-    open: boolean;
-    onClose: () => void;
-    ragCount: number;
-    cloudKeySet: boolean;
-    deepSearchEnabled: boolean;
-    memoryEnabled: boolean;
-    provider: AIProvider;
-    webllm: any;
-    chromeAI: any;
-    ollama: any;
-    cloudAI: any;
-    searchError?: string | null;
-}) {
-    if (!open) return null;
-
-    const rows = [
-        {
-            icon: Database,
-            label: "IndexedDB",
-            value: `${ragCount} attached file${ragCount === 1 ? "" : "s"} · conversations, memory, vector cache`,
-        },
-        {
-            icon: KeyRound,
-            label: "Cloud keys",
-            value: cloudKeySet ? "sessionStorage for this browser session" : "not configured",
-        },
-        {
-            icon: Lock,
-            label: "Current chat path",
-            value:
-                provider === "cloud"
-                    ? "cloud provider receives selected prompt/context"
-                    : deepSearchEnabled
-                      ? "local model plus network search context"
-                      : "local provider path",
-        },
-        {
-            icon: Wifi,
-            label: "Network toggles",
-            value: `search ${deepSearchEnabled ? "on" : "off"} · memory recall ${memoryEnabled ? "on" : "off"}`,
-        },
-    ];
-
-    return (
-        <div className="fixed right-4 top-16 z-50 w-[min(360px,calc(100vw-2rem))] rounded-xl border border-zinc-800 bg-[#0b0b0b] p-4 shadow-2xl">
-            <div className="mb-3 flex items-start justify-between gap-3">
-                <div>
-                    <div className="flex items-center gap-2 text-sm font-semibold text-white">
-                        <Shield className="h-4 w-4 text-emerald-300" />
-                        Privacy inspector
-                    </div>
-                    <p className="mt-1 text-[11px] leading-relaxed text-zinc-500">
-                        Shows where the next prompt and local data can go.
-                    </p>
-                </div>
-                <button
-                    onClick={onClose}
-                    className="rounded-md px-2 py-1 text-xs text-zinc-500 hover:bg-zinc-900 hover:text-white"
-                >
-                    Close
-                </button>
-            </div>
-            <div className="space-y-2">
-                {rows.map(({ icon: Icon, label, value }) => (
-                    <div key={label} className="flex gap-3 rounded-lg border border-zinc-900 bg-zinc-950/60 p-3">
-                        <Icon className="mt-0.5 h-4 w-4 shrink-0 text-zinc-500" />
-                        <div>
-                            <div className="text-[11px] font-semibold text-zinc-300">{label}</div>
-                            <div className="mt-0.5 text-[10px] leading-relaxed text-zinc-500">{value}</div>
-                        </div>
-                    </div>
-                ))}
-            </div>
-            <div className="mt-3 flex gap-3 border-t border-zinc-900 pt-3 text-[10px] font-mono">
-                <a href="/security" className="inline-flex items-center gap-1 text-zinc-500 hover:text-white">
-                    Security <ExternalLink className="h-3 w-3" />
-                </a>
-                <a href="/privacy" className="inline-flex items-center gap-1 text-zinc-500 hover:text-white">
-                    Privacy <ExternalLink className="h-3 w-3" />
-                </a>
-            </div>
-            <div className="mt-4">
-                <DependencyFallbackPanel
-                    provider={provider}
-                    webllm={webllm}
-                    chromeAI={chromeAI}
-                    ollama={ollama}
-                    cloudAI={cloudAI}
-                    searchError={searchError}
-                />
-            </div>
-        </div>
-    );
-}
-
 function ChatPageInner() {
-    const [provider, _setProvider] = useState<AIProvider>(() => {
-        if (typeof window === "undefined") return "browser";
-        const saved = localStorage.getItem("n0x-provider") as AIProvider | null;
-        return saved && ["browser", "ollama", "cloud", "chrome-ai"].includes(saved) ? saved : "browser";
-    });
-    const setProvider = useCallback((p: AIProvider) => {
-        _setProvider(p);
-        localStorage.setItem("n0x-provider", p);
-        trackFunnelEvent("provider_selected", { provider: p });
+    const onProviderSelected = useCallback((provider: AIProvider) => {
+        trackFunnelEvent("provider_selected", { provider });
     }, []);
-    const [ollamaUrl, setOllamaUrl] = useState(() => {
-        if (typeof window === "undefined") return "http://localhost:11434";
-        return localStorage.getItem("n0x-ollama-url") || "http://localhost:11434";
+    const { provider, setProvider, ollamaUrl, setOllamaUrl, sidebarOpen, setSidebarOpen } = useWorkbenchPreferences({
+        onProviderSelected,
     });
-    const [cloudApiKey, setCloudApiKey] = useState(() => useCloudAI.getState().apiKey || "");
-    const [cloudBaseUrl, setCloudBaseUrl] = useState(
-        () => useCloudAI.getState().baseUrl || "https://api.groq.com/openai/v1"
-    );
+    const [cloudApiKey, setCloudApiKey] = useState("");
+    const [cloudBaseUrl, setCloudBaseUrl] = useState("https://api.groq.com/openai/v1");
 
     const ollama = useOllama();
     const cloudAI = useCloudAI();
@@ -565,6 +124,7 @@ function ChatPageInner() {
         autoRouteEnabled,
         setAutoRouteEnabled,
         lastRouteDecision,
+        activeExecutionMeta,
         webllm,
         deepSearch,
         memory,
@@ -572,7 +132,6 @@ function ChatPageInner() {
         tts,
         rag,
         chatStore,
-        persona,
         agent,
         handleSend,
         handleNewChat,
@@ -589,19 +148,11 @@ function ChatPageInner() {
     }, []);
 
     const [headerModelOpen, setHeaderModelOpen] = useState(false);
-    // Default sidebar closed on mobile (<768px), open on desktop
-    const [sidebarOpen, setSidebarOpen] = useState(() => {
-        if (typeof window === "undefined") return true;
-        return window.innerWidth >= 768;
-    });
 
-    // Sync sidebar state with viewport resizes (desktop ↔ mobile)
     useEffect(() => {
-        const mq = window.matchMedia("(min-width: 768px)");
-        const handler = (e: MediaQueryListEvent) => setSidebarOpen(e.matches);
-        mq.addEventListener("change", handler);
-        return () => mq.removeEventListener("change", handler);
-    }, []);
+        setCloudApiKey(cloudAI.apiKey || "");
+        setCloudBaseUrl(cloudAI.baseUrl || "https://api.groq.com/openai/v1");
+    }, [cloudAI.apiKey, cloudAI.baseUrl]);
 
     const [showMemoryPanel, setShowMemoryPanel] = useState(false);
     const [showMetrics, setShowMetrics] = useState(false);
@@ -610,6 +161,7 @@ function ChatPageInner() {
     const [providerMenuOpen, setProviderMenuOpen] = useState(false);
     const [showShortcuts, setShowShortcuts] = useState(false);
     const [showPrivacyInspector, setShowPrivacyInspector] = useState(false);
+    const [mobileControlsOpen, setMobileControlsOpen] = useState(false);
 
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     const userScrolledUpRef = useRef(false);
@@ -782,24 +334,6 @@ function ChatPageInner() {
               : provider === "chrome-ai"
                 ? "Gemini Nano"
                 : WEBLLM_MODELS.find(m => m.id === webllm.loadedModel)?.label || webllm.loadedModel || "No model";
-    const liveMessageMeta = {
-        provider,
-        providerLabel:
-            provider === "browser"
-                ? "WebGPU"
-                : provider === "chrome-ai"
-                  ? "Chrome AI"
-                  : provider === "ollama"
-                    ? "Ollama"
-                    : "Cloud API",
-        modelName: activeModelName,
-        privacy: provider === "cloud" ? "cloud" : deepSearchEnabled ? "mixed" : "local",
-        usedSearch: deepSearchEnabled,
-        usedDocs: rag.documents.length > 0,
-        usedMemory: memoryEnabled,
-        agent: agent.enabled,
-    } as const;
-
     const cloudBlockingError =
         cloudAI.apiKey && cloudAI.error && cloudAI.error !== "API Key required for Cloud AI" ? cloudAI.error : null;
 
@@ -905,6 +439,7 @@ function ChatPageInner() {
             />
 
             <main className="flex-1 flex flex-col min-w-0 relative">
+                <h1 className="sr-only">N0X local AI workspace</h1>
                 <MetricsOverlay
                     tps={
                         provider === "ollama"
@@ -940,22 +475,27 @@ function ChatPageInner() {
                     onToggle={() => setShowMetrics(!showMetrics)}
                 />
                 {/* Header */}
-                <header className="h-14 border-b border-border flex items-center px-4 shrink-0 bg-background/50 backdrop-blur-md sticky top-0 z-40">
+                <header className="sticky top-0 z-40 flex h-14 shrink-0 items-center gap-1 border-b border-border bg-background/80 px-2 backdrop-blur-md sm:px-3 lg:px-4">
                     <button
                         onClick={() => setSidebarOpen(!sidebarOpen)}
-                        className="mr-3 text-txt-tertiary hover:text-phosphor transition-colors"
+                        aria-label={sidebarOpen ? "Close conversation sidebar" : "Open conversation sidebar"}
+                        aria-expanded={sidebarOpen}
+                        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-zinc-300 transition-colors hover:bg-zinc-900 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white lg:mr-1"
                     >
                         <Menu className="w-4 h-4" />
                     </button>
 
                     {/* Model selector */}
-                    <div className="relative">
+                    <div className="relative min-w-0 flex-1 lg:max-w-[240px] lg:flex-none">
                         <button
                             onClick={() => setHeaderModelOpen(!headerModelOpen)}
-                            className="flex items-center gap-2 text-xs font-mono text-txt-secondary hover:text-phosphor transition-colors"
+                            aria-label={`Select model. Current model: ${activeModelName}`}
+                            aria-haspopup="menu"
+                            aria-expanded={headerModelOpen}
+                            className="flex h-11 w-full min-w-0 items-center gap-2 rounded-md px-2 text-xs font-mono text-zinc-300 transition-colors hover:bg-zinc-900 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white lg:w-auto"
                         >
-                            <Cpu className="w-3.5 h-3.5" />
-                            <span>
+                            <Cpu className="h-3.5 w-3.5 shrink-0" />
+                            <span className="truncate">
                                 {provider === "browser"
                                     ? WEBLLM_MODELS.find(m => m.id === webllm.loadedModel)?.label || "Select model"
                                     : provider === "ollama"
@@ -968,7 +508,7 @@ function ChatPageInner() {
                             </span>
                             <ChevronDown
                                 className={cn(
-                                    "w-3 h-3 opacity-40 transition-transform",
+                                    "h-3 w-3 shrink-0 opacity-60 transition-transform",
                                     headerModelOpen && "rotate-180"
                                 )}
                             />
@@ -977,12 +517,16 @@ function ChatPageInner() {
                         {headerModelOpen && (
                             <>
                                 <div className="fixed inset-0 z-40" onClick={() => setHeaderModelOpen(false)} />
-                                <div className="absolute top-full left-0 mt-2 w-72 max-h-[70vh] overflow-y-auto bg-card border border-border shadow-xl rounded-xl z-50 no-scrollbar p-1">
+                                <div
+                                    role="menu"
+                                    aria-label="Available models"
+                                    className="absolute left-0 top-full z-50 mt-2 max-h-[70vh] w-[min(18rem,calc(100vw-1rem))] overflow-y-auto rounded-xl border border-border bg-card p-1 shadow-xl no-scrollbar"
+                                >
                                     {provider === "cloud" ? (
                                         <div className="p-1">
                                             <div className="px-2 py-1.5 flex items-center gap-2">
                                                 <Cloud className="w-3 h-3 text-blue-400" />
-                                                <span className="text-[10px] font-mono text-txt-tertiary uppercase tracking-wider">
+                                                <span className="text-xs font-mono text-txt-tertiary uppercase tracking-wider">
                                                     Cloud Models
                                                 </span>
                                                 {cloudAI.fetchingModels && (
@@ -997,7 +541,7 @@ function ChatPageInner() {
                                                         setHeaderModelOpen(false);
                                                     }}
                                                     className={cn(
-                                                        "w-full flex items-center px-2 py-1.5 rounded text-xs text-left transition-all font-mono",
+                                                        "flex min-h-11 w-full items-center rounded px-2 py-2 text-left text-xs font-mono transition-all",
                                                         cloudAI.loadedModel === m
                                                             ? "bg-zinc-800 text-white border border-zinc-700 font-semibold"
                                                             : "text-zinc-400 hover:bg-zinc-900 hover:text-white"
@@ -1011,7 +555,7 @@ function ChatPageInner() {
                                         <div className="p-1">
                                             <div className="px-2 py-1.5 flex items-center gap-2">
                                                 <Server className="w-3 h-3 text-orange-400" />
-                                                <span className="text-[10px] font-mono text-txt-tertiary uppercase tracking-wider">
+                                                <span className="text-xs font-mono text-txt-tertiary uppercase tracking-wider">
                                                     Ollama Models
                                                 </span>
                                             </div>
@@ -1023,20 +567,20 @@ function ChatPageInner() {
                                                         setHeaderModelOpen(false);
                                                     }}
                                                     className={cn(
-                                                        "w-full flex items-center justify-between px-2 py-1.5 rounded text-xs text-left transition-all font-mono",
+                                                        "flex min-h-11 w-full items-center justify-between rounded px-2 py-2 text-left text-xs font-mono transition-all",
                                                         ollama.loadedModel === m.name
                                                             ? "bg-zinc-800 text-white border border-zinc-700 font-semibold"
                                                             : "text-zinc-400 hover:bg-zinc-900 hover:text-white"
                                                     )}
                                                 >
                                                     <span>{m.name}</span>
-                                                    <span className="text-[10px] text-txt-tertiary">
+                                                    <span className="text-xs text-txt-tertiary">
                                                         {(m.size / 1e9).toFixed(1)}GB
                                                     </span>
                                                 </button>
                                             ))}
                                             {ollama.models.length === 0 && (
-                                                <div className="px-2 py-3 text-[10px] text-zinc-500 text-center">
+                                                <div className="px-2 py-3 text-xs text-zinc-500 text-center">
                                                     No models found
                                                 </div>
                                             )}
@@ -1059,7 +603,7 @@ function ChatPageInner() {
                                                         {key === "uncensored" && (
                                                             <Shield className="w-3 h-3 text-neon-pink" />
                                                         )}
-                                                        <span className="text-[10px] font-mono text-txt-tertiary uppercase tracking-wider">
+                                                        <span className="text-xs font-mono text-txt-tertiary uppercase tracking-wider">
                                                             {cat.label}
                                                         </span>
                                                     </div>
@@ -1069,7 +613,7 @@ function ChatPageInner() {
                                                             onClick={() => handleModelChange(m.id)}
                                                             disabled={!webllm.isSupported}
                                                             className={cn(
-                                                                "w-full flex items-center justify-between px-2 py-1.5 rounded text-xs text-left transition-all font-mono",
+                                                                "flex min-h-11 w-full items-center justify-between rounded px-2 py-2 text-left text-xs font-mono transition-all",
                                                                 webllm.loadedModel === m.id
                                                                     ? "bg-zinc-800 text-white border border-zinc-700 font-semibold"
                                                                     : "text-zinc-400 hover:bg-zinc-900 hover:text-white"
@@ -1077,13 +621,11 @@ function ChatPageInner() {
                                                         >
                                                             <div>
                                                                 <div>{m.label}</div>
-                                                                <div className="text-[10px] text-txt-tertiary">
+                                                                <div className="text-xs text-txt-tertiary">
                                                                     {m.desc}
                                                                 </div>
                                                             </div>
-                                                            <span className="text-[10px] text-txt-tertiary">
-                                                                {m.size}
-                                                            </span>
+                                                            <span className="text-xs text-txt-tertiary">{m.size}</span>
                                                         </button>
                                                     ))}
                                                 </div>
@@ -1096,11 +638,14 @@ function ChatPageInner() {
                     </div>
 
                     {/* Provider switcher */}
-                    <div className="relative ml-2">
+                    <div className="relative shrink-0 lg:ml-1">
                         <button
                             onClick={() => setProviderMenuOpen(!providerMenuOpen)}
+                            aria-label={`Select provider. Current provider: ${provider}`}
+                            aria-haspopup="menu"
+                            aria-expanded={providerMenuOpen}
                             className={cn(
-                                "flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] font-mono transition-all border",
+                                "flex h-11 min-w-11 items-center justify-center gap-1.5 rounded-md border px-2 text-xs font-mono transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white",
                                 provider === "browser"
                                     ? "text-emerald-400 border-emerald-500/20 bg-emerald-500/5"
                                     : provider === "chrome-ai"
@@ -1114,26 +659,32 @@ function ChatPageInner() {
                             {provider === "chrome-ai" && <Sparkles className="w-3 h-3" />}
                             {provider === "ollama" && <Server className="w-3 h-3" />}
                             {provider === "cloud" && <Cloud className="w-3 h-3" />}
-                            {provider === "browser"
-                                ? "WebGPU"
-                                : provider === "chrome-ai"
-                                  ? "Chrome AI"
-                                  : provider === "ollama"
-                                    ? "Ollama"
-                                    : "Cloud"}
+                            <span className="hidden min-[430px]:inline">
+                                {provider === "browser"
+                                    ? "WebGPU"
+                                    : provider === "chrome-ai"
+                                      ? "Chrome AI"
+                                      : provider === "ollama"
+                                        ? "Ollama"
+                                        : "Cloud"}
+                            </span>
                         </button>
 
                         {providerMenuOpen && (
                             <>
                                 <div className="fixed inset-0 z-40" onClick={() => setProviderMenuOpen(false)} />
-                                <div className="absolute top-full left-0 mt-2 w-64 bg-card border border-border shadow-xl rounded-xl z-50 p-2 space-y-1">
+                                <div
+                                    role="menu"
+                                    aria-label="AI providers"
+                                    className="absolute right-0 top-full z-50 mt-2 w-[min(16rem,calc(100vw-1rem))] space-y-1 rounded-xl border border-border bg-card p-2 shadow-xl lg:left-0 lg:right-auto"
+                                >
                                     <button
                                         onClick={() => {
                                             setProvider("browser");
                                             setProviderMenuOpen(false);
                                         }}
                                         className={cn(
-                                            "w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-xs text-left transition-all",
+                                            "flex min-h-11 w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-xs transition-all",
                                             provider === "browser"
                                                 ? "bg-emerald-500/10 border border-emerald-500/20 text-white"
                                                 : "text-zinc-400 hover:bg-zinc-900 hover:text-white"
@@ -1142,7 +693,7 @@ function ChatPageInner() {
                                         <Monitor className="w-4 h-4 text-emerald-400 shrink-0" />
                                         <div>
                                             <div className="font-semibold">Browser (WebGPU)</div>
-                                            <div className="text-[10px] text-zinc-500">
+                                            <div className="text-xs text-zinc-500">
                                                 Runs in your browser — zero server, max privacy
                                             </div>
                                         </div>
@@ -1154,7 +705,7 @@ function ChatPageInner() {
                                                 setProviderMenuOpen(false);
                                             }}
                                             className={cn(
-                                                "w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-xs text-left transition-all",
+                                                "flex min-h-11 w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-xs transition-all",
                                                 provider === "chrome-ai"
                                                     ? "bg-purple-500/10 border border-purple-500/20 text-white"
                                                     : "text-zinc-400 hover:bg-zinc-900 hover:text-white"
@@ -1164,15 +715,15 @@ function ChatPageInner() {
                                             <div>
                                                 <div className="font-semibold">
                                                     Chrome AI{" "}
-                                                    <span className="text-[9px] text-purple-400 font-mono ml-1">
+                                                    <span className="text-xs text-purple-400 font-mono ml-1">
                                                         INSTANT
                                                     </span>
                                                 </div>
-                                                <div className="text-[10px] text-zinc-500">
+                                                <div className="text-xs text-zinc-500">
                                                     Gemini Nano — zero download, on-device
                                                 </div>
                                                 {chromeAI.status === "ready" && (
-                                                    <div className="text-[10px] text-emerald-400 mt-0.5">✓ Ready</div>
+                                                    <div className="text-xs text-emerald-400 mt-0.5">✓ Ready</div>
                                                 )}
                                             </div>
                                         </button>
@@ -1184,7 +735,7 @@ function ChatPageInner() {
                                             ollama.setBaseUrl(ollamaUrl);
                                         }}
                                         className={cn(
-                                            "w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-xs text-left transition-all",
+                                            "flex min-h-11 w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-xs transition-all",
                                             provider === "ollama"
                                                 ? "bg-orange-500/10 border border-orange-500/20 text-white"
                                                 : "text-zinc-400 hover:bg-zinc-900 hover:text-white"
@@ -1193,16 +744,16 @@ function ChatPageInner() {
                                         <Server className="w-4 h-4 text-orange-400 shrink-0" />
                                         <div>
                                             <div className="font-semibold">Ollama (Local)</div>
-                                            <div className="text-[10px] text-zinc-500">
+                                            <div className="text-xs text-zinc-500">
                                                 Use any model from your Ollama server
                                             </div>
                                             {provider === "ollama" && ollama.isSupported && (
-                                                <div className="text-[10px] text-emerald-400 mt-0.5">
+                                                <div className="text-xs text-emerald-400 mt-0.5">
                                                     ✓ Connected · {ollama.models.length} models
                                                 </div>
                                             )}
                                             {provider === "ollama" && !ollama.isSupported && ollama.error && (
-                                                <div className="text-[10px] text-red-400 mt-0.5">{ollama.error}</div>
+                                                <div className="text-xs text-red-400 mt-0.5">{ollama.error}</div>
                                             )}
                                         </div>
                                     </button>
@@ -1212,7 +763,7 @@ function ChatPageInner() {
                                             setProviderMenuOpen(false);
                                         }}
                                         className={cn(
-                                            "w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-xs text-left transition-all",
+                                            "flex min-h-11 w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-xs transition-all",
                                             provider === "cloud"
                                                 ? "bg-blue-500/10 border border-blue-500/20 text-white"
                                                 : "text-zinc-400 hover:bg-zinc-900 hover:text-white"
@@ -1221,7 +772,7 @@ function ChatPageInner() {
                                         <Cloud className="w-4 h-4 text-blue-400 shrink-0" />
                                         <div>
                                             <div className="font-semibold">Cloud API</div>
-                                            <div className="text-[10px] text-zinc-500">
+                                            <div className="text-xs text-zinc-500">
                                                 Sends selected prompt/context to your configured provider
                                             </div>
                                         </div>
@@ -1230,10 +781,14 @@ function ChatPageInner() {
                                     {/* Ollama URL config */}
                                     {provider === "ollama" && (
                                         <div className="pt-2 border-t border-zinc-800 mt-2">
-                                            <label className="text-[10px] text-zinc-500 font-mono px-1">
+                                            <label
+                                                htmlFor="ollama-url"
+                                                className="px-1 font-mono text-xs text-zinc-400"
+                                            >
                                                 Ollama URL
                                             </label>
                                             <input
+                                                id="ollama-url"
                                                 type="text"
                                                 value={ollamaUrl}
                                                 onChange={e => {
@@ -1254,19 +809,23 @@ function ChatPageInner() {
                                         <div className="pt-2 border-t border-zinc-800 mt-2 space-y-2">
                                             <div>
                                                 <div className="flex items-center justify-between">
-                                                    <label className="text-[10px] text-zinc-500 font-mono px-1">
+                                                    <label
+                                                        htmlFor="cloud-api-key"
+                                                        className="px-1 font-mono text-xs text-zinc-400"
+                                                    >
                                                         API Key
                                                     </label>
                                                     <a
                                                         href="https://console.groq.com/keys"
                                                         target="_blank"
                                                         rel="noopener noreferrer"
-                                                        className="text-[9px] text-blue-400 hover:text-blue-300 font-mono px-1 underline underline-offset-2"
+                                                        className="text-xs text-blue-400 hover:text-blue-300 font-mono px-1 underline underline-offset-2"
                                                     >
                                                         Get free key (Groq) →
                                                     </a>
                                                 </div>
                                                 <input
+                                                    id="cloud-api-key"
                                                     type="password"
                                                     value={cloudApiKey}
                                                     onChange={e => {
@@ -1278,10 +837,14 @@ function ChatPageInner() {
                                                 />
                                             </div>
                                             <div>
-                                                <label className="text-[10px] text-zinc-500 font-mono px-1">
+                                                <label
+                                                    htmlFor="cloud-base-url"
+                                                    className="px-1 font-mono text-xs text-zinc-400"
+                                                >
                                                     Base URL
                                                 </label>
                                                 <input
+                                                    id="cloud-base-url"
                                                     type="text"
                                                     value={cloudBaseUrl}
                                                     onChange={e => {
@@ -1293,13 +856,17 @@ function ChatPageInner() {
                                                 />
                                             </div>
                                             <div>
-                                                <label className="text-[10px] text-zinc-500 font-mono px-1 flex items-center gap-1">
+                                                <label
+                                                    htmlFor="cloud-model"
+                                                    className="flex items-center gap-1 px-1 font-mono text-xs text-zinc-400"
+                                                >
                                                     Model
                                                     {cloudAI.fetchingModels && (
                                                         <Loader2 className="w-2.5 h-2.5 animate-spin text-blue-400" />
                                                     )}
                                                 </label>
                                                 <select
+                                                    id="cloud-model"
                                                     value={cloudAI.loadedModel || ""}
                                                     onChange={e => cloudAI.loadModel(e.target.value)}
                                                     className="w-full mt-1 px-2 py-1.5 rounded-md bg-zinc-900 border border-zinc-800 text-xs font-mono text-zinc-300 focus:border-blue-500/30 outline-none appearance-none cursor-pointer"
@@ -1315,7 +882,7 @@ function ChatPageInner() {
                                                 <button
                                                     onClick={() => cloudAI.fetchModels()}
                                                     disabled={cloudAI.fetchingModels}
-                                                    className="w-full mt-1 px-2 py-1.5 rounded-md bg-blue-500/10 border border-blue-500/20 text-[10px] font-mono text-blue-300 hover:bg-blue-500/20 transition-all disabled:opacity-50"
+                                                    className="w-full mt-1 px-2 py-1.5 rounded-md bg-blue-500/10 border border-blue-500/20 text-xs font-mono text-blue-300 hover:bg-blue-500/20 transition-all disabled:opacity-50"
                                                 >
                                                     {cloudAI.fetchingModels ? "Fetching…" : "Refresh Models"}
                                                 </button>
@@ -1327,9 +894,69 @@ function ChatPageInner() {
                         )}
                     </div>
 
+                    {!(provider === "browser" && webllm.status === "loading") && (
+                        <div className="relative shrink-0 lg:hidden">
+                            <button
+                                onClick={() => setMobileControlsOpen(open => !open)}
+                                aria-label="More workspace controls"
+                                aria-haspopup="menu"
+                                aria-expanded={mobileControlsOpen}
+                                className="flex h-11 w-11 items-center justify-center rounded-md text-zinc-300 transition-colors hover:bg-zinc-900 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                            >
+                                <MoreHorizontal className="h-4 w-4" />
+                            </button>
+                            {mobileControlsOpen && (
+                                <>
+                                    <div
+                                        className="fixed inset-0 z-40"
+                                        onClick={() => setMobileControlsOpen(false)}
+                                        aria-hidden="true"
+                                    />
+                                    <div
+                                        role="menu"
+                                        aria-label="Workspace controls"
+                                        className="absolute right-0 top-full z-50 mt-2 w-[min(17rem,calc(100vw-1rem))] space-y-1 rounded-xl border border-zinc-700 bg-card p-2 shadow-xl"
+                                    >
+                                        <div className="flex min-h-11 items-center justify-between gap-3 rounded-md px-3 py-1 text-xs text-zinc-300">
+                                            <span>Persona</span>
+                                            <PersonaSelector compact menuPlacement="bottom" menuAlign="right" />
+                                        </div>
+                                        <button
+                                            onClick={() => tts.setEnabled(!tts.isEnabled)}
+                                            aria-pressed={tts.isEnabled}
+                                            className="flex min-h-11 w-full items-center gap-3 rounded-md px-3 py-2 text-left text-xs text-zinc-300 transition-colors hover:bg-zinc-900 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                                        >
+                                            {tts.isEnabled ? (
+                                                <Volume2 className="h-4 w-4 text-emerald-300" />
+                                            ) : (
+                                                <VolumeX className="h-4 w-4" />
+                                            )}
+                                            Text to speech {tts.isEnabled ? "on" : "off"}
+                                        </button>
+                                        <button
+                                            onClick={() => {
+                                                setMobileControlsOpen(false);
+                                                setShowPrivacyInspector(true);
+                                            }}
+                                            className="flex min-h-11 w-full items-center gap-3 rounded-md px-3 py-2 text-left text-xs text-zinc-300 transition-colors hover:bg-zinc-900 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                                        >
+                                            <Shield className="h-4 w-4 text-emerald-300" />
+                                            Privacy inspector
+                                        </button>
+                                        <ShareMenu
+                                            label="Share / export"
+                                            messages={chatStore.messages}
+                                            modelName={activeModelName}
+                                        />
+                                    </div>
+                                </>
+                            )}
+                        </div>
+                    )}
+
                     {/* Only hide toolbar during WebGPU model download */}
                     {!(provider === "browser" && webllm.status === "loading") && (
-                        <>
+                        <div className="hidden shrink-0 items-center lg:flex">
                             {/* Persona */}
                             <div className="ml-3">
                                 <PersonaSelector compact />
@@ -1338,8 +965,10 @@ function ChatPageInner() {
                             {/* TTS */}
                             <button
                                 onClick={() => tts.setEnabled(!tts.isEnabled)}
+                                aria-label={tts.isEnabled ? "Disable text to speech" : "Enable text to speech"}
+                                aria-pressed={tts.isEnabled}
                                 className={cn(
-                                    "ml-3 p-1 rounded transition-all",
+                                    "ml-2 flex h-11 w-11 items-center justify-center rounded-md transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white",
                                     tts.isEnabled ? "text-phosphor" : "text-txt-tertiary hover:text-txt-secondary"
                                 )}
                             >
@@ -1353,8 +982,10 @@ function ChatPageInner() {
                             <button
                                 onClick={() => setShowPrivacyInspector(open => !open)}
                                 title="Privacy inspector"
+                                aria-label="Open privacy inspector"
+                                aria-expanded={showPrivacyInspector}
                                 className={cn(
-                                    "ml-2 p-1 rounded transition-all",
+                                    "flex h-11 w-11 items-center justify-center rounded-md transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white",
                                     showPrivacyInspector
                                         ? "text-emerald-300"
                                         : "text-txt-tertiary hover:text-txt-secondary"
@@ -1374,7 +1005,7 @@ function ChatPageInner() {
                                 return tps > 0 ? (
                                     <div
                                         className={cn(
-                                            "ml-3 font-mono text-[11px] flex items-center gap-1",
+                                            "ml-3 font-mono text-xs flex items-center gap-1",
                                             tps > 50
                                                 ? "text-phosphor text-glow-sm"
                                                 : tps > 20
@@ -1403,18 +1034,21 @@ function ChatPageInner() {
                                     }
                                 />
                             </div>
-                        </>
+                        </div>
                     )}
 
                     {/* Loading — show only spinner + progress (WebGPU model download) */}
                     {provider === "browser" && webllm.status === "loading" && (
-                        <div className="ml-auto text-[11px] font-mono text-phosphor-dim flex items-center gap-2">
+                        <div
+                            aria-live="polite"
+                            className="ml-1 flex shrink-0 items-center gap-2 text-xs font-mono text-phosphor-dim"
+                        >
                             <Loader2 className="w-3 h-3 animate-spin" />
                             {Math.round(webllm.loadProgress * 100)}%
                         </div>
                     )}
 
-                    <div className="ml-auto text-[10px] text-txt-tertiary font-mono">ctrl+k</div>
+                    <div className="ml-auto hidden text-xs font-mono text-zinc-400 xl:block">ctrl+k</div>
                 </header>
 
                 <PrivacyInspector
@@ -1438,130 +1072,14 @@ function ChatPageInner() {
                 <div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-6">
                     {/* WebGPU unsupported hint is now integrated into the welcome screen */}
 
-                    {/* WebLLM Error Banner — with actionable recovery options */}
-                    {provider === "browser" && webllm.error && webllm.status === "error" && (
-                        <div className="max-w-lg mx-auto mt-12 mb-6">
-                            <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-5 text-center space-y-4">
-                                <AlertTriangle className="w-7 h-7 text-red-400 mx-auto" />
-                                <h3 className="text-sm font-mono text-red-400 font-bold">Model Load Failed</h3>
-                                <p className="text-xs text-red-300/80 font-mono leading-relaxed max-w-sm mx-auto">
-                                    {webllm.error}
-                                </p>
-
-                                {/* Recovery actions */}
-                                <div className="flex flex-col gap-2 pt-2">
-                                    {/* Try a smaller model */}
-                                    <button
-                                        onClick={() => handleModelChange("SmolLM2-360M-Instruct-q4f16_1-MLC")}
-                                        className="w-full px-4 py-2.5 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-200 text-xs font-mono rounded-lg transition-colors flex items-center justify-center gap-2"
-                                    >
-                                        <Zap className="w-3.5 h-3.5 text-neon-amber" /> Try SmolLM2 360M (tiny, works
-                                        everywhere)
-                                    </button>
-
-                                    {/* Switch to Cloud API — the fast path */}
-                                    <button
-                                        onClick={() => setProvider("cloud")}
-                                        className="w-full px-4 py-2.5 bg-blue-500/15 hover:bg-blue-500/25 border border-blue-500/30 text-blue-300 text-xs font-mono font-bold rounded-lg transition-colors flex items-center justify-center gap-2"
-                                    >
-                                        <Cloud className="w-3.5 h-3.5" /> Use Cloud API for this session
-                                    </button>
-
-                                    {/* Force load (if hardware restricted) */}
-                                    {webllm.error.includes("Hardware Restricted") && (
-                                        <button
-                                            onClick={() => {
-                                                const modelToForce =
-                                                    webllm.loadingModel ||
-                                                    webllm.loadedModel ||
-                                                    "Qwen2.5-1.5B-Instruct-q4f16_1-MLC";
-                                                webllm.loadModel(modelToForce, true);
-                                            }}
-                                            className="px-4 py-2 text-red-400/60 hover:text-red-300 text-[10px] font-mono transition-colors"
-                                        >
-                                            Force Load Anyway (may crash)
-                                        </button>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Loading screen — only show for WebGPU provider */}
-                    {provider === "browser" &&
-                        webllm.isSupported &&
-                        webllm.status === "loading" &&
-                        chatStore.messages.length === 0 && (
-                            <div className="h-full flex flex-col items-center justify-center">
-                                <div className="space-y-6 text-center max-w-sm">
-                                    <h2 className="text-xl text-white font-bold tracking-tight">N0X Engine</h2>
-
-                                    {/* Progress bar */}
-                                    <div className="w-64 mx-auto">
-                                        <div className="h-1.5 bg-crt-surface rounded-full overflow-hidden border border-crt-border">
-                                            <div
-                                                className="h-full bg-phosphor rounded-full transition-all duration-300 shadow-glow-sm"
-                                                style={{ width: `${Math.round(webllm.loadProgress * 100)}%` }}
-                                            />
-                                        </div>
-                                        <div className="flex justify-between mt-2">
-                                            <span className="text-[10px] text-txt-tertiary font-mono">
-                                                downloading{" "}
-                                                {WEBLLM_MODELS.find(
-                                                    m =>
-                                                        m.id ===
-                                                        (webllm.loadingModel || webllm.loadedModel || DEFAULT_MODEL)
-                                                )?.label || "model"}
-                                            </span>
-                                            <span className="text-[10px] text-phosphor-dim font-mono">
-                                                {Math.round(webllm.loadProgress * 100)}%
-                                            </span>
-                                        </div>
-                                    </div>
-
-                                    {/* Tips + stall warning */}
-                                    <div className="space-y-2 pt-2">
-                                        {webllm.error ? (
-                                            <>
-                                                <p className="text-[11px] text-amber-300/80 font-mono">
-                                                    ⚠ {webllm.error}
-                                                </p>
-                                                <div className="flex gap-2 justify-center pt-1">
-                                                    <button
-                                                        onClick={() =>
-                                                            handleModelChange("SmolLM2-360M-Instruct-q4f16_1-MLC")
-                                                        }
-                                                        className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-[10px] text-zinc-300 font-mono rounded transition-colors"
-                                                    >
-                                                        Try smaller model
-                                                    </button>
-                                                    <button
-                                                        onClick={() => setProvider("cloud")}
-                                                        className="px-3 py-1.5 bg-blue-500/15 hover:bg-blue-500/25 border border-blue-500/25 text-[10px] text-blue-300 font-mono font-bold rounded transition-colors"
-                                                    >
-                                                        Use Cloud API
-                                                    </button>
-                                                </div>
-                                            </>
-                                        ) : (
-                                            <>
-                                                <p className="text-[11px] text-txt-secondary font-mono">
-                                                    first time? this downloads once, then it's instant forever.
-                                                </p>
-                                                <p className="text-[10px] text-txt-tertiary font-mono">
-                                                    the model weights are cached in your browser —<br />
-                                                    no server, no account, everything stays on your machine.
-                                                </p>
-                                                <p className="text-[10px] text-txt-tertiary font-mono opacity-60">
-                                                    don't refresh — download will restart
-                                                </p>
-                                            </>
-                                        )}
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-
+                    <ModelRuntimeStatus
+                        provider={provider}
+                        webllm={webllm}
+                        messageCount={chatStore.messages.length}
+                        defaultModel={DEFAULT_MODEL}
+                        onModelChange={handleModelChange}
+                        onUseCloud={() => setProvider("cloud")}
+                    />
                     {emptyWorkbenchVisible ? (
                         <WorkbenchEmptyState
                             provider={provider}
@@ -1641,7 +1159,7 @@ function ChatPageInner() {
                             )}
 
                             {streamingContent && (
-                                <MessageBubble role="assistant" content={streamingContent} meta={liveMessageMeta} />
+                                <MessageBubble role="assistant" content={streamingContent} meta={activeExecutionMeta} />
                             )}
 
                             {/* Agent Trace */}
@@ -1695,6 +1213,7 @@ function ChatPageInner() {
                         onPyodideToggle={setPyEnabled}
                         onFileDrop={rag.addFile}
                         attachedFiles={rag.documents.map(d => ({ id: d.id, name: d.name, size: d.size, type: d.type }))}
+                        fileStatus={rag.status}
                         onRemoveFile={id => {
                             rag.removeFile(id);
                         }}
@@ -1734,44 +1253,7 @@ function ChatPageInner() {
                 onSearch={memory.searchMemories}
             />
 
-            {/* Keyboard shortcuts overlay */}
-            {showShortcuts && (
-                <>
-                    <div className="fixed inset-0 bg-black/80 z-50" onClick={() => setShowShortcuts(false)} />
-                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-                        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 max-w-sm w-full shadow-2xl">
-                            <div className="flex items-center justify-between mb-4">
-                                <h3 className="text-sm font-semibold text-white">Keyboard Shortcuts</h3>
-                                <button
-                                    onClick={() => setShowShortcuts(false)}
-                                    className="text-zinc-500 hover:text-white"
-                                >
-                                    <span className="text-lg">×</span>
-                                </button>
-                            </div>
-                            <div className="space-y-2 text-xs">
-                                {[
-                                    ["⌘/Ctrl + K", "Command palette"],
-                                    ["⌘/Ctrl + Shift + N", "New conversation"],
-                                    ["?", "Toggle this help"],
-                                    ["Enter", "Send message"],
-                                    ["Shift + Enter", "New line in input"],
-                                ].map(([key, desc]) => (
-                                    <div
-                                        key={key}
-                                        className="flex items-center justify-between py-1.5 border-b border-zinc-800/50 last:border-0"
-                                    >
-                                        <span className="text-zinc-400">{desc}</span>
-                                        <kbd className="px-2 py-0.5 bg-zinc-800 border border-zinc-700 rounded text-zinc-300 font-mono text-[10px]">
-                                            {key}
-                                        </kbd>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    </div>
-                </>
-            )}
+            <KeyboardShortcutsDialog open={showShortcuts} onClose={() => setShowShortcuts(false)} />
         </div>
     );
 }

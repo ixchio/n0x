@@ -1,13 +1,19 @@
 "use client";
 
-import React, { useState, useRef, useEffect } from "react";
+import React, { useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 // Optimize: Move remarkPlugins to constant to prevent ReactMarkdown reconfiguration on every render
 const REMARK_PLUGINS = [remarkGfm];
-import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
-import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
+const SyntaxHighlightedCode = dynamic(
+    () => import("@/components/chat/syntax-highlighted-code").then(module => module.SyntaxHighlightedCode),
+    {
+        ssr: false,
+        loading: () => <div className="h-5 w-40 animate-pulse rounded bg-zinc-800" aria-hidden="true" />,
+    }
+);
 import {
     Copy,
     Check,
@@ -149,7 +155,6 @@ const CodeBlock = ({ children, className, onRunCode, codeResults, runningCode, h
     const [copied, setCopied] = useState(false);
     const [showPreview, setShowPreview] = useState(false);
     const iframeRef = useRef<HTMLIFrameElement>(null);
-    const autoPreviewRef = useRef(false);
 
     const lang = match?.[1]?.toLowerCase() || "";
     const isPython = lang === "python" || lang === "py";
@@ -158,24 +163,6 @@ const CodeBlock = ({ children, className, onRunCode, codeResults, runningCode, h
     // Auto-detect "artifact" — a full HTML document with <html or <!doctype
     const isArtifact =
         isWeb && lang === "html" && (code.toLowerCase().includes("<!doctype") || code.toLowerCase().includes("<html"));
-
-    // Auto-open preview for artifacts (full HTML documents)
-    useEffect(() => {
-        if (isArtifact && !autoPreviewRef.current) {
-            autoPreviewRef.current = true;
-            setShowPreview(true);
-            setTimeout(() => {
-                if (iframeRef.current) {
-                    const doc = iframeRef.current.contentDocument;
-                    if (doc) {
-                        doc.open();
-                        doc.write(buildSandboxHtml(code, lang));
-                        doc.close();
-                    }
-                }
-            }, 100);
-        }
-    }, [isArtifact, code, lang]);
 
     if (!match) {
         return (
@@ -226,9 +213,9 @@ const CodeBlock = ({ children, className, onRunCode, codeResults, runningCode, h
             {/* Header */}
             <div className="flex items-center justify-between px-4 py-2 bg-zinc-900/50 border-b border-zinc-800">
                 <div className="flex items-center gap-2">
-                    <span className="text-[11px] text-zinc-400 font-mono font-medium">{lang}</span>
+                    <span className="text-xs font-mono font-medium text-zinc-300">{lang}</span>
                     {isArtifact && (
-                        <span className="text-[9px] text-purple-400 bg-purple-500/10 px-1.5 py-0.5 rounded font-mono font-semibold">
+                        <span className="rounded bg-purple-500/10 px-1.5 py-0.5 text-[10px] font-mono font-semibold text-purple-300">
                             ARTIFACT
                         </span>
                     )}
@@ -237,8 +224,11 @@ const CodeBlock = ({ children, className, onRunCode, codeResults, runningCode, h
                     {isWeb && (
                         <button
                             onClick={handlePreview}
+                            aria-label={showPreview ? `Show ${lang} source code` : `Preview ${lang} code`}
+                            aria-pressed={showPreview}
+                            title={showPreview ? "Show source code" : "Run in sandboxed preview"}
                             className={cn(
-                                "p-1.5 rounded-md transition-colors flex items-center gap-1.5 text-xs font-mono font-medium",
+                                "flex min-h-11 items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-mono font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white",
                                 showPreview ? "bg-white text-black" : "text-zinc-400 hover:text-white hover:bg-zinc-800"
                             )}
                         >
@@ -251,7 +241,8 @@ const CodeBlock = ({ children, className, onRunCode, codeResults, runningCode, h
                         <button
                             onClick={() => handleRunCode(code)}
                             disabled={isRunning}
-                            className="p-1.5 rounded-md text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors flex items-center gap-1.5 text-xs font-mono font-medium"
+                            aria-label={isRunning ? "Running Python code" : "Run Python code"}
+                            className="flex min-h-11 items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-mono font-medium text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white disabled:cursor-wait disabled:opacity-60"
                         >
                             {isRunning ? (
                                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -264,8 +255,10 @@ const CodeBlock = ({ children, className, onRunCode, codeResults, runningCode, h
 
                     <button
                         onClick={handleCopy}
+                        aria-label={copied ? "Code copied" : "Copy code"}
+                        title={copied ? "Copied" : "Copy code"}
                         className={cn(
-                            "p-1.5 rounded-md transition-colors",
+                            "flex h-11 w-11 items-center justify-center rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white",
                             copied ? "bg-[#1f1f1f] text-phosphor" : "text-zinc-400 hover:text-white hover:bg-zinc-800"
                         )}
                     >
@@ -277,14 +270,7 @@ const CodeBlock = ({ children, className, onRunCode, codeResults, runningCode, h
             {/* Code view */}
             {!showPreview && (
                 <div className="p-4 bg-[#0a0a0a] overflow-x-auto text-[13px] leading-relaxed no-scrollbar">
-                    <SyntaxHighlighter
-                        language={lang}
-                        style={vscDarkPlus}
-                        customStyle={{ margin: 0, padding: 0, background: "transparent" }}
-                        codeTagProps={{ style: { fontFamily: "'JetBrains Mono', monospace" } }}
-                    >
-                        {code}
-                    </SyntaxHighlighter>
+                    <SyntaxHighlightedCode language={lang} code={code} />
                 </div>
             )}
 
@@ -303,10 +289,10 @@ const CodeBlock = ({ children, className, onRunCode, codeResults, runningCode, h
             {/* Python output */}
             {result && (
                 <div className="border-t border-zinc-800 p-3 bg-zinc-950">
-                    <div className="text-[10px] text-zinc-500 mb-1.5 font-mono flex flex-wrap items-center gap-2">
+                    <div className="mb-1.5 flex flex-wrap items-center gap-2 text-xs font-mono text-zinc-400">
                         <Terminal className="w-3 h-3" /> Execution output · {result.duration}ms
                         {result.duration > 3000 && (
-                            <span className="text-[10px] text-amber-500/80 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">
+                            <span className="rounded border border-amber-500/20 bg-amber-500/10 px-1.5 py-0.5 text-xs text-amber-300">
                                 WASM — expect 10–50× vs native
                             </span>
                         )}
@@ -354,7 +340,7 @@ function MessageMetaBadge({ meta, align = "left" }: { meta?: ChatMessageMeta; al
         <div className={cn("mb-1 flex flex-wrap items-center gap-1.5", align === "right" && "justify-end")}>
             <span
                 className={cn(
-                    "inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide",
+                    "inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-xs font-semibold uppercase tracking-wide",
                     privacy === "cloud"
                         ? "border-blue-500/25 bg-blue-500/10 text-blue-300"
                         : privacy === "mixed"
@@ -366,18 +352,18 @@ function MessageMetaBadge({ meta, align = "left" }: { meta?: ChatMessageMeta; al
                 {label} · {meta.providerLabel || "Provider"}
             </span>
             {meta.modelName && (
-                <span className="rounded-md border border-zinc-800 bg-zinc-900/60 px-1.5 py-0.5 text-[9px] text-zinc-500">
+                <span className="rounded-md border border-zinc-800 bg-zinc-900/60 px-1.5 py-0.5 text-xs text-zinc-400">
                     {meta.modelName}
                 </span>
             )}
             {meta.usedDocs && (
-                <span className="inline-flex items-center gap-1 rounded-md border border-zinc-800 bg-zinc-900/60 px-1.5 py-0.5 text-[9px] text-zinc-500">
+                <span className="inline-flex items-center gap-1 rounded-md border border-zinc-800 bg-zinc-900/60 px-1.5 py-0.5 text-xs text-zinc-400">
                     <FileText className="h-2.5 w-2.5" />
                     docs
                 </span>
             )}
             {meta.usedSearch && (
-                <span className="inline-flex items-center gap-1 rounded-md border border-zinc-800 bg-zinc-900/60 px-1.5 py-0.5 text-[9px] text-zinc-500">
+                <span className="inline-flex items-center gap-1 rounded-md border border-zinc-800 bg-zinc-900/60 px-1.5 py-0.5 text-xs text-zinc-400">
                     <Search className="h-2.5 w-2.5" />
                     search
                 </span>
@@ -493,8 +479,9 @@ export const MessageBubble = React.memo(function MessageBubble({
                     {onBranch && (
                         <button
                             onClick={onBranch}
+                            aria-label="Branch conversation from this message"
                             title="Branch conversation from here"
-                            className="absolute -left-8 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-lg text-zinc-500 hover:text-white hover:bg-zinc-800"
+                            className="absolute -left-12 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-lg text-zinc-400 opacity-60 transition-opacity hover:bg-zinc-800 hover:text-white focus:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white sm:opacity-0 sm:group-hover:opacity-100"
                         >
                             <GitBranch className="w-3.5 h-3.5" />
                         </button>
@@ -530,8 +517,9 @@ export const MessageBubble = React.memo(function MessageBubble({
                 {onBranch && (
                     <button
                         onClick={onBranch}
+                        aria-label="Branch conversation from this message"
                         title="Branch conversation from here"
-                        className="absolute -left-12 top-1 opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-lg text-zinc-500 hover:text-white hover:bg-zinc-800"
+                        className="absolute -left-14 top-0 flex h-11 w-11 items-center justify-center rounded-lg text-zinc-400 opacity-60 transition-opacity hover:bg-zinc-800 hover:text-white focus:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white sm:opacity-0 sm:group-hover:opacity-100"
                     >
                         <GitBranch className="w-3.5 h-3.5" />
                     </button>
@@ -543,7 +531,7 @@ export const MessageBubble = React.memo(function MessageBubble({
                         {imageLoading && !imageError && (
                             <div className="max-w-md w-[300px] h-[300px] rounded-xl bg-zinc-900 border border-zinc-800 flex flex-col items-center justify-center gap-3 animate-pulse">
                                 <div className="w-8 h-8 border-2 border-zinc-600 border-t-zinc-300 rounded-full animate-spin" />
-                                <span className="text-xs text-zinc-500 font-mono">generating image…</span>
+                                <span className="text-xs font-mono text-zinc-400">generating image…</span>
                             </div>
                         )}
                         {/* Error state with retry */}
@@ -555,16 +543,19 @@ export const MessageBubble = React.memo(function MessageBubble({
                                         setImageError(false);
                                         setImageLoading(true);
                                     }}
-                                    className="px-4 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-xs text-zinc-300 transition-colors"
+                                    className="min-h-11 rounded-lg bg-zinc-800 px-4 py-2 text-xs text-zinc-200 transition-colors hover:bg-zinc-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
                                 >
                                     Retry
                                 </button>
                             </div>
                         )}
                         {/* Actual image */}
-                        <div
+                        <button
+                            type="button"
+                            aria-label={imageZoomed ? "Close generated image preview" : "Open generated image preview"}
+                            aria-expanded={imageZoomed}
                             className={cn(
-                                "rounded-xl overflow-hidden border border-zinc-800 cursor-pointer transition-all shadow-sm",
+                                "overflow-hidden rounded-xl border border-zinc-800 shadow-sm transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white",
                                 imageZoomed
                                     ? "fixed inset-4 z-50 flex items-center justify-center bg-black/95 border-none"
                                     : "max-w-md bg-zinc-900",
@@ -590,15 +581,16 @@ export const MessageBubble = React.memo(function MessageBubble({
                                     imageZoomed && "max-w-full max-h-full object-contain rounded-xl"
                                 )}
                             />
-                        </div>
+                        </button>
                         {!imageZoomed && !imageLoading && !imageError && (
-                            <div className="absolute bottom-3 right-3 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <div className="absolute bottom-3 right-3 flex gap-1.5 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100">
                                 <button
                                     onClick={e => {
                                         e.stopPropagation();
                                         setImageZoomed(true);
                                     }}
-                                    className="p-2 bg-black/60 hover:bg-black/80 backdrop-blur text-white rounded-lg transition-colors"
+                                    aria-label="Open generated image preview"
+                                    className="flex h-11 w-11 items-center justify-center rounded-lg bg-black/70 text-white backdrop-blur transition-colors hover:bg-black/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
                                 >
                                     <ZoomIn className="w-4 h-4" />
                                 </button>
@@ -606,7 +598,8 @@ export const MessageBubble = React.memo(function MessageBubble({
                                     href={image}
                                     download={`n0x-${Date.now()}.png`}
                                     onClick={e => e.stopPropagation()}
-                                    className="p-2 bg-black/60 hover:bg-black/80 backdrop-blur text-white rounded-lg transition-colors"
+                                    aria-label="Download generated image"
+                                    className="flex h-11 w-11 items-center justify-center rounded-lg bg-black/70 text-white backdrop-blur transition-colors hover:bg-black/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
                                 >
                                     <Download className="w-4 h-4" />
                                 </a>
@@ -626,10 +619,11 @@ export const MessageBubble = React.memo(function MessageBubble({
                     <div className="mb-2 text-sm border border-zinc-800 rounded-xl overflow-hidden bg-zinc-900/40">
                         <button
                             onClick={() => setShowThinking(!showThinking)}
-                            className="flex items-center gap-2 w-full px-4 py-2.5 hover:bg-zinc-800/50 transition-colors"
+                            aria-expanded={showThinking}
+                            className="flex min-h-11 w-full items-center gap-2 px-4 py-2.5 transition-colors hover:bg-zinc-800/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white"
                         >
                             <Brain className="w-3.5 h-3.5 text-phosphor-dim" />
-                            <span className="font-mono text-[11px] font-medium tracking-wider uppercase text-zinc-400 group-hover:text-zinc-200">
+                            <span className="font-mono text-xs font-medium uppercase tracking-wider text-zinc-300 group-hover:text-zinc-200">
                                 Reasoning Process
                             </span>
                             {showThinking ? (
@@ -640,7 +634,7 @@ export const MessageBubble = React.memo(function MessageBubble({
                         </button>
                         {showThinking && (
                             <div className="px-4 pb-4 pt-2 border-t border-zinc-800/80 bg-[#0a0a0a]/50">
-                                <div className="text-[13px] border-l-2 border-zinc-800 pl-4 py-1 my-2 text-zinc-500 font-serif italic max-w-none leading-relaxed whitespace-pre-wrap">
+                                <div className="my-2 max-w-none whitespace-pre-wrap border-l-2 border-zinc-800 py-1 pl-4 font-serif text-[13px] italic leading-relaxed text-zinc-400">
                                     <ReactMarkdown remarkPlugins={REMARK_PLUGINS}>{thinking}</ReactMarkdown>
                                 </div>
                             </div>
@@ -674,10 +668,10 @@ export const MessageBubble = React.memo(function MessageBubble({
                     </div>
                 )}
                 {finalContent && (
-                    <div className="flex flex-wrap items-center gap-2 border-t border-zinc-900/80 pt-2 text-[10px] font-mono text-zinc-500">
+                    <div className="flex flex-wrap items-center gap-2 border-t border-zinc-900/80 pt-2 text-xs font-mono text-zinc-400">
                         <button
                             onClick={handleCopyAnswerCard}
-                            className="inline-flex items-center gap-1 rounded-md px-2 py-1 transition-colors hover:bg-zinc-900 hover:text-zinc-200"
+                            className="inline-flex min-h-11 items-center gap-1 rounded-md px-3 py-2 transition-colors hover:bg-zinc-900 hover:text-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
                             title="Copy reproducible answer card"
                         >
                             {answerCopied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
@@ -685,7 +679,7 @@ export const MessageBubble = React.memo(function MessageBubble({
                         </button>
                         <button
                             onClick={() => downloadText(`n0x-answer-${timestamp || Date.now()}.md`, answerCard)}
-                            className="inline-flex items-center gap-1 rounded-md px-2 py-1 transition-colors hover:bg-zinc-900 hover:text-zinc-200"
+                            className="inline-flex min-h-11 items-center gap-1 rounded-md px-3 py-2 transition-colors hover:bg-zinc-900 hover:text-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
                             title="Export this answer as Markdown"
                         >
                             <Download className="h-3 w-3" />

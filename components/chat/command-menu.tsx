@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState } from "react";
 import { Command } from "cmdk";
-import { Terminal, Volume2, VolumeX, Database, Cpu, Search, X, Keyboard } from "lucide-react";
+import { Terminal, Volume2, VolumeX, Database, Cpu, Keyboard } from "lucide-react";
 import { WEBLLM_MODELS } from "@/lib/providers/useWebLLM";
 import { getKeySoundEnabled, setKeySoundEnabled } from "@/lib/media/useKeySound";
 
@@ -36,6 +36,7 @@ export function CommandMenu({
                 e.preventDefault();
                 setOpen(prev => !prev);
             }
+            if (e.key === "Escape") setOpen(false);
         };
         document.addEventListener("keydown", handler);
         return () => document.removeEventListener("keydown", handler);
@@ -46,20 +47,25 @@ export function CommandMenu({
     return (
         <div className="fixed inset-0 z-50 flex items-start justify-center pt-[20vh]">
             {/* Backdrop */}
-            <div className="absolute inset-0 bg-black/80" onClick={() => setOpen(false)} />
+            <div className="absolute inset-0 bg-black/80" onClick={() => setOpen(false)} aria-hidden="true" />
 
             {/* Command palette */}
-            <Command className="relative w-full max-w-md bg-crt-surface border border-crt-border rounded overflow-hidden font-mono text-sm">
+            <Command
+                role="dialog"
+                aria-modal="true"
+                aria-label="Command palette"
+                className="relative w-full max-w-md bg-crt-surface border border-crt-border rounded overflow-hidden font-mono text-sm"
+            >
                 {/* Input */}
                 <div className="flex items-center gap-2 px-3 py-2.5 border-b border-crt-border">
                     <span className="text-phosphor text-xs">{">"}</span>
                     <Command.Input
+                        autoFocus
                         placeholder="type a command..."
+                        aria-label="Search commands"
                         className="flex-1 bg-transparent text-txt-primary text-xs outline-none placeholder:text-txt-tertiary font-mono"
                     />
-                    <kbd className="text-[9px] text-txt-tertiary border border-crt-border px-1.5 py-0.5 rounded">
-                        esc
-                    </kbd>
+                    <kbd className="rounded border border-crt-border px-1.5 py-0.5 text-[11px] text-zinc-400">esc</kbd>
                 </div>
 
                 {/* List */}
@@ -68,16 +74,14 @@ export function CommandMenu({
 
                     {/* Actions */}
                     <Command.Group
-                        heading={
-                            <span className="text-[10px] text-txt-tertiary uppercase tracking-wider px-1">actions</span>
-                        }
+                        heading={<span className="px-1 text-xs uppercase tracking-wider text-zinc-400">actions</span>}
                     >
                         <Command.Item
                             onSelect={() => {
                                 onNewChat();
                                 setOpen(false);
                             }}
-                            className="flex items-center gap-2 px-2 py-1.5 text-xs text-txt-secondary rounded cursor-pointer hover:bg-crt-hover hover:text-phosphor data-[selected=true]:bg-crt-hover data-[selected=true]:text-phosphor"
+                            className="flex min-h-11 cursor-pointer items-center gap-2 rounded px-2 py-2 text-xs text-zinc-300 hover:bg-crt-hover hover:text-phosphor data-[selected=true]:bg-crt-hover data-[selected=true]:text-phosphor"
                         >
                             <Terminal className="w-3 h-3" />
                             new session
@@ -87,7 +91,7 @@ export function CommandMenu({
                                 onToggleTTS();
                                 setOpen(false);
                             }}
-                            className="flex items-center gap-2 px-2 py-1.5 text-xs text-txt-secondary rounded cursor-pointer hover:bg-crt-hover hover:text-phosphor data-[selected=true]:bg-crt-hover data-[selected=true]:text-phosphor"
+                            className="flex min-h-11 cursor-pointer items-center gap-2 rounded px-2 py-2 text-xs text-zinc-300 hover:bg-crt-hover hover:text-phosphor data-[selected=true]:bg-crt-hover data-[selected=true]:text-phosphor"
                         >
                             {ttsEnabled ? <VolumeX className="w-3 h-3" /> : <Volume2 className="w-3 h-3" />}
                             {ttsEnabled ? "disable tts" : "enable tts"}
@@ -97,7 +101,7 @@ export function CommandMenu({
                                 onToggleRAG();
                                 setOpen(false);
                             }}
-                            className="flex items-center gap-2 px-2 py-1.5 text-xs text-txt-secondary rounded cursor-pointer hover:bg-crt-hover hover:text-phosphor data-[selected=true]:bg-crt-hover data-[selected=true]:text-phosphor"
+                            className="flex min-h-11 cursor-pointer items-center gap-2 rounded px-2 py-2 text-xs text-zinc-300 hover:bg-crt-hover hover:text-phosphor data-[selected=true]:bg-crt-hover data-[selected=true]:text-phosphor"
                         >
                             <Database className="w-3 h-3" />
                             {ragEnabled ? "close knowledge base" : "open knowledge base"}
@@ -109,7 +113,7 @@ export function CommandMenu({
                                 setKeySounds(next);
                                 setOpen(false);
                             }}
-                            className="flex items-center gap-2 px-2 py-1.5 text-xs text-txt-secondary rounded cursor-pointer hover:bg-crt-hover hover:text-phosphor data-[selected=true]:bg-crt-hover data-[selected=true]:text-phosphor"
+                            className="flex min-h-11 cursor-pointer items-center gap-2 rounded px-2 py-2 text-xs text-zinc-300 hover:bg-crt-hover hover:text-phosphor data-[selected=true]:bg-crt-hover data-[selected=true]:text-phosphor"
                         >
                             <Keyboard className="w-3 h-3" />
                             {keySounds ? "disable key sounds" : "enable key sounds"}
@@ -119,9 +123,7 @@ export function CommandMenu({
                     {/* Models */}
                     <Command.Group
                         heading={
-                            <span className="text-[10px] text-txt-tertiary uppercase tracking-wider px-1 mt-2">
-                                models
-                            </span>
+                            <span className="mt-2 px-1 text-xs uppercase tracking-wider text-zinc-400">models</span>
                         }
                     >
                         {WEBLLM_MODELS.map(model => (
@@ -131,18 +133,18 @@ export function CommandMenu({
                                     onLoadModel(model.id);
                                     setOpen(false);
                                 }}
-                                className="flex items-center gap-2 px-2 py-1.5 text-xs text-txt-secondary rounded cursor-pointer hover:bg-crt-hover hover:text-phosphor data-[selected=true]:bg-crt-hover data-[selected=true]:text-phosphor"
+                                className="flex min-h-11 cursor-pointer items-center gap-2 rounded px-2 py-2 text-xs text-zinc-300 hover:bg-crt-hover hover:text-phosphor data-[selected=true]:bg-crt-hover data-[selected=true]:text-phosphor"
                             >
                                 <Cpu className="w-3 h-3" />
                                 <span className="flex-1">{model.label}</span>
-                                <span className="text-[10px] text-txt-tertiary">{model.size}</span>
+                                <span className="text-xs text-zinc-400">{model.size}</span>
                             </Command.Item>
                         ))}
                     </Command.Group>
                 </Command.List>
 
                 {/* Footer */}
-                <div className="px-3 py-1.5 border-t border-crt-border text-[9px] text-txt-tertiary flex gap-3">
+                <div className="flex gap-3 border-t border-crt-border px-3 py-2 text-[11px] text-zinc-400">
                     <span>↑↓ navigate</span>
                     <span>↵ select</span>
                     <span>esc close</span>

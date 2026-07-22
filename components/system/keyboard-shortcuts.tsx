@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { X, Keyboard } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -40,41 +40,82 @@ const SHORTCUTS: Shortcut[] = [
 
 export function KeyboardShortcuts() {
     const [isOpen, setIsOpen] = useState(false);
+    const closeRef = useRef<HTMLButtonElement>(null);
+    const dialogRef = useRef<HTMLDivElement>(null);
+    const previousFocusRef = useRef<HTMLElement | null>(null);
 
     useEffect(() => {
         function handleKeyPress(e: KeyboardEvent) {
             if ((e.metaKey || e.ctrlKey) && e.key === "/") {
                 e.preventDefault();
-                setIsOpen(prev => !prev);
+                if (!isOpen) {
+                    previousFocusRef.current = document.activeElement as HTMLElement | null;
+                    setIsOpen(true);
+                } else {
+                    setIsOpen(false);
+                    requestAnimationFrame(() => previousFocusRef.current?.focus());
+                }
             }
             if (e.key === "Escape" && isOpen) {
                 setIsOpen(false);
+                requestAnimationFrame(() => previousFocusRef.current?.focus());
             }
         }
 
         document.addEventListener("keydown", handleKeyPress);
+        if (isOpen) closeRef.current?.focus();
         return () => document.removeEventListener("keydown", handleKeyPress);
     }, [isOpen]);
 
     if (!isOpen) return null;
 
     const categories = Array.from(new Set(SHORTCUTS.map(s => s.category)));
+    const trapFocus = (event: React.KeyboardEvent<HTMLDivElement>) => {
+        if (event.key !== "Tab" || !dialogRef.current) return;
+        const focusable = Array.from(
+            dialogRef.current.querySelectorAll<HTMLElement>(
+                'button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])'
+            )
+        );
+        const first = focusable[0];
+        const last = focusable.at(-1);
+        if (!first || !last) return;
+        if (event.shiftKey && document.activeElement === first) {
+            event.preventDefault();
+            last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+            event.preventDefault();
+            first.focus();
+        }
+    };
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
             <div
+                ref={dialogRef}
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="keyboard-shortcuts-title"
                 className="max-w-2xl w-full mx-4 bg-zinc-900 border border-zinc-800 rounded-lg shadow-2xl animate-in zoom-in-95 duration-200"
                 onClick={e => e.stopPropagation()}
+                onKeyDown={trapFocus}
             >
                 {/* Header */}
                 <div className="flex items-center justify-between p-6 border-b border-zinc-800">
                     <div className="flex items-center gap-3">
                         <Keyboard className="w-5 h-5 text-phosphor" />
-                        <h2 className="text-lg font-semibold text-zinc-100">Keyboard Shortcuts</h2>
+                        <h2 id="keyboard-shortcuts-title" className="text-lg font-semibold text-zinc-100">
+                            Keyboard Shortcuts
+                        </h2>
                     </div>
                     <button
-                        onClick={() => setIsOpen(false)}
-                        className="p-2 hover:bg-zinc-800 rounded transition-colors"
+                        ref={closeRef}
+                        onClick={() => {
+                            setIsOpen(false);
+                            requestAnimationFrame(() => previousFocusRef.current?.focus());
+                        }}
+                        aria-label="Close keyboard shortcuts"
+                        className="flex h-11 w-11 items-center justify-center rounded transition-colors hover:bg-zinc-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
                     >
                         <X className="w-5 h-5 text-zinc-400" />
                     </button>

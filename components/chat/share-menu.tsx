@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useCallback, useRef } from "react";
+import React, { useState, useCallback, useEffect, useRef } from "react";
 import { Share2, X, Copy, Check, ExternalLink, Camera, Download, FileText, FileJson } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -8,31 +8,31 @@ interface ShareMenuProps {
     messages?: Array<{ role: string; content: string }>;
     modelName?: string;
     appUrl?: string;
+    label?: string;
 }
 
 const REPO = "https://github.com/ixchio/n0x";
 const APP = "https://n0xth.vercel.app";
+const TRUTH_COPY = "Local by default. Search, image and cloud paths are explicit.";
 
 // platform-specific share hooks — different vibes for different audiences
 function shareTexts(snippet: string, hasChat: boolean) {
-    const base = hasChat
-        ? `just had this conversation with an AI running 100% in my browser — no server, no API key, no account.\n\n${snippet}\n\n`
-        : "";
+    const base = hasChat ? `A conversation from N0X:\n\n${snippet}\n\n${TRUTH_COPY}\n\n` : "";
 
     return {
         x: hasChat
-            ? `${base}built with WebGPU. runs offline after first visit.\n\n${REPO}`
-            : `N0X — LLM inference, RAG, code exec, image gen, deep search. all running locally in one browser tab via WebGPU.\n\nno server. no API key. works offline.\n\n${REPO}`,
+            ? `${base}${REPO}`
+            : `N0X — an in-browser AI workstation for models, documents and code.\n\n${TRUTH_COPY}\n\n${REPO}`,
 
         linkedin: hasChat
-            ? `I've been testing N0X — an open-source project that runs the full AI stack directly in the browser using WebGPU.\n\nNo backend server. No API keys. No data leaves your machine.\n\n${snippet}\n\nThe stack includes: local LLM inference, retrieval-augmented generation, Python execution, image generation, and deep web search. All client-side.\n\n${REPO}`
-            : `N0X is an open-source project that puts the full AI stack in one browser tab — LLM inference, RAG, code execution, image generation, and web search. All running locally via WebGPU.\n\nNo server. No API keys. No data transmitted. Works offline after first visit.\n\nWorth checking out if you're interested in local-first AI.\n\n${REPO}`,
+            ? `I've been testing N0X, an open-source in-browser AI workstation.\n\n${TRUTH_COPY}\n\n${snippet}\n\nLocal features include WebGPU inference, document retrieval, and Python execution. Network paths are shown when selected.\n\n${REPO}`
+            : `N0X is an open-source in-browser AI workstation for local inference, document retrieval, code execution, image generation, and web search.\n\n${TRUTH_COPY}\n\n${REPO}`,
 
         reddit: hasChat
-            ? `N0X — full AI stack in one browser tab (WebGPU, local-first)\n\nJust tested this — runs LLMs, RAG, Python sandbox, image gen, deep search all locally in the browser. No backend required.\n\n${snippet}\n\n${REPO}`
-            : `N0X — full AI stack in one browser tab. LLMs, RAG, code exec, image gen, search. All local via WebGPU. No server, no API keys.\n\n${REPO}`,
+            ? `N0X — in-browser AI workstation (local-first)\n\n${TRUTH_COPY}\n\n${snippet}\n\n${REPO}`
+            : `N0X — in-browser AI workstation for LLMs, document retrieval, code, image generation, and search.\n\n${TRUTH_COPY}\n\n${REPO}`,
 
-        hn: `N0X – browser-native AI stack (WebGPU): LLM inference, RAG, Python sandbox, image gen, deep search – all local, zero backend`,
+        hn: `N0X – browser-native AI workstation; local by default with explicit search, image and cloud paths`,
     };
 }
 
@@ -103,7 +103,7 @@ async function renderCard(messages: Array<{ role: string; content: string }>, mo
     ctx.fillStyle = "#39ff1460";
     ctx.font = "11px 'IBM Plex Mono', monospace";
     const modelLabel = model || "local model";
-    ctx.fillText(`· ${modelLabel} · in-browser`, PAD + ctx.measureText(">_ N0X  ").width + 10, PAD + 20);
+    ctx.fillText(`· ${modelLabel}`, PAD + ctx.measureText(">_ N0X  ").width + 10, PAD + 20);
 
     // separator
     ctx.strokeStyle = "#39ff1420";
@@ -142,18 +142,19 @@ async function renderCard(messages: Array<{ role: string; content: string }>, mo
 
     ctx.fillStyle = "#39ff1425";
     ctx.fillText(
-        "the full AI stack, in one browser tab",
-        W - PAD - ctx.measureText("the full AI stack, in one browser tab").width,
+        "local by default · explicit network paths",
+        W - PAD - ctx.measureText("local by default · explicit network paths").width,
         totalH - PAD + 5
     );
 
     return new Promise(resolve => canvas.toBlob(resolve, "image/png"));
 }
 
-export function ShareMenu({ messages = [], modelName, appUrl = REPO }: ShareMenuProps) {
+export function ShareMenu({ messages = [], modelName, appUrl = REPO, label }: ShareMenuProps) {
     const [open, setOpen] = useState(false);
     const [copied, setCopied] = useState(false);
     const [cardStatus, setCardStatus] = useState<"idle" | "generating" | "done">("idle");
+    const triggerRef = useRef<HTMLButtonElement>(null);
     const cardRef = useRef<Blob | null>(null);
 
     const hasChat = messages.length > 0;
@@ -259,25 +260,50 @@ export function ShareMenu({ messages = [], modelName, appUrl = REPO }: ShareMenu
         }
     }, [texts.x, appUrl]);
 
+    useEffect(() => {
+        if (!open) return;
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key !== "Escape") return;
+            setOpen(false);
+            requestAnimationFrame(() => triggerRef.current?.focus());
+        };
+        document.addEventListener("keydown", handleKeyDown);
+        return () => document.removeEventListener("keydown", handleKeyDown);
+    }, [open]);
+
     return (
         <div className="relative">
             <button
+                ref={triggerRef}
                 onClick={() => setOpen(!open)}
-                className="flex items-center gap-1.5 p-1 rounded text-txt-tertiary hover:text-phosphor transition-colors"
+                aria-label="Share or export conversation"
+                aria-haspopup="dialog"
+                aria-expanded={open}
+                className={cn(
+                    "flex h-11 items-center justify-center gap-2 rounded-md text-zinc-300 transition-colors hover:bg-zinc-900 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white",
+                    label ? "w-full justify-start px-3" : "w-11"
+                )}
                 title="Share"
             >
                 <Share2 className="w-3.5 h-3.5" />
+                {label && <span className="text-xs font-medium">{label}</span>}
             </button>
 
             {open && (
                 <>
-                    <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-                    <div className="absolute top-full right-0 mt-2 w-64 bg-crt-surface border border-crt-border rounded z-50 overflow-hidden shadow-lg shadow-black/50">
+                    <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} aria-hidden="true" />
+                    <div
+                        role="dialog"
+                        aria-label="Share and export conversation"
+                        className="absolute right-0 top-full z-50 mt-2 max-h-[min(32rem,calc(100dvh-5rem))] w-64 overflow-y-auto rounded border border-crt-border bg-crt-surface shadow-lg shadow-black/50"
+                    >
                         <div className="px-3 py-2 border-b border-crt-border flex items-center justify-between">
-                            <span className="text-[10px] text-txt-tertiary font-mono uppercase tracking-wider">
-                                share n0x
-                            </span>
-                            <button onClick={() => setOpen(false)} className="text-txt-tertiary hover:text-txt-primary">
+                            <span className="text-xs font-mono uppercase tracking-wider text-zinc-400">share n0x</span>
+                            <button
+                                onClick={() => setOpen(false)}
+                                aria-label="Close share menu"
+                                className="flex h-11 w-11 items-center justify-center rounded-md text-zinc-300 hover:bg-zinc-800 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                            >
                                 <X className="w-3 h-3" />
                             </button>
                         </div>
@@ -291,7 +317,7 @@ export function ShareMenu({ messages = [], modelName, appUrl = REPO }: ShareMenu
                                     rel="noopener noreferrer"
                                     onClick={() => setOpen(false)}
                                     className={cn(
-                                        "flex items-center gap-3 px-3 py-2 rounded text-xs font-mono text-txt-secondary transition-all hover:bg-crt-hover",
+                                        "flex min-h-11 items-center gap-3 rounded px-3 py-2 text-xs font-mono text-zinc-300 transition-all hover:bg-crt-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white",
                                         l.hover
                                     )}
                                 >
@@ -308,7 +334,7 @@ export function ShareMenu({ messages = [], modelName, appUrl = REPO }: ShareMenu
                                 <button
                                     onClick={genCard}
                                     disabled={cardStatus === "generating"}
-                                    className="w-full flex items-center gap-3 px-3 py-2 rounded text-xs font-mono text-txt-secondary hover:bg-crt-hover hover:text-neon-cyan transition-all"
+                                    className="flex min-h-11 w-full items-center gap-3 rounded px-3 py-2 text-xs font-mono text-zinc-300 transition-all hover:bg-crt-hover hover:text-neon-cyan focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
                                 >
                                     {cardStatus === "generating" ? (
                                         <Camera className="w-3.5 h-3.5 ml-0.5 animate-pulse text-neon-cyan" />
@@ -334,7 +360,7 @@ export function ShareMenu({ messages = [], modelName, appUrl = REPO }: ShareMenu
                                         nativeShare();
                                         setOpen(false);
                                     }}
-                                    className="w-full flex items-center gap-3 px-3 py-2 rounded text-xs font-mono text-txt-secondary hover:bg-crt-hover hover:text-phosphor transition-all"
+                                    className="flex min-h-11 w-full items-center gap-3 rounded px-3 py-2 text-xs font-mono text-zinc-300 transition-all hover:bg-crt-hover hover:text-phosphor focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
                                 >
                                     <Share2 className="w-3.5 h-3.5 ml-0.5" />
                                     <span>share via...</span>
@@ -343,7 +369,7 @@ export function ShareMenu({ messages = [], modelName, appUrl = REPO }: ShareMenu
 
                             <button
                                 onClick={copyText}
-                                className="w-full flex items-center gap-3 px-3 py-2 rounded text-xs font-mono text-txt-secondary hover:bg-crt-hover hover:text-phosphor transition-all"
+                                className="flex min-h-11 w-full items-center gap-3 rounded px-3 py-2 text-xs font-mono text-zinc-300 transition-all hover:bg-crt-hover hover:text-phosphor focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
                             >
                                 {copied ? (
                                     <Check className="w-3.5 h-3.5 ml-0.5 text-phosphor" />
@@ -372,7 +398,7 @@ export function ShareMenu({ messages = [], modelName, appUrl = REPO }: ShareMenu
                                             URL.revokeObjectURL(url);
                                             setOpen(false);
                                         }}
-                                        className="w-full flex items-center gap-3 px-3 py-2 rounded text-xs font-mono text-txt-secondary hover:bg-crt-hover hover:text-phosphor transition-all"
+                                        className="flex min-h-11 w-full items-center gap-3 rounded px-3 py-2 text-xs font-mono text-zinc-300 transition-all hover:bg-crt-hover hover:text-phosphor focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
                                     >
                                         <FileText className="w-3.5 h-3.5 ml-0.5" />
                                         <span>export as Markdown</span>
@@ -396,7 +422,7 @@ export function ShareMenu({ messages = [], modelName, appUrl = REPO }: ShareMenu
                                             URL.revokeObjectURL(url);
                                             setOpen(false);
                                         }}
-                                        className="w-full flex items-center gap-3 px-3 py-2 rounded text-xs font-mono text-txt-secondary hover:bg-crt-hover hover:text-phosphor transition-all"
+                                        className="flex min-h-11 w-full items-center gap-3 rounded px-3 py-2 text-xs font-mono text-zinc-300 transition-all hover:bg-crt-hover hover:text-phosphor focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
                                     >
                                         <FileJson className="w-3.5 h-3.5 ml-0.5" />
                                         <span>export as JSON</span>

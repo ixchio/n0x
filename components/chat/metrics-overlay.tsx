@@ -42,7 +42,8 @@ export function MetricsOverlay({
                         animate={{ opacity: 1, scale: 1 }}
                         exit={{ opacity: 0, scale: 0.9 }}
                         onClick={onToggle}
-                        className="flex items-center gap-2 px-3 py-1.5 bg-zinc-900/80 backdrop-blur border border-zinc-800 rounded-full text-xs font-mono text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors shadow-glass"
+                        aria-expanded={false}
+                        className="flex min-h-11 items-center gap-2 rounded-full border border-zinc-800 bg-zinc-900/80 px-3 py-2 text-xs font-mono text-zinc-300 shadow-glass backdrop-blur transition-colors hover:bg-zinc-800 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
                     >
                         <Activity className="w-3.5 h-3.5" />
                         <span>Metrics</span>
@@ -50,17 +51,22 @@ export function MetricsOverlay({
                     </motion.button>
                 ) : (
                     <motion.div
+                        role="region"
+                        aria-label="Engine telemetry"
                         initial={{ opacity: 0, y: -10, scale: 0.95 }}
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: -10, scale: 0.95 }}
-                        className="w-72 bg-zinc-950/90 backdrop-blur-xl border border-zinc-800/80 rounded-xl shadow-2xl overflow-hidden font-mono text-[11px]"
+                        className="w-72 overflow-hidden rounded-xl border border-zinc-800/80 bg-zinc-950/90 font-mono text-xs shadow-2xl backdrop-blur-xl"
                     >
                         <div className="px-4 py-3 border-b border-zinc-800/80 flex items-center justify-between bg-zinc-900/50">
                             <div className="flex items-center gap-2 text-zinc-300 font-semibold">
                                 <Activity className="w-4 h-4" />
                                 <span>Engine Telemetry</span>
                             </div>
-                            <button onClick={onToggle} className="text-zinc-500 hover:text-white transition-colors">
+                            <button
+                                onClick={onToggle}
+                                className="min-h-11 rounded px-3 text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                            >
                                 close
                             </button>
                         </div>
@@ -68,10 +74,10 @@ export function MetricsOverlay({
                         <div className="p-4 space-y-4">
                             {/* Status Row */}
                             <div className="flex items-center justify-between">
-                                <span className="text-zinc-500">Engine Status</span>
+                                <span className="text-zinc-400">Engine Status</span>
                                 <span
                                     className={cn(
-                                        "px-2 py-0.5 rounded-full text-[10px] font-semibold flex items-center gap-1.5",
+                                        "flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-semibold",
                                         isLoaded
                                             ? "bg-green-500/10 text-green-400 border border-green-500/20"
                                             : isLoading
@@ -95,7 +101,7 @@ export function MetricsOverlay({
 
                             {/* Model Info */}
                             <div className="flex items-center justify-between">
-                                <span className="text-zinc-500">Active Model</span>
+                                <span className="text-zinc-400">Active Model</span>
                                 <span className="text-zinc-300 max-w-[140px] truncate" title={modelName || "None"}>
                                     {modelName || "None"}
                                 </span>
@@ -104,8 +110,8 @@ export function MetricsOverlay({
                             {/* Progress Bar (if loading) */}
                             {isLoading && (
                                 <div className="space-y-2">
-                                    <div className="flex items-center justify-between text-[10px]">
-                                        <span className="text-zinc-500">
+                                    <div className="flex items-center justify-between text-xs">
+                                        <span className="text-zinc-400">
                                             {progress === 0 ? "Initializing..." : "Downloading to browser cache"}
                                         </span>
                                         <span className="text-yellow-400">{Math.round(progress * 100)}%</span>
@@ -120,14 +126,14 @@ export function MetricsOverlay({
                                         estimatedTimeRemaining !== undefined &&
                                         progress > 0 &&
                                         progress < 1 && (
-                                            <div className="flex items-center justify-between text-[10px]">
-                                                <span className="text-zinc-600">Time remaining</span>
+                                            <div className="flex items-center justify-between text-xs">
+                                                <span className="text-zinc-400">Time remaining</span>
                                                 <span className="text-amber-400 font-semibold">
                                                     ~{formatTimeRemaining(estimatedTimeRemaining)}
                                                 </span>
                                             </div>
                                         )}
-                                    <div className="text-[10px] text-zinc-600 mt-1">
+                                    <div className="mt-1 text-xs text-zinc-400">
                                         💡 Model downloads once, then loads instantly from cache
                                     </div>
                                 </div>
@@ -139,7 +145,7 @@ export function MetricsOverlay({
                             {/* Grid Stats */}
                             <div className="grid grid-cols-2 gap-3">
                                 <div className="space-y-1">
-                                    <span className="text-zinc-500 flex items-center gap-1">
+                                    <span className="flex items-center gap-1 text-zinc-400">
                                         <Zap className="w-3 h-3" /> Throughput
                                     </span>
                                     <div className="text-zinc-200 text-sm font-semibold">
@@ -147,13 +153,13 @@ export function MetricsOverlay({
                                     </div>
                                 </div>
                                 <div className="space-y-1">
-                                    <span className="text-zinc-500 flex items-center gap-1">
+                                    <span className="flex items-center gap-1 text-zinc-400">
                                         <Server className="w-3 h-3" /> Runtime
                                     </span>
                                     <div className="text-zinc-200 text-sm font-semibold">Local WASM</div>
                                 </div>
                                 <div className="space-y-1">
-                                    <span className="text-zinc-500 flex items-center gap-1">
+                                    <span className="flex items-center gap-1 text-zinc-400">
                                         <Database className="w-3 h-3" /> VRAM Est.
                                     </span>
                                     <div className="text-zinc-200 text-sm font-semibold">
@@ -161,7 +167,7 @@ export function MetricsOverlay({
                                     </div>
                                 </div>
                                 <div className="space-y-1">
-                                    <span className="text-zinc-500 flex items-center gap-1">
+                                    <span className="flex items-center gap-1 text-zinc-400">
                                         <Clock className="w-3 h-3" /> Latency
                                     </span>
                                     <div className="text-zinc-200 text-sm font-semibold">

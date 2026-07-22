@@ -49,6 +49,7 @@ interface ChatInputProps {
     fileInputId?: string;
     attachedFiles?: AttachedFile[];
     onRemoveFile?: (id: string) => void;
+    fileStatus?: string | null;
     agentEnabled?: boolean;
     toggleAgent?: () => void;
     sttSupported?: boolean;
@@ -89,6 +90,7 @@ export function ChatInput({
     fileInputId = "n0x-attach-input",
     attachedFiles = [],
     onRemoveFile,
+    fileStatus,
     agentEnabled,
     toggleAgent,
     sttSupported,
@@ -102,6 +104,10 @@ export function ChatInput({
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [isDragging, setIsDragging] = useState(false);
+    const visibleFileStatus = fileStatus?.trim().toLowerCase() === "ready" ? "" : fileStatus?.trim() || "";
+    const fileStatusIsError = /failed|unsupported|too large|empty|could not|not allowed|invalid/i.test(
+        visibleFileStatus
+    );
 
     useEffect(() => {
         if (textareaRef.current) {
@@ -200,26 +206,31 @@ export function ChatInput({
 
     return (
         <div
-            className={cn("bg-background mx-auto max-w-4xl w-full p-4", isDragging && "bg-zinc-900/50 rounded-xl")}
+            className={cn(
+                "mx-auto w-full max-w-4xl bg-background p-2 sm:p-4",
+                isDragging && "rounded-xl bg-zinc-900/50"
+            )}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
         >
-            <div className="relative border border-zinc-800 bg-zinc-900/40 rounded-2xl shadow-sm overflow-hidden focus-within:border-zinc-700 transition-colors flex flex-col pt-3 pb-2 px-4 shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
+            <div className="relative flex flex-col overflow-hidden rounded-xl border border-zinc-700 bg-zinc-900/40 px-2.5 pb-1.5 pt-2 shadow-[0_4px_24px_rgba(0,0,0,0.2)] transition-colors focus-within:border-zinc-500 sm:rounded-2xl sm:px-4 sm:pb-2 sm:pt-3">
                 {attachedFiles.length > 0 && (
-                    <div className="flex flex-wrap gap-2 mb-3">
+                    <div className="mb-2 flex flex-wrap gap-2 sm:mb-3">
                         {attachedFiles.map(file => (
                             <div
                                 key={file.id}
-                                className="group flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-xs"
+                                className="group flex min-h-11 max-w-full items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-900 py-1 pl-3 pr-1 text-xs"
                             >
                                 <FileText className="w-3.5 h-3.5 text-zinc-500" />
                                 <span className="text-zinc-300 max-w-[120px] truncate">{file.name}</span>
-                                <span className="text-zinc-600 text-[10px]">{formatSize(file.size)}</span>
+                                <span className="text-xs text-zinc-400">{formatSize(file.size)}</span>
                                 {onRemoveFile && (
                                     <button
+                                        type="button"
                                         onClick={() => onRemoveFile(file.id)}
-                                        className="ml-1 opacity-0 group-hover:opacity-100 focus:opacity-100 max-sm:opacity-60 text-zinc-500 hover:text-red-400"
+                                        aria-label={`Remove ${file.name}`}
+                                        className="ml-1 flex h-11 w-11 items-center justify-center rounded-md text-zinc-300 opacity-70 transition hover:bg-zinc-800 hover:text-red-300 focus:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white sm:opacity-0 sm:group-hover:opacity-100"
                                     >
                                         <X className="w-3.5 h-3.5" />
                                     </button>
@@ -229,55 +240,68 @@ export function ChatInput({
                     </div>
                 )}
 
-                <div className="max-h-60 overflow-y-auto custom-scrollbar no-scrollbar pr-2 mb-2">
+                <div className="mb-1 max-h-60 overflow-y-auto pr-1 custom-scrollbar no-scrollbar sm:mb-2 sm:pr-2">
                     <textarea
                         ref={textareaRef}
                         value={input}
                         onChange={e => setInput(e.target.value)}
                         onKeyDown={handleKeyDown}
                         placeholder={sttListening ? "Listening..." : "Message n0x..."}
+                        aria-label="Message n0x"
                         disabled={isStreaming}
                         rows={1}
-                        className="w-full bg-transparent text-sm resize-none outline-none text-zinc-200 placeholder:text-zinc-500 leading-relaxed min-h-[40px] overflow-y-auto"
+                        className="min-h-9 w-full resize-none overflow-y-auto bg-transparent text-sm leading-relaxed text-zinc-100 outline-none placeholder:text-zinc-400 disabled:cursor-not-allowed disabled:opacity-60 sm:min-h-10"
                         style={{ height: "auto" }}
                     />
                 </div>
 
-                <div className="flex bg-transparent items-center justify-between border-t border-zinc-800/50 pt-2 pb-1">
-                    <div className="flex flex-wrap gap-1.5 overflow-x-auto no-scrollbar py-1">
+                <div className="flex min-w-0 items-center justify-between gap-1 border-t border-zinc-700/70 bg-transparent pb-0.5 pt-1 sm:gap-2 sm:pb-1 sm:pt-2">
+                    <div className="flex min-w-0 flex-1 flex-nowrap gap-0.5 overflow-x-auto py-0.5 no-scrollbar sm:gap-1.5 sm:py-1">
                         {onFileDrop && (
                             <button
+                                type="button"
                                 onClick={() => fileInputRef.current?.click()}
-                                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[11px] font-medium transition-colors text-zinc-400 hover:text-white hover:bg-zinc-800"
+                                aria-label="Attach files"
+                                title="Attach files"
+                                className="flex h-11 min-w-11 shrink-0 items-center justify-center gap-1.5 rounded-md px-2 text-xs font-medium text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white sm:px-2.5"
                             >
-                                <Upload className="w-3.5 h-3.5" /> Attach
+                                <Upload className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
+                                <span className="hidden sm:inline">Attach</span>
                             </button>
                         )}
                         {features.map(f => (
                             <button
+                                type="button"
                                 key={f.key}
                                 onClick={f.action}
+                                aria-label={f.active ? `${f.label}, enabled` : f.label}
+                                aria-pressed={f.key === "image" ? undefined : f.active}
+                                title={f.label}
                                 className={cn(
-                                    "flex shrink-0 items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[11px] font-medium transition-colors",
+                                    "flex h-11 min-w-11 shrink-0 items-center justify-center gap-1.5 rounded-md px-2 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white sm:px-2.5",
                                     f.active
                                         ? "bg-white text-black"
-                                        : "text-zinc-400 hover:text-white hover:bg-zinc-800"
+                                        : "text-zinc-300 hover:bg-zinc-800 hover:text-white"
                                 )}
                             >
-                                <f.icon className="w-3.5 h-3.5" /> {f.label}
+                                <f.icon className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
+                                <span className="hidden sm:inline">{f.label}</span>
                             </button>
                         ))}
                     </div>
 
-                    <div className="flex items-center gap-2 shrink-0">
+                    <div className="flex shrink-0 items-center gap-1 sm:gap-2">
                         {sttSupported && onSttToggle && (
                             <button
+                                type="button"
                                 onClick={onSttToggle}
+                                aria-label={sttListening ? "Stop voice input" : "Start voice input"}
+                                aria-pressed={sttListening}
                                 className={cn(
-                                    "p-2 rounded-full transition-colors",
+                                    "flex h-11 w-11 items-center justify-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white",
                                     sttListening
-                                        ? "bg-red-500/20 text-red-500 animate-pulse"
-                                        : "text-zinc-400 hover:bg-zinc-800 hover:text-white"
+                                        ? "animate-pulse bg-red-500/20 text-red-300"
+                                        : "text-zinc-300 hover:bg-zinc-800 hover:text-white"
                                 )}
                             >
                                 {sttListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
@@ -285,16 +309,20 @@ export function ChatInput({
                         )}
                         {isStreaming && onStop ? (
                             <button
+                                type="button"
                                 onClick={onStop}
-                                className="p-2 rounded-full bg-red-500/20 text-red-500 hover:bg-red-500/30 transition-colors"
+                                aria-label="Stop generating"
+                                className="flex h-11 w-11 items-center justify-center rounded-full bg-red-500/20 text-red-300 transition-colors hover:bg-red-500/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
                             >
                                 <Square className="w-4 h-4 fill-current" />
                             </button>
                         ) : (
                             <button
+                                type="button"
                                 onClick={onSend}
                                 disabled={isStreaming || (!input.trim() && attachedFiles.length === 0)}
-                                className="p-2 rounded-full bg-white text-black disabled:bg-zinc-800 disabled:text-zinc-600 transition-colors hover:bg-zinc-200"
+                                aria-label="Send message"
+                                className="flex h-11 w-11 items-center justify-center rounded-full bg-white text-black transition-colors hover:bg-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-500"
                             >
                                 <Send className="w-4 h-4" />
                             </button>
@@ -302,6 +330,15 @@ export function ChatInput({
                     </div>
                 </div>
             </div>
+            {visibleFileStatus && (
+                <p
+                    role="status"
+                    aria-live="polite"
+                    className={cn("px-2 pt-2 text-xs leading-5", fileStatusIsError ? "text-red-300" : "text-zinc-300")}
+                >
+                    {visibleFileStatus}
+                </p>
+            )}
             <input
                 id={fileInputId}
                 type="file"

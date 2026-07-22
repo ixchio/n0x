@@ -63,13 +63,13 @@ export class ErrorBoundary extends Component<Props, State> {
                     <div className="flex gap-2">
                         <button
                             onClick={() => this.setState({ hasError: false, error: null, info: "" })}
-                            className="flex-1 px-3 py-2 text-xs font-mono border border-phosphor-dim text-phosphor rounded hover:bg-phosphor-faint transition-all"
+                            className="min-h-11 flex-1 rounded border border-phosphor-dim px-3 py-2 text-xs font-mono text-phosphor transition-all hover:bg-phosphor-faint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
                         >
                             try again
                         </button>
                         <button
                             onClick={() => window.location.reload()}
-                            className="flex-1 px-3 py-2 text-xs font-mono border border-crt-border text-txt-secondary rounded hover:text-txt-primary transition-all"
+                            className="min-h-11 flex-1 rounded border border-crt-border px-3 py-2 text-xs font-mono text-zinc-300 transition-all hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
                         >
                             reload
                         </button>

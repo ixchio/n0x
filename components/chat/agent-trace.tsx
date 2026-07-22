@@ -83,13 +83,13 @@ function StepCard({ step, isLast }: { step: AgentStep; isLast: boolean }) {
     const toolCfg = step.tool ? TOOL_CONFIG[step.tool] : null;
 
     const styles: Record<string, { bg: string; border: string; labelColor: string }> = {
-        thought: { bg: "bg-zinc-900/30", border: "border-zinc-800/60", labelColor: "text-zinc-500" },
+        thought: { bg: "bg-zinc-900/30", border: "border-zinc-800/60", labelColor: "text-zinc-400" },
         action: {
             bg: toolCfg?.bg || "bg-zinc-900/40",
             border: toolCfg?.border || "border-zinc-700/50",
             labelColor: toolCfg?.color || "text-zinc-400",
         },
-        observation: { bg: "bg-zinc-950/60", border: "border-zinc-800/40", labelColor: "text-zinc-600" },
+        observation: { bg: "bg-zinc-950/60", border: "border-zinc-800/40", labelColor: "text-zinc-400" },
         final: { bg: "bg-emerald-500/5", border: "border-emerald-500/25", labelColor: "text-emerald-400" },
         error: { bg: "bg-red-500/5", border: "border-red-500/25", labelColor: "text-red-400" },
     };
@@ -166,18 +166,18 @@ function StepCard({ step, isLast }: { step: AgentStep; isLast: boolean }) {
                 {/* Header */}
                 <div className="flex items-center gap-2 mb-1">
                     <StepIcon />
-                    <span className={cn("text-[10px] font-mono font-bold tracking-widest", s.labelColor)}>{label}</span>
+                    <span className={cn("text-xs font-mono font-bold tracking-widest", s.labelColor)}>{label}</span>
 
                     {/* Duration badge for tool executions */}
                     {step.durationMs != null && (
-                        <span className="text-[9px] font-mono text-zinc-600 bg-zinc-800/50 px-1.5 py-0.5 rounded">
+                        <span className="rounded bg-zinc-800/50 px-1.5 py-0.5 text-[10px] font-mono text-zinc-400">
                             {step.durationMs > 1000
                                 ? `${(step.durationMs / 1000).toFixed(1)}s`
                                 : `${step.durationMs}ms`}
                         </span>
                     )}
 
-                    <span className="text-[9px] text-zinc-700 font-mono ml-auto tabular-nums">
+                    <span className="ml-auto text-[10px] font-mono tabular-nums text-zinc-500">
                         {new Date(step.timestamp).toLocaleTimeString([], {
                             hour: "2-digit",
                             minute: "2-digit",
@@ -193,13 +193,13 @@ function StepCard({ step, isLast }: { step: AgentStep; isLast: boolean }) {
                         step.type === "thought"
                             ? "text-zinc-400 italic font-sans"
                             : step.type === "observation"
-                              ? "text-zinc-500 font-mono text-[11px]"
+                              ? "text-zinc-400 font-mono text-xs"
                               : step.type === "action"
-                                ? "text-zinc-300 font-mono text-[11px]"
+                                ? "text-zinc-300 font-mono text-xs"
                                 : step.type === "final"
                                   ? "text-zinc-200 font-sans"
                                   : step.type === "error"
-                                    ? "text-red-300 font-mono text-[11px]"
+                                    ? "text-red-300 font-mono text-xs"
                                     : "text-zinc-400",
                         isCollapsible && !collapsed && "max-h-48 overflow-y-auto no-scrollbar"
                     )}
@@ -211,7 +211,8 @@ function StepCard({ step, isLast }: { step: AgentStep; isLast: boolean }) {
                 {isCollapsible && (
                     <button
                         onClick={() => setCollapsed(!collapsed)}
-                        className="flex items-center gap-1 mt-1.5 text-[9px] font-mono text-zinc-600 hover:text-zinc-400 transition-colors"
+                        aria-expanded={!collapsed}
+                        className="mt-1.5 flex min-h-11 items-center gap-1 rounded px-2 text-xs font-mono text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
                     >
                         {collapsed ? <ChevronRight className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
                         {collapsed ? `show ${step.content.length} chars` : "collapse"}
@@ -254,10 +255,15 @@ export function AgentTrace({ steps, status, iteration, isActive, elapsedMs = 0, 
     };
 
     return (
-        <div className="w-full my-4 border border-zinc-800/60 rounded-xl overflow-hidden bg-zinc-950/30">
+        <div
+            aria-busy={isRunning}
+            aria-label="Agent activity"
+            className="my-4 w-full overflow-hidden rounded-xl border border-zinc-800/60 bg-zinc-950/30"
+        >
             {/* Header bar */}
             <div className="flex items-center gap-2 px-4 py-2.5 bg-zinc-900/30 border-b border-zinc-800/40">
                 <div
+                    aria-hidden="true"
                     className={cn(
                         "w-2 h-2 rounded-full shrink-0",
                         isRunning
@@ -272,7 +278,7 @@ export function AgentTrace({ steps, status, iteration, isActive, elapsedMs = 0, 
 
                 <Bot className="w-3.5 h-3.5 text-zinc-500" />
 
-                <span className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider">
+                <span role="status" className="text-xs font-mono uppercase tracking-wider text-zinc-300">
                     Agent
                     {isRunning && ` · step ${iteration}/${12}`}
                     {status === "done" && ` · done`}
@@ -281,7 +287,7 @@ export function AgentTrace({ steps, status, iteration, isActive, elapsedMs = 0, 
 
                 {/* Timer */}
                 {elapsedMs > 0 && (
-                    <span className="flex items-center gap-1 text-[9px] font-mono text-zinc-600 ml-auto">
+                    <span className="ml-auto flex items-center gap-1 text-xs font-mono text-zinc-400">
                         <Clock className="w-3 h-3" />
                         {formatElapsed(elapsedMs)}
                     </span>
@@ -291,7 +297,8 @@ export function AgentTrace({ steps, status, iteration, isActive, elapsedMs = 0, 
                 {isRunning && onAbort && (
                     <button
                         onClick={onAbort}
-                        className="flex items-center gap-1 px-2 py-1 rounded text-[9px] font-mono font-bold text-red-400 bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 transition-colors ml-2"
+                        aria-label="Abort agent run"
+                        className="ml-2 flex min-h-11 items-center gap-1 rounded border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs font-mono font-bold text-red-300 transition-colors hover:bg-red-500/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
                     >
                         <Square className="w-2.5 h-2.5 fill-current" />
                         ABORT
@@ -299,11 +306,19 @@ export function AgentTrace({ steps, status, iteration, isActive, elapsedMs = 0, 
                 )}
 
                 {/* Spinner */}
-                {isRunning && <Loader2 className="w-3.5 h-3.5 text-zinc-500 animate-spin shrink-0" />}
+                {isRunning && (
+                    <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-zinc-400" aria-hidden="true" />
+                )}
             </div>
 
             {/* Steps */}
-            <div ref={scrollRef} className="p-3 space-y-1 max-h-[500px] overflow-y-auto no-scrollbar">
+            <div
+                ref={scrollRef}
+                role="log"
+                aria-live="polite"
+                aria-relevant="additions"
+                className="max-h-[500px] space-y-1 overflow-y-auto p-3 no-scrollbar"
+            >
                 {steps.map((step, i) => (
                     <StepCard key={step.id} step={step} isLast={i === steps.length - 1} />
                 ))}
@@ -327,7 +342,7 @@ export function AgentTrace({ steps, status, iteration, isActive, elapsedMs = 0, 
                                     style={{ animationDelay: "200ms" }}
                                 />
                             </div>
-                            <span className="text-[10px] font-mono text-zinc-600">reasoning…</span>
+                            <span className="text-xs font-mono text-zinc-400">reasoning…</span>
                         </div>
                     </div>
                 )}
@@ -337,7 +352,7 @@ export function AgentTrace({ steps, status, iteration, isActive, elapsedMs = 0, 
                         <div className="absolute -left-5 top-2 w-2.5 h-2.5 rounded-full bg-blue-400/50 border-2 border-blue-400/30 animate-pulse" />
                         <div className="flex items-center gap-2 py-2">
                             <Loader2 className="w-3 h-3 text-blue-400 animate-spin" />
-                            <span className="text-[10px] font-mono text-zinc-600">executing tool…</span>
+                            <span className="text-xs font-mono text-zinc-400">executing tool…</span>
                         </div>
                     </div>
                 )}
