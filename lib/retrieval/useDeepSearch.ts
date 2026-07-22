@@ -182,65 +182,22 @@ export function useDeepSearch() {
                 };
             }
 
-            // Update with search results
-            setState(prev => ({
-                ...prev,
-                phase: "reading",
-                query: data.query || query,
-                refinedQuery: data.refinedQuery || "",
-                results: data.results || [],
-                streamingText: `Found ${data.results?.length || 0} results. Extracting content...`,
-                providerStatus: data.providerStatus || [],
-            }));
-
-            // Stream the content progressively
-            let streamText = "";
+            // The API performs search, extraction and ranking before returning JSON.
+            // Do not replay returned content as fake streaming output.
             const contents = data.content || [];
             const sources = data.sources || [];
-
-            // If we have a summary, show it first
-            if (data.summary) {
-                streamText = `📌 Quick Answer:\n${data.summary}\n\n---\n\n`;
-                setState(prev => ({
-                    ...prev,
-                    streamingText: streamText,
-                    summary: data.summary,
-                }));
-                await new Promise(r => setTimeout(r, 300));
-            }
-
-            // Stream each content piece
-            for (let i = 0; i < contents.length; i++) {
-                if (abortRef.current?.signal.aborted) return null;
-
-                const contentText = contents[i];
-                setState(prev => ({
-                    ...prev,
-                    currentUrl: sources[i] || "",
-                    phase: "reading",
-                }));
-
-                // Direct update without simulated typing for speed
-                streamText += contentText + "\n\n";
-                setState(prev => ({ ...prev, streamingText: streamText }));
-
-                // Keep UI responsive
-                await new Promise(r => requestAnimationFrame(r));
-            }
-
-            // Analysis phase
-            setState(prev => ({
-                ...prev,
-                phase: "analyzing",
-                streamingText: streamText + "✅ Analysis complete. Generating response...",
-            }));
-
-            // Complete
             setState(prev => ({
                 ...prev,
                 phase: "complete",
+                query: data.query || query,
+                refinedQuery: data.refinedQuery || "",
+                results: data.results || [],
                 content: contents,
                 sources,
+                currentUrl: "",
+                streamingText: `Found ${data.results?.length || 0} relevant source${data.results?.length === 1 ? "" : "s"}.`,
+                summary: data.summary || "",
+                providerStatus: data.providerStatus || [],
             }));
 
             const result = {

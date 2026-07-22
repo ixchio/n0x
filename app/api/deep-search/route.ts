@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { logger } from "@/lib/core/logger";
 import { checkRateLimit } from "@/lib/server/rate-limit";
 
+export const maxDuration = 30;
+
 // N0X Deep Search
 // Multi-engine search with graceful fallback.
 // No API key is required for the default engines; Brave/Tavily are optional upgrades.
@@ -728,17 +730,28 @@ function synthesizeAnswer(query: string, allContent: string[], summary?: string)
 // ── Main Handler ──
 
 export async function POST(request: NextRequest) {
-    try {
-        const limit = checkRateLimit(request, {
-            key: "deep-search",
-            limit: 20,
-            windowMs: 10 * 60 * 1000,
-        });
-        if (!limit.allowed) return limit.response;
+    const limit = checkRateLimit(request, {
+        key: "deep-search",
+        limit: 20,
+        windowMs: 10 * 60 * 1000,
+    });
+    if (!limit.allowed) return limit.response;
 
+    const contentLength = Number(request.headers.get("content-length") || "0");
+    if (contentLength > 16_384) {
+        return NextResponse.json({ error: "Payload too large" }, { status: 413, headers: limit.headers });
+    }
+
+    try {
         const { query: rawQuery } = await request.json();
-        if (!rawQuery) {
-            return NextResponse.json({ error: "Query required" }, { status: 400 });
+        if (typeof rawQuery !== "string" || !rawQuery.trim()) {
+            return NextResponse.json({ error: "Query required" }, { status: 400, headers: limit.headers });
+        }
+        if (rawQuery.length > 1_000) {
+            return NextResponse.json(
+                { error: "Search query is too long. Keep it under 1,000 characters." },
+                { status: 413, headers: limit.headers }
+            );
         }
 
         const intent = buildSearchIntent(String(rawQuery));
@@ -906,16 +919,19 @@ export async function POST(request: NextRequest) {
         ];
 
         if (rankedResults.length === 0 && rankedContent.length === 0) {
-            return NextResponse.json({
-                query,
-                originalQuery,
-                refinedQuery,
-                results: [],
-                content: [],
-                sources: [],
-                noUsefulResults: true,
-                providerStatus,
-            } satisfies SearchResponse);
+            return NextResponse.json(
+                {
+                    query,
+                    originalQuery,
+                    refinedQuery,
+                    results: [],
+                    content: [],
+                    sources: [],
+                    noUsefulResults: true,
+                    providerStatus,
+                } satisfies SearchResponse,
+                { headers: limit.headers }
+            );
         }
 
         // 9. Synthesize answer if we don't have one
@@ -935,22 +951,25 @@ export async function POST(request: NextRequest) {
             providerStatus,
         };
 
-        return NextResponse.json(response);
+        return NextResponse.json(response, { headers: limit.headers });
     } catch (error) {
         logger.error("Deep search error:", error);
-        return NextResponse.json({
-            query: "",
-            results: [],
-            content: [],
-            sources: [],
-            error: "Search temporarily unavailable. The AI will answer from its own knowledge.",
-            providerStatus: [
-                {
-                    name: "Deep Search",
-                    status: "failed",
-                    detail: "route handler failed before provider status could be collected",
-                },
-            ],
-        });
+        return NextResponse.json(
+            {
+                query: "",
+                results: [],
+                content: [],
+                sources: [],
+                error: "Search temporarily unavailable. The AI will answer from its own knowledge.",
+                providerStatus: [
+                    {
+                        name: "Deep Search",
+                        status: "failed",
+                        detail: "route handler failed before provider status could be collected",
+                    },
+                ],
+            },
+            { headers: limit.headers }
+        );
     }
 }

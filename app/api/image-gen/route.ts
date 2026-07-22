@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { logger } from "@/lib/core/logger";
 import { checkRateLimit } from "@/lib/server/rate-limit";
 
+export const maxDuration = 60;
+
 // N0X Image Generation
 // Strategy:
 //   1. POLLINATIONS_API_KEY set → gen.pollinations.ai (free-tier key, reliable, no watermark)
@@ -23,7 +25,12 @@ const FREE_MODELS = ["flux", "z-image-turbo", "klein", "flux-schnell", "wan-imag
 // ── Authenticated Pollinations (gen.pollinations.ai) ──
 // Returns base64 data URL so the API key never touches the client
 
-async function tryPollinationsAuth(prompt: string, model: string, apiKey: string): Promise<GenResult | null> {
+async function tryPollinationsAuth(
+    prompt: string,
+    model: string,
+    apiKey: string,
+    timeoutMs: number
+): Promise<GenResult | null> {
     try {
         const seed = Math.floor(Math.random() * 999999);
         const url =
@@ -32,7 +39,7 @@ async function tryPollinationsAuth(prompt: string, model: string, apiKey: string
 
         const res = await fetch(url, {
             headers: { Authorization: `Bearer ${apiKey}` },
-            signal: AbortSignal.timeout(45000),
+            signal: AbortSignal.timeout(timeoutMs),
         });
 
         if (!res.ok) {
@@ -65,8 +72,11 @@ async function tryPollinationsWithKey(
             ? [preferredModel, ...FREE_MODELS.filter(m => m !== preferredModel)]
             : [...FREE_MODELS];
 
-    for (const model of models) {
-        const result = await tryPollinationsAuth(prompt, model, apiKey);
+    const deadline = Date.now() + 25_000;
+    for (const model of models.slice(0, 3)) {
+        const remaining = deadline - Date.now();
+        if (remaining < 1_000) break;
+        const result = await tryPollinationsAuth(prompt, model, apiKey, Math.min(12_000, remaining));
         if (result) return result;
     }
     return null;
@@ -121,7 +131,7 @@ async function tryAIHorde(prompt: string): Promise<GenResult | null> {
         const { id: jobId } = await submitRes.json();
         if (!jobId) return null;
 
-        const deadline = Date.now() + 60000;
+        const deadline = Date.now() + 20_000;
         while (Date.now() < deadline) {
             await new Promise(r => setTimeout(r, 3000));
             try {
@@ -157,16 +167,31 @@ async function tryAIHorde(prompt: string): Promise<GenResult | null> {
 // ── Main handler ──
 
 export async function POST(request: NextRequest) {
-    try {
-        const limit = checkRateLimit(request, {
-            key: "image-gen",
-            limit: 12,
-            windowMs: 10 * 60 * 1000,
-        });
-        if (!limit.allowed) return limit.response;
+    const limit = checkRateLimit(request, {
+        key: "image-gen",
+        limit: 12,
+        windowMs: 10 * 60 * 1000,
+    });
+    if (!limit.allowed) return limit.response;
 
-        const { prompt, model: preferredModel } = await request.json();
-        if (!prompt) return NextResponse.json({ error: "Prompt required" }, { status: 400 });
+    try {
+        const contentLength = Number(request.headers.get("content-length") || "0");
+        if (contentLength > 16_384) {
+            return NextResponse.json({ error: "Payload too large" }, { status: 413, headers: limit.headers });
+        }
+
+        const { prompt, model: requestedModel } = await request.json();
+        if (typeof prompt !== "string" || !prompt.trim()) {
+            return NextResponse.json({ error: "Prompt required" }, { status: 400, headers: limit.headers });
+        }
+        if (prompt.length > 2_000) {
+            return NextResponse.json(
+                { error: "Prompt is too long. Keep image prompts under 2,000 characters." },
+                { status: 413, headers: limit.headers }
+            );
+        }
+        const preferredModel =
+            typeof requestedModel === "string" && FREE_MODELS.includes(requestedModel) ? requestedModel : undefined;
 
         const cleanPrompt =
             prompt
@@ -183,14 +208,22 @@ export async function POST(request: NextRequest) {
             result = await tryPollinationsWithKey(cleanPrompt, apiKey, preferredModel);
         }
 
-        // Path B: No key → image.pollinations.ai direct URL (client loads it)
+        // Path B: Authenticated generation failed → use the community fallback.
+        if (apiKey && !result) {
+            result = await tryAIHorde(cleanPrompt);
+        }
+
+        // Path C: No server key (or providers unavailable) → client-loadable free URL.
         if (!result) {
             result = pollinationsFreeUrl(cleanPrompt, "turbo");
         }
 
-        return NextResponse.json({ success: true, image: result.image, provider: result.provider });
+        return NextResponse.json(
+            { success: true, image: result.image, provider: result.provider },
+            { headers: limit.headers }
+        );
     } catch (error) {
         logger.error("Image gen error:", error);
-        return NextResponse.json({ error: "Generation failed" }, { status: 500 });
+        return NextResponse.json({ error: "Generation failed" }, { status: 500, headers: limit.headers });
     }
 }

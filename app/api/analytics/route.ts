@@ -35,10 +35,15 @@ export async function POST(request: NextRequest) {
     });
     if (!limit.allowed) return limit.response;
 
+    const contentLength = Number(request.headers.get("content-length") || "0");
+    if (contentLength > 8_192) {
+        return NextResponse.json({ error: "Payload too large" }, { status: 413, headers: limit.headers });
+    }
+
     try {
         const body = await request.json();
         if (!EVENTS.has(body?.event)) {
-            return NextResponse.json({ error: "Invalid event" }, { status: 400 });
+            return NextResponse.json({ error: "Invalid event" }, { status: 400, headers: limit.headers });
         }
 
         const meta = typeof body.meta === "object" && body.meta ? body.meta : {};
@@ -56,8 +61,8 @@ export async function POST(request: NextRequest) {
             meta: sanitized,
         });
 
-        return new NextResponse(null, { status: 204 });
+        return new NextResponse(null, { status: 204, headers: limit.headers });
     } catch {
-        return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
+        return NextResponse.json({ error: "Invalid payload" }, { status: 400, headers: limit.headers });
     }
 }

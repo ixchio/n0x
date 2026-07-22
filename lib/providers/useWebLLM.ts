@@ -1,12 +1,12 @@
 "use client";
 
 import { create } from "zustand";
-import * as webllm from "@mlc-ai/web-llm";
+import type { MLCEngine, WebWorkerMLCEngine } from "@mlc-ai/web-llm";
 import { trackFunnelEvent } from "@/lib/core/analytics";
 import { logger } from "@/lib/core/logger";
 
-// Complete open-source model list: 360MB → 100GB+
-// All models are MLC-compiled and available via Hugging Face / MLC releases.
+// Curated from the model IDs in the installed WebLLM prebuilt app config.
+// Keep this static so rendering the selector does not load the WebLLM runtime.
 export const WEBLLM_MODELS = [
     // ── FAST / TINY (< 1GB) \u2014 works on anything ──────────────────────────────
     {
@@ -125,43 +125,8 @@ export const WEBLLM_MODELS = [
         size: "~4.5GB",
         category: "powerful",
     },
-    {
-        id: "Mistral-Nemo-Instruct-2407-q4f16_1-MLC",
-        label: "Mistral Nemo 12B",
-        desc: "Strong multilingual 12B",
-        size: "~8GB",
-        category: "powerful",
-    },
-    {
-        id: "Qwen2.5-14B-Instruct-q4f16_1-MLC",
-        label: "Qwen 2.5 14B",
-        desc: "Near GPT-4 at 14B",
-        size: "~9GB",
-        category: "powerful",
-    },
-    {
-        id: "Qwen2.5-32B-Instruct-q4f16_1-MLC",
-        label: "Qwen 2.5 32B",
-        desc: "Flagship 32B — very capable",
-        size: "~20GB",
-        category: "powerful",
-    },
-    {
-        id: "Llama-3.3-70B-Instruct-q3f16_1-MLC",
-        label: "Llama 3.3 70B",
-        desc: "Meta's latest flagship — 70B",
-        size: "~30GB",
-        category: "powerful",
-    },
 
     // ── REASONING — R1 distills (CoT trained) ─────────────────────────────────
-    {
-        id: "DeepSeek-R1-Distill-Qwen-1.5B-q4f16_1-MLC",
-        label: "R1 Qwen 1.5B",
-        desc: "CoT reasoning, tiny",
-        size: "~1.1GB",
-        category: "reasoning",
-    },
     {
         id: "DeepSeek-R1-Distill-Qwen-7B-q4f16_1-MLC",
         label: "R1 Qwen 7B",
@@ -176,27 +141,6 @@ export const WEBLLM_MODELS = [
         size: "~4.8GB",
         category: "reasoning",
     },
-    {
-        id: "DeepSeek-R1-Distill-Qwen-14B-q4f16_1-MLC",
-        label: "R1 Qwen 14B",
-        desc: "Elite 14B reasoning",
-        size: "~9GB",
-        category: "reasoning",
-    },
-    {
-        id: "DeepSeek-R1-Distill-Qwen-32B-q4f16_1-MLC",
-        label: "R1 Qwen 32B",
-        desc: "Near o1-level at 32B",
-        size: "~20GB",
-        category: "reasoning",
-    },
-    {
-        id: "DeepSeek-R1-Distill-Llama-70B-q3f16_1-MLC",
-        label: "R1 Llama 70B",
-        desc: "Best open reasoning, 70B",
-        size: "~30GB",
-        category: "reasoning",
-    },
 
     // ── CODING ────────────────────────────────────────────────────────────────
     {
@@ -207,24 +151,10 @@ export const WEBLLM_MODELS = [
         category: "coding",
     },
     {
-        id: "DeepSeek-Coder-1.3B-Instruct-q4f16_1-MLC",
-        label: "DeepSeek Coder 1.3B",
-        desc: "Fast code generation",
-        size: "~800MB",
-        category: "coding",
-    },
-    {
         id: "Qwen2.5-Coder-7B-Instruct-q4f16_1-MLC",
         label: "Qwen Coder 7B",
         desc: "Pro code assistant",
         size: "~4GB",
-        category: "coding",
-    },
-    {
-        id: "Qwen2.5-Coder-32B-Instruct-q4f16_1-MLC",
-        label: "Qwen Coder 32B",
-        desc: "Top open-source coder",
-        size: "~20GB",
         category: "coding",
     },
     {
@@ -234,32 +164,15 @@ export const WEBLLM_MODELS = [
         size: "~1GB",
         category: "coding",
     },
-    {
-        id: "Qwen2.5-Math-7B-Instruct-q4f16_1-MLC",
-        label: "Qwen Math 7B",
-        desc: "Pro math & logic",
-        size: "~4GB",
-        category: "coding",
-    },
-
-    // ── UNCENSORED ────────────────────────────────────────────────────────────
-    {
-        id: "WizardCoder-15B-V1.0-q4f16_1-MLC",
-        label: "WizardCoder 15B",
-        desc: "Uncensored coder",
-        size: "~8GB",
-        category: "uncensored",
-    },
 ];
 
 // Group models by category for the model selector UI
 export const MODEL_CATEGORIES = {
     fast: { label: "⚡ Tiny (< 1GB)", desc: "Any device, instant responses" },
     balanced: { label: "⚖️ Balanced (1–3GB)", desc: "Good speed & quality" },
-    powerful: { label: "🚀 Powerful (4–30GB+)", desc: "High quality — needs VRAM" },
+    powerful: { label: "🚀 Powerful (2–6GB)", desc: "High quality — needs VRAM" },
     reasoning: { label: "🧠 Reasoning (R1 CoT)", desc: "Chain-of-thought specialist" },
     coding: { label: "💻 Coding", desc: "Optimised for code & math" },
-    uncensored: { label: "🔓 Uncensored", desc: "No safety filters" },
 };
 
 export type WebLLMStatus = "unloaded" | "loading" | "ready" | "generating" | "error";
@@ -309,10 +222,38 @@ interface WebLLMState {
     unload: () => Promise<void>;
 }
 
-// Module-level variables to hold non-reactive instances
-let engine: webllm.MLCEngine | webllm.WebWorkerMLCEngine | null = null;
+type WebLLMRuntime = typeof import("@mlc-ai/web-llm");
+
+// Module-level variables to hold non-reactive instances. The runtime itself is
+// loaded only when a model is requested so the chat shell stays lightweight.
+let engine: MLCEngine | WebWorkerMLCEngine | null = null;
+let runtimePromise: Promise<WebLLMRuntime> | null = null;
 let abortController: AbortController | null = null;
 let isLoadingModel = false;
+
+function loadWebLLMRuntime(): Promise<WebLLMRuntime> {
+    if (!runtimePromise) {
+        runtimePromise = import("@mlc-ai/web-llm").catch(error => {
+            // A transient chunk/network error should be retryable.
+            runtimePromise = null;
+            throw error;
+        });
+    }
+    return runtimePromise;
+}
+
+function createAbortError(): Error {
+    if (typeof DOMException !== "undefined") {
+        return new DOMException("Generation stopped", "AbortError");
+    }
+    const error = new Error("Generation stopped");
+    error.name = "AbortError";
+    return error;
+}
+
+function throwIfAborted(signal: AbortSignal) {
+    if (signal.aborted) throw createAbortError();
+}
 // Cumulative token counter persisted to localStorage for cost savings display
 const TOKENS_KEY = "n0x_total_tokens";
 export function getTotalTokens(): number {
@@ -440,7 +381,7 @@ export const useWebLLM = create<WebLLMState>((set, get) => ({
                     return;
                 }
                 // If device has 8GB or less, warn/block massive models
-                if (deviceMemory <= 8 && (model.category === "uncensored" || model.category === "powerful")) {
+                if (deviceMemory <= 8 && model.category === "powerful") {
                     set({
                         error: `Hardware Restricted: Device reports ${deviceMemory}GB RAM. Loading a heavy model requires 16GB+ and may cause an Out-Of-Memory crash.`,
                         status: "error",
@@ -476,6 +417,8 @@ export const useWebLLM = create<WebLLMState>((set, get) => ({
                 }
                 engine = null;
             }
+
+            const webllm = await loadWebLLMRuntime();
 
             // Progress stall watchdog — detect if download freezes + calculate ETA
             let lastProgress = 0;
@@ -526,18 +469,23 @@ export const useWebLLM = create<WebLLMState>((set, get) => ({
                 try {
                     const worker = new Worker(new URL("./webllm.worker.ts", import.meta.url), { type: "module" });
                     // Race against a timeout — if the Worker hangs, fall back
-                    engine = await Promise.race([
-                        webllm.CreateWebWorkerMLCEngine(worker, modelId, initOpts),
-                        new Promise<never>((_, reject) => {
-                            setTimeout(() => {
-                                // Only reject if still at 0% (Worker never responded)
-                                if (get().loadProgress === 0) {
-                                    worker.terminate();
-                                    reject(new Error("Worker init timeout"));
-                                }
-                            }, 5000);
-                        }),
-                    ]);
+                    let workerInitTimeout: ReturnType<typeof setTimeout> | undefined;
+                    try {
+                        engine = await Promise.race([
+                            webllm.CreateWebWorkerMLCEngine(worker, modelId, initOpts),
+                            new Promise<never>((_, reject) => {
+                                workerInitTimeout = setTimeout(() => {
+                                    // Only reject if still at 0% (Worker never responded)
+                                    if (get().loadProgress === 0) {
+                                        worker.terminate();
+                                        reject(new Error("Worker init timeout"));
+                                    }
+                                }, 5000);
+                            }),
+                        ]);
+                    } finally {
+                        if (workerInitTimeout) clearTimeout(workerInitTimeout);
+                    }
                 } catch {
                     // Worker failed — fall back to main thread engine
                     engine = await webllm.CreateMLCEngine(modelId, initOpts);
@@ -589,8 +537,10 @@ export const useWebLLM = create<WebLLMState>((set, get) => ({
             throw new Error("Model not loaded");
         }
 
-        set({ status: "generating" });
-        abortController = new AbortController();
+        const activeEngine = engine;
+        const controller = new AbortController();
+        abortController = controller;
+        set({ status: "generating", error: null });
 
         // Stats tracking
         let tokenCount = 0;
@@ -613,10 +563,14 @@ export const useWebLLM = create<WebLLMState>((set, get) => ({
                 createOpts.response_format = responseFormat;
             }
 
-            const asyncGenerator = (await engine.chat.completions.create(createOpts)) as any;
+            const asyncGenerator = (await activeEngine.chat.completions.create(createOpts)) as any;
+            throwIfAborted(controller.signal);
 
             for await (const chunk of asyncGenerator) {
-                if (abortController?.signal.aborted) break;
+                // The engine interrupt ends decoding; the local signal makes a
+                // stopped stream reject instead of looking like a successful,
+                // second copy of the partial response to the chat orchestrator.
+                throwIfAborted(controller.signal);
 
                 const token = chunk.choices[0]?.delta?.content || "";
                 fullResponse += token;
@@ -635,27 +589,44 @@ export const useWebLLM = create<WebLLMState>((set, get) => ({
                 onToken?.(token);
             }
 
-            // Final update
-            const now = performance.now();
-            const duration = (now - startTime) / 1000;
-            const tps = duration > 0 ? Math.round(tokenCount / duration) : 0;
-            set({ stats: { tps, totalTokens: tokenCount, lastTokenTime: now }, status: "ready" });
-            addTokens(tokenCount); // persist for cost savings counter
+            throwIfAborted(controller.signal);
 
             return fullResponse;
         } catch (e: any) {
+            if (controller.signal.aborted) {
+                throw createAbortError();
+            }
             if (e.name !== "AbortError") {
                 logger.error("Generation error:", e);
                 set({ error: e.message });
             }
-            set({ status: "ready" });
             throw e;
+        } finally {
+            const now = performance.now();
+            const duration = (now - startTime) / 1000;
+            const tps = duration > 0 ? Math.round(tokenCount / duration) : 0;
+            set(state => ({
+                stats: { tps, totalTokens: tokenCount, lastTokenTime: now },
+                ...(state.status === "generating" ? { status: "ready" as const } : {}),
+            }));
+            if (tokenCount > 0) addTokens(tokenCount);
+            if (abortController === controller) abortController = null;
         }
     },
 
     stop: () => {
-        if (abortController) {
-            abortController.abort();
+        const controller = abortController;
+        if (!controller) return;
+
+        controller.abort();
+        try {
+            // AbortController only guards N0X's stream consumer. WebLLM also
+            // needs its own interrupt signal to stop GPU decoding immediately.
+            void Promise.resolve(engine?.interruptGenerate()).catch(error => {
+                logger.warn("Failed to interrupt WebLLM generation:", error);
+            });
+        } catch (error) {
+            logger.warn("Failed to interrupt WebLLM generation:", error);
         }
     },
 

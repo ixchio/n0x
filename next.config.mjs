@@ -3,9 +3,27 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+const contentSecurityPolicy = [
+    "default-src 'self'",
+    "base-uri 'self'",
+    "object-src 'none'",
+    "frame-ancestors 'none'",
+    "form-action 'self'",
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' https://cdn.jsdelivr.net https://cdn.tailwindcss.com",
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    "font-src 'self' data: https://fonts.gstatic.com",
+    "img-src 'self' data: blob: https:",
+    "connect-src 'self' data: blob: https: http: ws: wss:",
+    "worker-src 'self' blob: https://cdn.jsdelivr.net",
+    "child-src 'self' blob:",
+    "frame-src 'self' data: blob:",
+    "media-src 'self' data: blob: https:",
+].join("; ");
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
     reactStrictMode: true,
+    poweredByHeader: false,
     output: "standalone", // Required for Docker
     outputFileTracingRoot: __dirname,
     experimental: {
@@ -66,7 +84,9 @@ const nextConfig = {
                     { key: "Cross-Origin-Embedder-Policy", value: "credentialless" },
                     { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
                     { key: "X-Content-Type-Options", value: "nosniff" },
+                    { key: "X-Frame-Options", value: "DENY" },
                     { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+                    { key: "Content-Security-Policy", value: contentSecurityPolicy },
                     {
                         key: "Permissions-Policy",
                         value: "camera=(), geolocation=(), payment=(), usb=(), serial=()",

@@ -1,5 +1,13 @@
 /// <reference lib="webworker" />
 
+import {
+    MAX_DOCX_EXPANDED_BYTES,
+    MAX_RAG_FILE_BYTES,
+    getFileExtension,
+    limitExtractedText,
+    validateRagFile,
+} from "@/lib/retrieval/file-policy";
+
 // N0X RAG Worker v2 - BULLETPROOF EDITION
 // Complete rewrite focused on:
 // - Graceful failure paths for extraction, embedding, and cache errors
@@ -175,7 +183,7 @@ async function extractDocx(file: File): Promise<string> {
             throw new Error("Not a valid ZIP/DOCX file");
         }
 
-        const findFile = (name: string): Uint8Array | null => {
+        const findFile = (name: string): { data: Uint8Array; compression: number } | null => {
             let offset = 0;
             while (offset < bytes.length - 30) {
                 if (
@@ -186,12 +194,10 @@ async function extractDocx(file: File): Promise<string> {
                 )
                     break;
 
-                const compression = bytes[offset + 8] | (bytes[offset + 9] << 8);
-                const compressedSize =
-                    bytes[offset + 18] |
-                    (bytes[offset + 19] << 8) |
-                    (bytes[offset + 20] << 16) |
-                    (bytes[offset + 21] << 24);
+                const header = new DataView(bytes.buffer, bytes.byteOffset + offset, 30);
+                const compression = header.getUint16(8, true);
+                const compressedSize = header.getUint32(18, true);
+                const expandedSize = header.getUint32(22, true);
                 const fileNameLen = bytes[offset + 26] | (bytes[offset + 27] << 8);
                 const extraLen = bytes[offset + 28] | (bytes[offset + 29] << 8);
                 const fileNameBytes = bytes.slice(offset + 30, offset + 30 + fileNameLen);
@@ -200,39 +206,56 @@ async function extractDocx(file: File): Promise<string> {
                 const compressedData = bytes.slice(dataOffset, dataOffset + compressedSize);
 
                 if (fileName === name) {
-                    if (compression === 0) return compressedData;
-                    if (compression === 8) return compressedData;
+                    if (expandedSize > MAX_DOCX_EXPANDED_BYTES) {
+                        throw new Error("DOCX expanded content exceeds the 32 MB safety limit");
+                    }
+                    if (compression === 0 || compression === 8) {
+                        return { data: compressedData, compression };
+                    }
+                    throw new Error(`Unsupported DOCX compression method ${compression}`);
                 }
                 offset = dataOffset + compressedSize;
             }
             return null;
         };
 
-        const compressed = findFile("word/document.xml");
-        if (!compressed) {
-            return `[Could not extract text from DOCX: "${file.name}"]`;
+        const archiveEntry = findFile("word/document.xml");
+        if (!archiveEntry) {
+            throw new Error(`Could not find document content in “${file.name}”`);
         }
+        let merged: Uint8Array;
+        if (archiveEntry.compression === 0) {
+            merged = archiveEntry.data;
+        } else {
+            const ds = new DecompressionStream("deflate-raw");
+            const writer = ds.writable.getWriter();
+            const reader = ds.readable.getReader();
+            const compressedBuffer = archiveEntry.data.slice().buffer as ArrayBuffer;
+            await writer.write(compressedBuffer);
+            await writer.close();
 
-        const ds = new DecompressionStream("deflate-raw");
-        const writer = ds.writable.getWriter();
-        const reader = ds.readable.getReader();
-        writer.write(compressed.buffer as ArrayBuffer);
-        writer.close();
+            const chunks: Uint8Array[] = [];
+            let total = 0;
+            let done = false;
+            while (!done) {
+                const { value, done: streamDone } = await reader.read();
+                if (value) {
+                    total += value.byteLength;
+                    if (total > MAX_DOCX_EXPANDED_BYTES) {
+                        await reader.cancel("Expanded DOCX exceeds safety limit");
+                        throw new Error("DOCX expanded content exceeds the 32 MB safety limit");
+                    }
+                    chunks.push(value);
+                }
+                done = streamDone;
+            }
 
-        const chunks: Uint8Array[] = [];
-        let done = false;
-        while (!done) {
-            const { value, done: d } = await reader.read();
-            if (value) chunks.push(value);
-            done = d;
-        }
-
-        const total = chunks.reduce((s, c) => s + c.length, 0);
-        const merged = new Uint8Array(total);
-        let pos = 0;
-        for (const c of chunks) {
-            merged.set(c, pos);
-            pos += c.length;
+            merged = new Uint8Array(total);
+            let pos = 0;
+            for (const chunk of chunks) {
+                merged.set(chunk, pos);
+                pos += chunk.length;
+            }
         }
         const xml = new TextDecoder().decode(merged);
 
@@ -247,10 +270,11 @@ async function extractDocx(file: File): Promise<string> {
             .replace(/\s+/g, " ")
             .trim();
 
-        return text || `[DOCX "${file.name}" appears to be empty]`;
+        if (!text) throw new Error(`DOCX “${file.name}” appears to be empty`);
+        return limitExtractedText(text);
     } catch (e: any) {
         console.error("DOCX extraction error:", e);
-        return `[Failed to extract DOCX "${file.name}": ${e.message}]`;
+        throw new Error(`Failed to extract DOCX “${file.name}”: ${e.message}`);
     }
 }
 
@@ -300,7 +324,7 @@ async function extractText(file: File): Promise<string> {
                 }
             }
 
-            return sanitizeText(text);
+            return limitExtractedText(sanitizeText(text));
         }
 
         // DOCX
@@ -323,26 +347,28 @@ async function extractText(file: File): Promise<string> {
                 formatted += headers.map((h, i) => `${h}: ${cells[i] || ""}`).join(" | ") + "\n";
             }
 
-            return formatted;
+            return limitExtractedText(formatted);
         }
 
         // HTML
         if (name.endsWith(".html") || name.endsWith(".htm")) {
             const html = await file.text();
-            return html
-                .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
-                .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
-                .replace(/<[^>]+>/g, " ")
-                .replace(/&[a-z]+;/gi, " ")
-                .replace(/\s+/g, " ")
-                .trim();
+            return limitExtractedText(
+                html
+                    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
+                    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
+                    .replace(/<[^>]+>/g, " ")
+                    .replace(/&[a-z]+;/gi, " ")
+                    .replace(/\s+/g, " ")
+                    .trim()
+            );
         }
 
         // Fallback: TXT, MD, JSON
-        return sanitizeText(await file.text());
+        return limitExtractedText(sanitizeText(await file.text()));
     } catch (e: any) {
         console.error(`Text extraction failed for ${file.name}:`, e);
-        return `[Failed to extract text from "${file.name}": ${e.message}]`;
+        throw new Error(`Failed to extract text from “${file.name}”: ${e.message}`);
     }
 }
 
@@ -548,6 +574,11 @@ self.addEventListener("message", async (e: MessageEvent) => {
         if (action === "ADD_FILE") {
             const { file } = payload;
 
+            const validationError = validateRagFile(file);
+            if (validationError || file.size > MAX_RAG_FILE_BYTES) {
+                throw new Error(validationError || "File exceeds the local upload safety limit");
+            }
+
             self.postMessage({ id, status: `Reading ${file.name}...` });
             await loadDeps();
 
@@ -561,7 +592,7 @@ self.addEventListener("message", async (e: MessageEvent) => {
                 id: fileHash,
                 name: file.name,
                 size: file.size,
-                type: file.type || file.name.split(".").pop() || "unknown",
+                type: file.type || getFileExtension(file.name) || "unknown",
                 chunks: 0,
                 rawText: text,
             };

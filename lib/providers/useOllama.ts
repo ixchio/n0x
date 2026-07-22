@@ -6,6 +6,13 @@ import { logger } from "@/lib/core/logger";
 
 export type OllamaStatus = "unloaded" | "ready" | "generating" | "error";
 
+export function statusAfterOllamaHealthCheck(current: OllamaStatus, reachable: boolean): OllamaStatus {
+    // A health poll can refresh availability and models, but it must not make
+    // an in-flight generation disappear from the UI.
+    if (current === "generating") return current;
+    return reachable ? "ready" : "error";
+}
+
 interface ChatMessage {
     role: string;
     content: string;
@@ -69,20 +76,24 @@ export const useOllama = create<OllamaState>((set, get) => ({
                 name: m.name,
                 size: m.size,
             }));
-            set({
+            set(state => ({
                 isSupported: true,
                 models,
-                status: "ready",
+                status: statusAfterOllamaHealthCheck(state.status, true),
                 error: null,
-                loadedModel: get().loadedModel || (models.length > 0 ? models[0].name : null),
-            });
+                loadedModel: state.loadedModel || (models.length > 0 ? models[0].name : null),
+            }));
         } catch (e: any) {
             // If the error is a fetch TypeError, it's likely CORS or the server is down.
             let errorMsg = "Ollama not reachable at " + baseUrl;
             if (e.message === "Failed to fetch") {
                 errorMsg = `Cannot connect to Ollama. Make sure it's running and CORS is enabled: \`OLLAMA_ORIGINS="*" ollama serve\``;
             }
-            set({ isSupported: false, error: errorMsg, status: "error" });
+            set(state => ({
+                isSupported: false,
+                error: errorMsg,
+                status: statusAfterOllamaHealthCheck(state.status, false),
+            }));
         }
     },
 

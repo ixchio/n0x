@@ -23,6 +23,27 @@ declare global {
 const PYODIDE_VERSION = "0.26.4";
 const PYODIDE_URL = `https://cdn.jsdelivr.net/pyodide/v${PYODIDE_VERSION}/full/`;
 
+export const PYODIDE_OUTPUT_CAPTURE_BOOTSTRAP = `
+import sys
+from io import StringIO
+
+class _Out:
+    def __init__(self):
+        self.buf = StringIO()
+    def write(self, s):
+        self.buf.write(s)
+    def flush(self):
+        pass
+    def get(self):
+        return self.buf.getvalue()
+    def clear(self):
+        self.buf = StringIO()
+
+_out = _Out()
+sys.stdout = _out
+sys.stderr = _out
+`;
+
 export function usePyodide() {
     const [status, setStatus] = useState<Status>("unloaded");
     const [loadProgress, setLoadProgress] = useState(0);
@@ -66,27 +87,7 @@ export function usePyodide() {
             setLoadProgress(0.7);
 
             // Setup output capture
-            await py.runPythonAsync(`
-import sys
-from io import StringIO
-import { logger } from "@/lib/core/logger";
-
-class _Out:
-    def __init__(self):
-        self.buf = StringIO()
-    def write(self, s):
-        self.buf.write(s)
-    def flush(self):
-        pass
-    def get(self):
-        return self.buf.getvalue()
-    def clear(self):
-        self.buf = StringIO()
-
-_out = _Out()
-sys.stdout = _out
-sys.stderr = _out
-`);
+            await py.runPythonAsync(PYODIDE_OUTPUT_CAPTURE_BOOTSTRAP);
 
             pyRef.current = py;
             setLoadProgress(1);
@@ -94,7 +95,9 @@ sys.stderr = _out
         } catch (e: any) {
             logger.error("Pyodide error:", e);
             setStatus("error");
+            setLoadProgress(0);
             setLoadError(e.message || "Failed to load Pyodide");
+        } finally {
             loadingRef.current = false;
         }
     }, []);
@@ -133,8 +136,6 @@ sys.stderr = _out
             const output = await py.runPythonAsync("_out.get()");
 
             const duration = Date.now() - start;
-            setStatus("ready");
-
             // Combine output and return value
             let finalOutput = output || "";
             if (result !== undefined && result !== null) {
@@ -146,8 +147,11 @@ sys.stderr = _out
 
             return { output: finalOutput, error: null, duration };
         } catch (e: any) {
-            setStatus("ready");
             return { output: "", error: e.message || String(e), duration: Date.now() - start };
+        } finally {
+            // Package-loading failures return early from the try block, so status
+            // cleanup belongs in finally rather than only on the success path.
+            setStatus("ready");
         }
     }, []);
 

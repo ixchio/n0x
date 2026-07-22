@@ -24,8 +24,8 @@ class Logger {
 
     constructor() {
         this.isProduction = process.env.NODE_ENV === "production";
-        // In production, only show warnings and errors
-        this.minLevel = this.isProduction ? "warn" : "debug";
+        // Keep structured product events observable in production while omitting debug noise.
+        this.minLevel = this.isProduction ? "info" : "debug";
     }
 
     private shouldLog(level: LogLevel): boolean {

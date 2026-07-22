@@ -1,5 +1,12 @@
-const CACHE = "n0x-v2";
+const SHELL_CACHE_PREFIX = "n0x-shell-";
+const CACHE = `${SHELL_CACHE_PREFIX}v3`;
 const SHELL = ["/", "/chat", "/manifest.json"];
+
+function isOldN0xShellCache(name) {
+    const isCurrentPrefix = name.startsWith(SHELL_CACHE_PREFIX);
+    const isLegacyShell = /^n0x-v\d+$/.test(name);
+    return name !== CACHE && (isCurrentPrefix || isLegacyShell);
+}
 
 self.addEventListener("install", (e) => {
     e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)));
@@ -9,10 +16,9 @@ self.addEventListener("install", (e) => {
 self.addEventListener("activate", (e) => {
     e.waitUntil(
         caches.keys().then(keys =>
-            Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
-        )
+            Promise.all(keys.filter(isOldN0xShellCache).map(k => caches.delete(k)))
+        ).then(() => self.clients.claim())
     );
-    self.clients.claim();
 });
 
 self.addEventListener("fetch", (e) => {

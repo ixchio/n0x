@@ -3,6 +3,7 @@
 import { create } from "zustand";
 import { trackFunnelEvent } from "@/lib/core/analytics";
 import { logger } from "@/lib/core/logger";
+import { getFileExtension, limitExtractedText, validateRagFile } from "@/lib/retrieval/file-policy";
 
 interface RAGDocument {
     id: string;
@@ -113,8 +114,13 @@ export const useRAG = create<RAGState>((set, get) => ({
 
     addFile: async (file: File) => {
         try {
+            const validationError = validateRagFile(file);
+            if (validationError) {
+                set({ isIndexing: false, status: validationError });
+                return;
+            }
             trackFunnelEvent("document_uploaded", {
-                type: file.type || file.name.split(".").pop()?.toLowerCase() || "unknown",
+                type: file.type || getFileExtension(file.name) || "unknown",
                 sizeBucket: file.size < 1024 * 1024 ? "small" : file.size < 10 * 1024 * 1024 ? "medium" : "large",
             });
             set({ isIndexing: true, status: `Initializing Worker for ${file.name}...` });
@@ -138,7 +144,7 @@ export const useRAG = create<RAGState>((set, get) => ({
                 set({ status: `Worker failed, trying fallback extraction...` });
 
                 let fallbackText = "";
-                const ext = file.name.split(".").pop()?.toLowerCase();
+                const ext = getFileExtension(file.name);
                 const isBinary = [
                     "pdf",
                     "docx",
@@ -155,10 +161,12 @@ export const useRAG = create<RAGState>((set, get) => ({
                 ].includes(ext || "");
 
                 if (isBinary) {
-                    fallbackText = `[Binary file: ${file.name}. Vector search unavailable, but file is attached to your messages for context.]`;
+                    throw new Error(
+                        `Could not extract text from “${file.name}”. Try a text-based copy of the document.`
+                    );
                 } else {
                     try {
-                        fallbackText = ((await file.text()) || "").slice(0, 50000);
+                        fallbackText = limitExtractedText((await file.text()) || "");
                     } catch {
                         fallbackText = `[Could not read ${file.name}. File may be corrupted or in an unsupported format.]`;
                     }
@@ -187,7 +195,7 @@ export const useRAG = create<RAGState>((set, get) => ({
             } catch (fallbackError: any) {
                 logger.error("Fallback extraction failed:", fallbackError);
                 set({
-                    status: `Failed to load ${file.name}: ${e.message}. Try a different file.`,
+                    status: `Failed to load ${file.name}: ${fallbackError.message || e.message}. Try a different file.`,
                     isIndexing: false,
                 });
             }
