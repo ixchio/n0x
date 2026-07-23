@@ -24,8 +24,9 @@ self.addEventListener("activate", (e) => {
 self.addEventListener("fetch", (e) => {
     const url = new URL(e.request.url);
 
-    // don't touch api routes or third-party stuff
-    if (url.pathname.startsWith("/api/") || url.origin !== self.location.origin) return;
+    // don't touch api routes, live Vercel telemetry, or third-party stuff
+    if (url.pathname.startsWith("/api/") || url.pathname.startsWith("/_vercel/") || url.origin !== self.location.origin)
+        return;
 
     if (e.request.mode === "navigate") {
         // pages: network first, fall back to cache

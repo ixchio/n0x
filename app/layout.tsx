@@ -3,6 +3,7 @@ import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { PWARegister } from "@/components/system/pwa-register";
 import { ErrorBoundary } from "@/components/system/error-boundary";
+import { VercelAnalytics } from "@/components/system/vercel-analytics";
 
 const inter = Inter({
     subsets: ["latin"],
@@ -106,6 +107,7 @@ export default function RootLayout({
                 <div className="fixed inset-0 z-[-1] bg-[#0a0a0a]" />
                 <ErrorBoundary>{children}</ErrorBoundary>
                 <PWARegister />
+                <VercelAnalytics />
             </body>
         </html>
     );

@@ -68,9 +68,11 @@ export default function PrivacyPage() {
                 <section className="space-y-3">
                     <h2 className="text-xl font-semibold text-white">Telemetry</h2>
                     <p className="text-zinc-400">
-                        Product telemetry is opt-in. If enabled, N0X sends only funnel events such as visit, provider
-                        selected, model load result, first message sent, document uploaded, and search used. It does not
-                        send prompts, responses, document text, file names, API keys, or memory content.
+                        Product telemetry is opt-in. If enabled, N0X sends sanitized page views to Vercel Web Analytics
+                        and funnel events such as provider selected, model load result, first message sent, document
+                        uploaded, and search used to the N0X analytics route. Page views include the path and explicit
+                        ref/UTM attribution; other query values and URL fragments are removed. Telemetry does not send
+                        prompts, responses, document text, file names, API keys, or memory content.
                     </p>
                 </section>
             </div>

@@ -14,6 +14,7 @@ type AnalyticsMeta = Record<string, string | number | boolean | null | undefined
 
 const OPT_IN_KEY = "n0x_analytics_opt_in";
 const FIRST_MESSAGE_KEY = "n0x_first_message_tracked";
+export const ANALYTICS_CONSENT_EVENT = "n0x:analytics-consent";
 const META_KEYS = new Set([
     "source",
     "page",
@@ -41,6 +42,7 @@ export function setAnalyticsEnabled(enabled: boolean) {
     if (typeof window === "undefined") return;
     try {
         localStorage.setItem(OPT_IN_KEY, enabled ? "1" : "0");
+        window.dispatchEvent(new CustomEvent<boolean>(ANALYTICS_CONSENT_EVENT, { detail: enabled }));
     } catch {}
 }
 

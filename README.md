@@ -283,7 +283,7 @@ Click any message → Branch → create an alternate timeline from that point. B
   PDF/DOCX → chunks → MiniLM embeds → Voy + BM25 → RRF → MMR → context
 ```
 
-Local by default. Search, image and cloud paths are explicit. Other network-dependent paths are first-time model/embedding downloads, Pyodide and package downloads, remote Ollama servers, optional telemetry, and browser speech implementations that use an online service.
+Local by default. Search, image and cloud paths are explicit. Other network-dependent paths are first-time model/embedding downloads, Pyodide and package downloads, remote Ollama servers, optional page-view/funnel telemetry, and browser speech implementations that use an online service.
 
 ---
 
@@ -309,7 +309,7 @@ Model weights and RAG vectors are cached for reuse. Browsers can evict either ca
 | Image prompts              | N0X API route, then Pollinations and, on the configured path, AI Horde     |
 | Cloud API prompts          | The OpenAI-compatible endpoint you configure                               |
 | Voice input/output         | Browser Web Speech implementation; it may use an online vendor service     |
-| Funnel telemetry           | N0X analytics route only after explicit opt-in                             |
+| Opt-in telemetry           | Sanitized page views to Vercel; funnel events to the N0X analytics route   |
 
 After dependencies are cached, local chat and document retrieval can work without enabling search, images, cloud, or telemetry. That is not an air-gap guarantee: uncached assets, Pyodide packages, remote Ollama, and some browser speech implementations still use the network.
 

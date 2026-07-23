@@ -194,8 +194,8 @@ export function Onboarding({ onComplete, chromeAIAvailable }: OnboardingProps) {
                             className="mt-0.5 h-4 w-4 rounded border-zinc-700 bg-zinc-900"
                         />
                         <span className="text-[11px] leading-relaxed text-zinc-400">
-                            Share anonymous product telemetry. No prompts, responses, file names, document text, or API
-                            keys are collected.
+                            Share anonymous page views and product telemetry. No prompts, responses, file names,
+                            document text, or API keys are collected.
                         </span>
                     </label>
                 </div>

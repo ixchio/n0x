@@ -50,4 +50,32 @@ describe("service worker activation", () => {
         expect(deleteCache).not.toHaveBeenCalledWith("mlc-ai-model-cache");
         expect(claim).toHaveBeenCalledOnce();
     });
+
+    it("does not cache or intercept Vercel Analytics traffic", () => {
+        const listeners = new Map<string, (event: unknown) => void>();
+        const workerSource = fs.readFileSync(new URL("../public/sw.js", import.meta.url), "utf8");
+
+        vm.runInNewContext(workerSource, {
+            self: {
+                addEventListener: (name: string, listener: (event: unknown) => void) => listeners.set(name, listener),
+                skipWaiting: vi.fn(),
+                clients: { claim: vi.fn() },
+                location: { origin: "https://n0x.test" },
+            },
+            caches: { open: vi.fn(), match: vi.fn(), keys: vi.fn(), delete: vi.fn() },
+            Promise,
+            URL,
+        });
+
+        const respondWith = vi.fn();
+        listeners.get("fetch")?.({
+            request: {
+                url: "https://n0x.test/_vercel/insights/script.js",
+                mode: "cors",
+            },
+            respondWith,
+        });
+
+        expect(respondWith).not.toHaveBeenCalled();
+    });
 });

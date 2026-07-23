@@ -37,12 +37,12 @@ export default function SecurityPage() {
                 "Inline run buttons block obvious desktop/server modules as a guardrail. Review generated code and use a separate origin for hostile input.",
         },
         {
-            surface: "API routes",
+            surface: "API routes and analytics",
             boundary:
-                "/api/deep-search, /api/image-gen, and /api/analytics are server routes for optional network features.",
-            risk: "Search queries, image prompts, and opt-in analytics events leave the device when those features are used.",
+                "/api/deep-search, /api/image-gen, and /api/analytics are server routes. Opt-in page views use Vercel Web Analytics.",
+            risk: "Search queries, image prompts, and opt-in page views or funnel events leave the device when those features are used.",
             mitigation:
-                "Routes use best-effort in-memory rate limits. Prompt text, document text, file names, API keys, and memory contents are excluded from analytics payloads.",
+                "Routes use best-effort in-memory rate limits. Analytics strips non-attribution query values and excludes prompt text, document text, file names, API keys, and memory contents.",
         },
         {
             surface: "Content Security Policy",

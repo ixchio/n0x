@@ -16,7 +16,7 @@ const limits = [
     "RAG extracts text, not full visual understanding of scanned images or diagrams.",
     "In-memory serverless rate limits are best-effort and reset per deployment instance.",
     "Generated code and HTML previews should be reviewed before trusting their behavior.",
-    "Opt-in telemetry records funnel events only; it is not a full analytics warehouse.",
+    "Opt-in telemetry records sanitized page views and funnel events only; it is not a full analytics warehouse.",
 ];
 
 export default function KnownLimitationsPage() {
