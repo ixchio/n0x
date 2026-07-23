@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { AnalyticsPreferences } from "@/components/system/analytics-preferences";
 
 export const metadata = {
     title: "Privacy | N0X",
@@ -74,6 +75,7 @@ export default function PrivacyPage() {
                         ref/UTM attribution; other query values and URL fragments are removed. Telemetry does not send
                         prompts, responses, document text, file names, API keys, or memory content.
                     </p>
+                    <AnalyticsPreferences />
                 </section>
             </div>
         </main>
