@@ -3,6 +3,7 @@
 import { useCallback, useRef, useState } from "react";
 import { useWebLLM } from "@/lib/providers/useWebLLM";
 import { useDeepSearch } from "@/lib/retrieval/useDeepSearch";
+import { formatRagEvidence, type RAGSearchResult } from "@/lib/retrieval/rag-evidence";
 import { useMemory } from "@/lib/memory/useMemory";
 import { usePyodide } from "@/lib/runtime/usePyodide";
 import { useTTS } from "@/lib/media/useTTS";
@@ -11,27 +12,32 @@ import { createChatMessageId, type ChatMessageMeta, useChatStore } from "@/lib/c
 import { useSystemPrompt } from "@/lib/chat/useSystemPrompt";
 import { tick as keySoundTick } from "@/lib/media/useKeySound";
 import { useAgent, type AgentToolkit } from "@/lib/runtime/useAgent";
+import { canExposeAgentPython, requestAgentPythonApproval } from "@/lib/runtime/pythonPermission";
+import { requestAgentSearchApproval } from "@/lib/runtime/networkPermission";
 import {
     createExecutionPlan,
     createExecutionRequestId,
     executionPlanToMessageMeta,
     getExecutionReadiness,
+    isNetworkedEndpoint,
     type ExecutionPlan,
-    type ExecutionSourceFlags,
     type TextExecutionProvider,
 } from "@/lib/chat/executionPlan";
 import {
     createActiveExecutionRuntime,
+    createLiveContentScheduler,
     getProviderSnapshot,
     isAbortError,
+    isRetryableExecutionError,
     providerUnavailableHint,
     type ActiveExecutionRuntime,
     type GatheredContext,
     type ImageGenProgress,
+    type ObservedExecutionSources,
 } from "@/lib/chat/executionRuntime";
 import { buildExecutionMessages, CHARS_PER_TOKEN } from "@/lib/chat/executionPrompt";
 import { imageCaption, imageProviderModel, requestImageGeneration } from "@/lib/chat/imageGeneration";
-import { getExecutionRequestOptions } from "@/lib/chat/executionRequest";
+import { getExecutionRequestOptions, shouldUseDocumentContext } from "@/lib/chat/executionRequest";
 import { formatAgentSearchContext, formatDirectSearchContext } from "@/lib/chat/searchContext";
 import { type RouteDecision } from "@/lib/chat/useAutoRouter";
 import { trackFirstMessage } from "@/lib/core/analytics";
@@ -39,7 +45,40 @@ import { logger } from "@/lib/core/logger";
 
 export { buildExecutionMessages, type BuildExecutionMessagesInput } from "@/lib/chat/executionPrompt";
 
-export function useChat(providerCtx?: { provider: TextExecutionProvider; ollama: any; cloudAI: any; chromeAI?: any }) {
+function runtimeMessageMeta(plan: ExecutionPlan, execution: ActiveExecutionRuntime): ChatMessageMeta {
+    const observed = execution.observedSources;
+    const planned = executionPlanToMessageMeta(plan, observed);
+    const providerUsesNetwork =
+        plan.provider === "cloud" ||
+        plan.provider === "image" ||
+        (plan.provider === "ollama" && isNetworkedEndpoint(plan.endpoint));
+    const privacy =
+        plan.provider === "cloud" || plan.provider === "image"
+            ? "cloud"
+            : providerUsesNetwork || execution.networkUsed
+              ? "mixed"
+              : "local";
+
+    return {
+        ...planned,
+        privacy,
+        usedSearch: observed.search,
+        usedDocs: observed.documents,
+        usedMemory: observed.memory,
+        usedPython: observed.python,
+        ...(execution.documentEvidence.length > 0
+            ? { citations: execution.documentEvidence.map(citation => ({ ...citation })) }
+            : {}),
+    };
+}
+
+export function useChat(providerCtx?: {
+    provider: TextExecutionProvider;
+    ollama: any;
+    cloudAI: any;
+    chromeAI?: any;
+    pythonEnabled?: boolean;
+}) {
     const [input, setInput] = useState("");
     const [streamingContent, setStreamingContent] = useState("");
     const [deepSearchEnabled, setDeepSearchEnabled] = useState(false);
@@ -67,36 +106,58 @@ export function useChat(providerCtx?: { provider: TextExecutionProvider; ollama:
     }, []);
 
     const setLiveContent = useCallback((plan: Pick<ExecutionPlan, "requestId">, content: string) => {
-        if (activeExecutionRef.current?.plan.requestId === plan.requestId) setStreamingContent(content);
+        const execution = activeExecutionRef.current;
+        if (execution?.plan.requestId !== plan.requestId) return;
+        execution.liveContent?.schedule(content);
+    }, []);
+
+    const flushLiveContent = useCallback((plan: Pick<ExecutionPlan, "requestId">, content?: string) => {
+        const execution = activeExecutionRef.current;
+        if (execution?.plan.requestId !== plan.requestId) return;
+        execution.liveContent?.flush(content);
     }, []);
 
     const markExecutionSources = useCallback(
-        (requestId: string, sources: Partial<ExecutionSourceFlags>, options: { networkUsed?: boolean } = {}) => {
+        (requestId: string, sources: Partial<ObservedExecutionSources>, options: { networkUsed?: boolean } = {}) => {
             const execution = activeExecutionRef.current;
             if (execution?.plan.requestId !== requestId) return;
             execution.observedSources = { ...execution.observedSources, ...sources };
             if (options.networkUsed) execution.networkUsed = true;
-            const plannedMeta = executionPlanToMessageMeta(execution.plan, execution.observedSources);
-            setActiveExecutionMeta({
-                ...plannedMeta,
-                privacy: execution.networkUsed && plannedMeta.privacy === "local" ? "mixed" : plannedMeta.privacy,
-            });
+            setActiveExecutionMeta(runtimeMessageMeta(execution.plan, execution));
         },
         []
     );
 
     const getExecutionMeta = useCallback((plan: ExecutionPlan): ChatMessageMeta => {
         const execution = activeExecutionRef.current;
-        const observed = execution?.plan.requestId === plan.requestId ? execution.observedSources : undefined;
-        const meta = executionPlanToMessageMeta(plan, observed);
-        if (execution?.plan.requestId === plan.requestId && execution.networkUsed && meta.privacy === "local") {
-            return { ...meta, privacy: "mixed" };
+        let meta: ChatMessageMeta = executionPlanToMessageMeta(plan);
+        if (execution?.plan.requestId === plan.requestId) {
+            meta = runtimeMessageMeta(plan, execution);
         }
         return meta;
     }, []);
 
+    const recordDocumentEvidence = useCallback((plan: Pick<ExecutionPlan, "requestId">, results: RAGSearchResult[]) => {
+        const execution = activeExecutionRef.current;
+        if (execution?.plan.requestId !== plan.requestId) return;
+        const existing = new Map(
+            execution.documentEvidence.map(citation => [`${citation.documentId}:${citation.chunkIndex}`, citation])
+        );
+        for (const result of results) {
+            existing.set(`${result.documentId}:${result.chunkIndex}`, {
+                documentId: result.documentId,
+                documentName: result.documentName,
+                chunkIndex: result.chunkIndex,
+                text: result.text,
+                relevance: { ...result.relevance },
+            });
+        }
+        execution.documentEvidence = [...existing.values()];
+    }, []);
+
     const finishExecution = useCallback((plan: Pick<ExecutionPlan, "requestId">) => {
         if (activeExecutionRef.current?.plan.requestId !== plan.requestId) return;
+        activeExecutionRef.current.liveContent?.cancel();
         activeExecutionRef.current = null;
         setActiveExecutionPlan(current => (current?.requestId === plan.requestId ? null : current));
         setActiveExecutionMeta(current => (current?.requestId === plan.requestId ? undefined : current));
@@ -108,10 +169,14 @@ export function useChat(providerCtx?: { provider: TextExecutionProvider; ollama:
             const toolkit: AgentToolkit = {};
 
             if (plan.sourceFlags.search) {
-                toolkit.webSearch = async (query: string) => {
-                    markExecutionSources(plan.requestId, { search: true }, { networkUsed: true });
+                toolkit.webSearch = async (query: string, signal?: AbortSignal) => {
                     try {
-                        const result = await deepSearch.search(query);
+                        if (!requestAgentSearchApproval(query)) {
+                            return "[Permission denied] The search query stayed in this browser.";
+                        }
+                        if (signal?.aborted) return "[Cancelled]";
+                        markExecutionSources(plan.requestId, { search: true }, { networkUsed: true });
+                        const result = await deepSearch.search(query, signal);
                         if (!result || result.noUsefulResults) {
                             if (isCurrentExecution(plan)) deepSearch.reset();
                             return "Search returned no relevant sources. Try more specific search terms.";
@@ -127,22 +192,29 @@ export function useChat(providerCtx?: { provider: TextExecutionProvider; ollama:
             }
 
             if (plan.sourceFlags.documents) {
-                toolkit.ragSearch = async (query: string) => {
+                toolkit.ragSearch = async (query: string, signal?: AbortSignal) => {
                     markExecutionSources(plan.requestId, { documents: true });
                     try {
-                        return (
-                            (await rag.getFileContext(query)) || "No relevant content found in the uploaded documents."
-                        );
+                        if (signal?.aborted) return "[Cancelled]";
+                        const evidence = await rag.search(query, 4);
+                        if (signal?.aborted) return "[Cancelled]";
+                        recordDocumentEvidence(plan, evidence);
+                        const result = formatRagEvidence(evidence);
+                        return signal?.aborted
+                            ? "[Cancelled]"
+                            : result || "No relevant content found in the uploaded documents.";
                     } catch (error: any) {
                         return `Document search failed: ${error.message}`;
                     }
                 };
             }
 
-            if (pyodide.isReady) {
-                toolkit.python = async (code: string) => {
+            if (plan.sourceFlags.python) {
+                toolkit.requestPythonApproval = requestAgentPythonApproval;
+                toolkit.python = async (code: string, signal?: AbortSignal) => {
                     try {
-                        const result = await pyodide.run(code);
+                        markExecutionSources(plan.requestId, { python: true });
+                        const result = await pyodide.run(code, { signal, timeoutMs: 45_000 });
                         if (result.error) return `Python error:\n${result.error}`;
                         return result.output || "(code ran successfully, no output)";
                     } catch (error: any) {
@@ -152,10 +224,12 @@ export function useChat(providerCtx?: { provider: TextExecutionProvider; ollama:
             }
 
             if (plan.sourceFlags.memory && memory.isLoaded) {
-                toolkit.memorySave = async (content: string) => {
+                toolkit.memorySave = async (content: string, signal?: AbortSignal) => {
                     try {
-                        await memory.saveMemory(content, ["agent"]);
-                        return "Saved to memory.";
+                        if (signal?.aborted) return "[Cancelled]";
+                        const saved = await memory.saveMemory(content, ["agent"]);
+                        if (signal?.aborted) return "[Cancelled]";
+                        return saved ? "Saved to memory." : "Failed to save memory.";
                     } catch {
                         return "Failed to save memory.";
                     }
@@ -168,33 +242,30 @@ export function useChat(providerCtx?: { provider: TextExecutionProvider; ollama:
 
             return toolkit;
         },
-        [deepSearch, isCurrentExecution, markExecutionSources, memory, pyodide, rag]
+        [deepSearch, isCurrentExecution, markExecutionSources, memory, pyodide, rag, recordDocumentEvidence]
     );
 
     const gatherContext = useCallback(
         async (plan: ExecutionPlan, message: string): Promise<GatheredContext> => {
             let ragCtx = "";
+            let documentEvidence: RAGSearchResult[] = [];
             const hasDocuments = plan.sourceFlags.documents;
 
             if (hasDocuments) {
+                markExecutionSources(plan.requestId, { documents: true });
                 setLiveContent(plan, "⟳ reading your documents...");
                 try {
-                    ragCtx = await rag.getFileContext(message);
+                    documentEvidence = await rag.search(message, 4);
+                    recordDocumentEvidence(plan, documentEvidence);
+                    ragCtx = formatRagEvidence(documentEvidence);
                 } catch (error) {
                     logger.error("RAG context failed:", error);
-                    try {
-                        const chunks = await rag.search(message, 4);
-                        ragCtx = chunks
-                            .filter((chunk: string) => chunk && chunk.trim().length > 20)
-                            .map((chunk: string, index: number) => `[Doc ${index + 1}] ${chunk.trim()}`)
-                            .join("\n\n");
-                    } catch {
-                        // Continue without document context.
-                    }
+                    // Continue without document context.
                 }
             }
 
             const memCtx = plan.sourceFlags.memory ? memory.getContext(message) : "";
+            if (memCtx) markExecutionSources(plan.requestId, { memory: true });
             let searchCtx = "";
 
             if (plan.sourceFlags.search && isCurrentExecution(plan)) {
@@ -210,9 +281,9 @@ export function useChat(providerCtx?: { provider: TextExecutionProvider; ollama:
                 }
             }
 
-            return { ragCtx, memCtx, searchCtx, hasDocuments };
+            return { ragCtx, memCtx, searchCtx, hasDocuments, documentEvidence };
         },
-        [deepSearch, isCurrentExecution, markExecutionSources, memory, rag, setLiveContent]
+        [deepSearch, isCurrentExecution, markExecutionSources, memory, rag, recordDocumentEvidence, setLiveContent]
     );
 
     const handleImageGen = useCallback(
@@ -293,8 +364,9 @@ export function useChat(providerCtx?: { provider: TextExecutionProvider; ollama:
                 message,
                 agentEnabled: agent.enabled,
                 deepSearchEnabled,
-                hasDocuments: rag.documents.length > 0,
+                hasDocuments: shouldUseDocumentContext(rag.ragEnabled, rag.documents.length),
                 memoryEnabled,
+                pythonEnabled: canExposeAgentPython(providerCtx?.pythonEnabled === true, pyodide.isReady),
             });
             const providers = getProviderSnapshot();
 
@@ -311,9 +383,12 @@ export function useChat(providerCtx?: { provider: TextExecutionProvider; ollama:
                 mode,
             });
             const execution = createActiveExecutionRuntime(plan);
+            execution.liveContent = createLiveContentScheduler(content => {
+                if (activeExecutionRef.current?.plan.requestId === plan.requestId) setStreamingContent(content);
+            });
             activeExecutionRef.current = execution;
             setActiveExecutionPlan(plan);
-            setActiveExecutionMeta(executionPlanToMessageMeta(plan));
+            setActiveExecutionMeta(runtimeMessageMeta(plan, execution));
             setLastRouteDecision(plan.route);
 
             trackFirstMessage({
@@ -323,7 +398,7 @@ export function useChat(providerCtx?: { provider: TextExecutionProvider; ollama:
                 agent: plan.sourceFlags.agent,
             });
 
-            const requestMeta = getExecutionMeta(plan);
+            const requestMeta = executionPlanToMessageMeta(plan);
             chatStore.addMessageToConversation(plan.conversationId, {
                 role: "user",
                 content: message,
@@ -389,6 +464,7 @@ export function useChat(providerCtx?: { provider: TextExecutionProvider; ollama:
                         content: finalAnswer,
                         meta: getExecutionMeta(plan),
                     });
+                    flushLiveContent(plan, finalAnswer);
                     finishExecution(plan);
                     if (tts.isEnabled) tts.speak(finalAnswer);
                 } catch (error: any) {
@@ -405,7 +481,13 @@ export function useChat(providerCtx?: { provider: TextExecutionProvider; ollama:
                 return;
             }
 
-            let context: GatheredContext = { ragCtx: "", memCtx: "", searchCtx: "", hasDocuments: false };
+            let context: GatheredContext = {
+                ragCtx: "",
+                memCtx: "",
+                searchCtx: "",
+                hasDocuments: false,
+                documentEvidence: [],
+            };
             try {
                 context = await gatherContext(plan, message);
             } catch (error) {
@@ -440,11 +522,13 @@ export function useChat(providerCtx?: { provider: TextExecutionProvider; ollama:
                     });
                     if (!isCurrentExecution(plan)) return;
                     const full = execution.partialContent || generated;
+                    flushLiveContent(plan, full);
+                    const finalizedMeta = getExecutionMeta(plan);
 
                     chatStore.addMessageToConversation(plan.conversationId, {
                         role: "assistant",
                         content: full,
-                        meta: getExecutionMeta(plan),
+                        meta: finalizedMeta,
                     });
                     deepSearch.reset();
                     if (context.hasDocuments) rag.clearPending();
@@ -452,13 +536,12 @@ export function useChat(providerCtx?: { provider: TextExecutionProvider; ollama:
 
                     if (memoryEnabled && full.length > 50 && !full.startsWith("⚠️")) {
                         const summary = `Q: ${message.slice(0, 200)}\nA: ${full.slice(0, 500)}`;
-                        const tags = ["chat", "auto"];
-                        if (plan.provider === "cloud") tags.push("cloud");
-                        else tags.push("local");
-                        if (plan.sourceFlags.search) tags.push("search");
+                        const tags = ["chat", "auto", finalizedMeta.privacy || plan.privacy];
+                        if (finalizedMeta.usedSearch) tags.push("search");
                         if (context.hasDocuments) tags.push("rag");
                         try {
-                            await memory.saveMemory(summary, tags);
+                            const saved = await memory.saveMemory(summary, tags);
+                            if (!saved) logger.warn("Memory auto-save failed: browser storage rejected the write.");
                         } catch (error) {
                             logger.warn("Memory save failed (non-fatal):", error);
                         }
@@ -477,9 +560,8 @@ export function useChat(providerCtx?: { provider: TextExecutionProvider; ollama:
                     logger.error(`Generation error (attempt ${retryCount}/${maxRetries + 1}):`, error);
                     const errorMessage = String(error?.message || "");
                     const isNetworkError = /fetch|network|timeout/i.test(errorMessage);
-                    const isServerError = /\b50[023]\b/.test(errorMessage);
 
-                    if (retryCount <= maxRetries && (isNetworkError || isServerError)) {
+                    if (retryCount <= maxRetries && isRetryableExecutionError(plan, error)) {
                         setLiveContent(plan, `⟳ Retrying (${retryCount}/${maxRetries})...`);
                         await new Promise(resolve => setTimeout(resolve, 1_000 * retryCount));
                         continue;
@@ -514,6 +596,7 @@ export function useChat(providerCtx?: { provider: TextExecutionProvider; ollama:
             deepSearch,
             deepSearchEnabled,
             finishExecution,
+            flushLiveContent,
             gatherContext,
             getExecutionMeta,
             handleImageGen,
@@ -524,6 +607,8 @@ export function useChat(providerCtx?: { provider: TextExecutionProvider; ollama:
             memoryEnabled,
             persona.systemPrompt,
             providerCtx?.provider,
+            providerCtx?.pythonEnabled,
+            pyodide.isReady,
             rag,
             setLiveContent,
             tts,
@@ -538,6 +623,7 @@ export function useChat(providerCtx?: { provider: TextExecutionProvider; ollama:
         const meta = getExecutionMeta(plan);
 
         execution.stop();
+        flushLiveContent(plan, execution.partialContent);
         if (execution.observedSources.search || deepSearch.isActive) deepSearch.stop();
         if (plan.mode === "agent") agent.abort();
 
@@ -562,7 +648,7 @@ export function useChat(providerCtx?: { provider: TextExecutionProvider; ollama:
         setGeneratingImage(false);
         setImageProgress({ active: false });
         finishExecution(plan);
-    }, [agent, chatStore, deepSearch, finishExecution, getExecutionMeta]);
+    }, [agent, chatStore, deepSearch, finishExecution, flushLiveContent, getExecutionMeta]);
 
     const handleNewChat = useCallback(() => {
         if (activeExecutionRef.current) handleStop();

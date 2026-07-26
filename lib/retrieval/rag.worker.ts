@@ -7,6 +7,22 @@ import {
     limitExtractedText,
     validateRagFile,
 } from "@/lib/retrieval/file-policy";
+import {
+    CACHE_VERSION,
+    clearVectorsCache,
+    createDocumentId,
+    deleteVectorsFromCache,
+    getCachedVectors,
+    saveVectorsToCache,
+} from "@/lib/retrieval/rag-cache";
+import {
+    calculateBm25Scores,
+    hasSufficientEvidence,
+    isWholeDocumentQuery,
+    selectDiverseWholeDocumentEvidence,
+    type RAGRelevanceScores,
+    type RAGSearchResult,
+} from "@/lib/retrieval/rag-evidence";
 
 // N0X RAG Worker v2 - BULLETPROOF EDITION
 // Complete rewrite focused on:
@@ -25,6 +41,9 @@ const RESOURCE_NAME = "Xenova/all-MiniLM-L6-v2";
 
 // Typed chunk storage with validation
 interface ChunkEntry {
+    documentId: string;
+    documentName: string;
+    chunkIndex: number;
     text: string;
     embedding: number[];
 }
@@ -33,134 +52,24 @@ const chunkStore = new Map<string, ChunkEntry>();
 
 const MAX_DIRECT_INJECT_SIZE = 8000;
 
-// --- IndexedDB Caching with validation ---
-const DB_NAME = "n0x_rag_cache";
-const STORE_NAME = "vectors";
-const CACHE_VERSION = 2; // Bump to invalidate old incompatible caches
-
-interface CachedData {
-    version: number;
-    serializedVoy: string;
-    chunks: [string, ChunkEntry][];
-    timestamp: number;
-}
-
-function openDB(): Promise<IDBDatabase> {
-    return new Promise((resolve, reject) => {
-        const req = indexedDB.open(DB_NAME, 1);
-        req.onerror = () => reject(req.error);
-        req.onsuccess = () => resolve(req.result);
-        req.onupgradeneeded = e => {
-            const db = (e.target as IDBOpenDBRequest).result;
-            if (!db.objectStoreNames.contains(STORE_NAME)) {
-                db.createObjectStore(STORE_NAME, { keyPath: "id" });
-            }
-        };
-    });
-}
-
-async function getCachedVectors(fileId: string): Promise<CachedData | null> {
-    let db: IDBDatabase | null = null;
-    try {
-        db = await openDB();
-        return new Promise((resolve, reject) => {
-            const tx = db!.transaction(STORE_NAME, "readonly");
-            const store = tx.objectStore(STORE_NAME);
-            const req = store.get(fileId);
-
-            req.onsuccess = () => {
-                const result = req.result?.data;
-                // Validate cache version and structure
-                if (
-                    result &&
-                    result.version === CACHE_VERSION &&
-                    result.serializedVoy &&
-                    Array.isArray(result.chunks)
-                ) {
-                    resolve(result);
-                } else {
-                    resolve(null); // Invalid cache, will regenerate
-                }
-            };
-            req.onerror = () => resolve(null);
-            tx.oncomplete = () => db?.close();
-            tx.onerror = () => {
-                db?.close();
-                reject(tx.error);
-            };
-        });
-    } catch (e) {
-        console.warn("Cache read failed:", e);
-        return null;
-    } finally {
-        if (db) db.close();
-    }
-}
-
-async function saveVectorsToCache(
-    fileId: string,
-    serializedVoy: string,
-    chunks: [string, ChunkEntry][]
-): Promise<void> {
-    let db: IDBDatabase | null = null;
-    try {
-        db = await openDB();
-        const data: CachedData = {
-            version: CACHE_VERSION,
-            serializedVoy,
-            chunks,
-            timestamp: Date.now(),
-        };
-
-        return new Promise((resolve, reject) => {
-            const tx = db!.transaction(STORE_NAME, "readwrite");
-            tx.objectStore(STORE_NAME).put({ id: fileId, data });
-            tx.oncomplete = () => {
-                db?.close();
-                resolve();
-            };
-            tx.onerror = () => {
-                db?.close();
-                reject(tx.error);
-            };
-        });
-    } catch (e) {
-        console.warn("Cache save failed (non-fatal):", e);
-        if (db) db.close();
-    }
-}
-
-async function clearVectorsCache(): Promise<void> {
-    let db: IDBDatabase | null = null;
-    try {
-        db = await openDB();
-        return new Promise((resolve, reject) => {
-            const tx = db!.transaction(STORE_NAME, "readwrite");
-            tx.objectStore(STORE_NAME).clear();
-            tx.oncomplete = () => {
-                db?.close();
-                resolve();
-            };
-            tx.onerror = () => {
-                db?.close();
-                reject(tx.error);
-            };
-        });
-    } catch (e) {
-        console.warn("Cache clear failed:", e);
-        if (db) db.close();
-    }
-}
-
-async function loadDeps(): Promise<void> {
+async function loadPdfDependency(): Promise<void> {
     if (!pdfjsLib) {
         pdfjsLib = await import("pdfjs-dist");
-        pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
+        pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+            "pdfjs-dist/build/pdf.worker.min.mjs",
+            import.meta.url
+        ).toString();
     }
+}
+
+async function loadVoyDependency(): Promise<void> {
     if (!VoyClass) {
         const voyModule = await import("voy-search");
         VoyClass = voyModule.Voy;
     }
+}
+
+async function loadEmbeddingDependency(): Promise<void> {
     if (!pipelineFn) {
         const transformers = await import("@huggingface/transformers");
         transformers.env.allowLocalModels = false;
@@ -297,7 +206,7 @@ async function extractText(file: File): Promise<string> {
     try {
         // PDF
         if (file.type === "application/pdf" || name.endsWith(".pdf")) {
-            await loadDeps();
+            await loadPdfDependency();
             const arrayBuffer = await file.arrayBuffer();
             const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
             let text = "";
@@ -441,62 +350,7 @@ function cosine(a: number[], b: number[]): number {
     return na === 0 || nb === 0 ? 0 : dot / (Math.sqrt(na) * Math.sqrt(nb));
 }
 
-const BM25_K1 = 1.2;
-const BM25_B = 0.75;
-
-function tokenize(text: string): string[] {
-    return text
-        .toLowerCase()
-        .replace(/[^\w\s]/g, " ")
-        .split(/\s+/)
-        .filter(t => t.length > 1);
-}
-
-function bm25Score(query: string, candidateIds: string[]): Map<string, number> {
-    const queryTerms = tokenize(query);
-    const N = chunkStore.size;
-    const allValues = Array.from(chunkStore.values());
-
-    const avgDl = (() => {
-        let sum = 0;
-        for (let i = 0; i < allValues.length; i++) {
-            sum += tokenize(allValues[i].text).length;
-        }
-        return sum / Math.max(N, 1);
-    })();
-
-    const df = new Map<string, number>();
-    for (const term of queryTerms) {
-        let count = 0;
-        for (let i = 0; i < allValues.length; i++) {
-            if (allValues[i].text.toLowerCase().includes(term)) count++;
-        }
-        df.set(term, count);
-    }
-
-    const scores = new Map<string, number>();
-    for (const id of candidateIds) {
-        const entry = chunkStore.get(id);
-        if (!entry) continue;
-
-        const tokens = tokenize(entry.text);
-        const dl = tokens.length;
-        let score = 0;
-
-        for (const term of queryTerms) {
-            const termFreq = tokens.filter(t => t === term).length;
-            const docFreq = df.get(term) || 0;
-            const idf = Math.log((N - docFreq + 0.5) / (docFreq + 0.5) + 1);
-            score += idf * ((termFreq * (BM25_K1 + 1)) / (termFreq + BM25_K1 * (1 - BM25_B + BM25_B * (dl / avgDl))));
-        }
-
-        scores.set(id, score);
-    }
-
-    return scores;
-}
-
-function rrfFusion(rankings: string[][], k = 60): string[] {
+function rrfFusion(rankings: string[][], k = 60): { ranking: string[]; scores: Map<string, number> } {
     const scores = new Map<string, number>();
     for (const ranking of rankings) {
         for (let i = 0; i < ranking.length; i++) {
@@ -504,9 +358,10 @@ function rrfFusion(rankings: string[][], k = 60): string[] {
             scores.set(id, (scores.get(id) || 0) + 1 / (k + i + 1));
         }
     }
-    return Array.from(scores.entries())
+    const ranking = Array.from(scores.entries())
         .sort((a, b) => b[1] - a[1])
         .map(e => e[0]);
+    return { ranking, scores };
 }
 
 function mmrRerank(queryEmbedding: number[], candidateIds: string[], k: number, lambda = 0.6): string[] {
@@ -565,9 +420,43 @@ function rebuildVoyFromChunks() {
     }
 }
 
+async function restoreIndexedDocuments(value: unknown): Promise<void> {
+    if (!Array.isArray(value)) return;
+    const loadedDocumentIds = new Set(Array.from(chunkStore.values(), entry => entry.documentId));
+    let restored = false;
+
+    for (const candidate of value) {
+        if (!candidate || typeof candidate !== "object") continue;
+        const document = candidate as { id?: unknown; name?: unknown };
+        if (typeof document.id !== "string" || typeof document.name !== "string") continue;
+        if (loadedDocumentIds.has(document.id)) continue;
+
+        try {
+            const cached = await getCachedVectors(document.id);
+            if (!cached || cached.version !== CACHE_VERSION) continue;
+            for (const [chunkId, entry] of cached.chunks) {
+                if (!entry || typeof entry.text !== "string" || !Array.isArray(entry.embedding)) continue;
+                chunkStore.set(chunkId, {
+                    ...entry,
+                    documentId: document.id,
+                    documentName: document.name,
+                });
+                restored = true;
+            }
+        } catch (error) {
+            console.warn("Could not restore an indexed document from browser storage:", error);
+        }
+    }
+
+    if (restored) {
+        await loadVoyDependency();
+        rebuildVoyFromChunks();
+    }
+}
+
 // ── Message Handler ──
 
-self.addEventListener("message", async (e: MessageEvent) => {
+async function handleWorkerMessage(e: MessageEvent) {
     const { action, payload, id } = e.data;
 
     try {
@@ -580,14 +469,13 @@ self.addEventListener("message", async (e: MessageEvent) => {
             }
 
             self.postMessage({ id, status: `Reading ${file.name}...` });
-            await loadDeps();
+            const fileHash = await createDocumentId(file);
 
             const text = await extractText(file);
             if (!text.trim()) {
                 throw new Error("No text content found in file");
             }
 
-            const fileHash = `${file.name}_${file.size}_${file.lastModified}`;
             const docMetadata = {
                 id: fileHash,
                 name: file.name,
@@ -605,22 +493,37 @@ self.addEventListener("message", async (e: MessageEvent) => {
             }
 
             // Check Cache
-            const cached = await getCachedVectors(fileHash);
+            let cached = null;
+            try {
+                cached = await getCachedVectors(fileHash);
+            } catch (cacheError) {
+                console.warn("Cache read failed, regenerating:", cacheError);
+            }
             if (cached && cached.version === CACHE_VERSION) {
                 self.postMessage({ id, status: `Loading cached vectors for ${file.name}...` });
 
                 try {
+                    await loadVoyDependency();
                     // Validate and load chunks
+                    let loadedChunks = 0;
                     for (const [k, v] of cached.chunks) {
                         if (v && typeof v.text === "string" && Array.isArray(v.embedding)) {
-                            chunkStore.set(k, v);
+                            // Content-addressed cache keys survive renames, so citations
+                            // must use the name from the current upload, not a stale cache name.
+                            chunkStore.set(k, {
+                                ...v,
+                                documentId: fileHash,
+                                documentName: file.name,
+                            });
+                            loadedChunks += 1;
                         } else {
                             console.warn(`Invalid cached chunk ${k}, skipping`);
                         }
                     }
+                    if (loadedChunks === 0) throw new Error("Cached vector record contains no searchable chunks");
                     rebuildVoyFromChunks();
 
-                    docMetadata.chunks = cached.chunks.length;
+                    docMetadata.chunks = loadedChunks;
                     docMetadata.rawText = "";
 
                     self.postMessage({ id, result: docMetadata, done: true });
@@ -640,6 +543,8 @@ self.addEventListener("message", async (e: MessageEvent) => {
             }
 
             self.postMessage({ id, status: `Loading Embedding Model...` });
+
+            await Promise.all([loadVoyDependency(), loadEmbeddingDependency()]);
 
             if (!embedder) {
                 const isWebGPU = !!(navigator as any).gpu;
@@ -678,7 +583,13 @@ self.addEventListener("message", async (e: MessageEvent) => {
                         ],
                     });
 
-                    const entry: ChunkEntry = { text: cleanChunk, embedding };
+                    const entry: ChunkEntry = {
+                        documentId: fileHash,
+                        documentName: file.name,
+                        chunkIndex: i + 1,
+                        text: cleanChunk,
+                        embedding,
+                    };
                     chunkStore.set(chunkId, entry);
                     chunkEntries.push([chunkId, entry]);
 
@@ -691,13 +602,24 @@ self.addEventListener("message", async (e: MessageEvent) => {
                 }
             }
 
-            // Save to Cache
+            if (chunkEntries.length === 0) {
+                throw new Error(
+                    `No searchable embeddings could be created for “${file.name}”. The document was not indexed.`
+                );
+            }
+
+            // Persist before reporting success. A large-document attachment
+            // without durable chunks would become a silent ghost after any
+            // worker restart.
             try {
                 self.postMessage({ id, status: `Caching vectors...` });
-                const serialized = voy.serialize();
-                await saveVectorsToCache(fileHash, serialized, chunkEntries);
+                await saveVectorsToCache(fileHash, chunkEntries);
             } catch (serErr) {
-                console.warn("Failed to cache vectors (non-fatal):", serErr);
+                for (const [chunkId] of chunkEntries) chunkStore.delete(chunkId);
+                if (chunkStore.size > 0) rebuildVoyFromChunks();
+                else voy = null;
+                const detail = serErr instanceof Error ? serErr.message : String(serErr);
+                throw new Error(`Could not persist the document index: ${detail}`);
             }
 
             docMetadata.chunks = chunkEntries.length;
@@ -705,14 +627,40 @@ self.addEventListener("message", async (e: MessageEvent) => {
 
             self.postMessage({ id, result: docMetadata, done: true });
         } else if (action === "SEARCH") {
-            const { query, limit = 3 } = payload;
+            const { query, limit = 3, documents } = payload;
+
+            // A worker may be replaced after a timeout/crash while the UI still
+            // has durable, content-addressed attachments. Rebuild its live index
+            // from those exact cache IDs before answering the next search.
+            await restoreIndexedDocuments(documents);
 
             if (!voy || chunkStore.size === 0) {
                 self.postMessage({ id, result: [], done: true });
                 return;
             }
 
+            // A generic summary request needs coverage, not whichever chunks
+            // happen to be closest to the words "summarize this document".
+            // Sample stable beginning/middle/end positions for indexed files,
+            // just as the direct-text path does for smaller documents.
+            if (isWholeDocumentQuery(query)) {
+                const allEvidence: RAGSearchResult[] = Array.from(chunkStore.values()).map(entry => ({
+                    documentId: entry.documentId,
+                    documentName: entry.documentName,
+                    chunkIndex: entry.chunkIndex,
+                    text: entry.text,
+                    relevance: { vector: null, bm25: null, fused: null },
+                }));
+                self.postMessage({
+                    id,
+                    result: selectDiverseWholeDocumentEvidence(allEvidence, limit),
+                    done: true,
+                });
+                return;
+            }
+
             if (!embedder) {
+                await loadEmbeddingDependency();
                 const isWebGPU = !!(navigator as any).gpu;
                 embedder = await pipelineFn("feature-extraction", RESOURCE_NAME, {
                     device: isWebGPU ? "webgpu" : "wasm",
@@ -724,6 +672,10 @@ self.addEventListener("message", async (e: MessageEvent) => {
             const queryEmbedding = Array.from(output.data) as number[];
 
             const poolSize = Math.min(Math.max(limit * 4, 12), chunkStore.size);
+            const allChunkIds = Array.from(chunkStore.keys());
+            const vectorScores = new Map(
+                allChunkIds.map(chunkId => [chunkId, cosine(queryEmbedding, chunkStore.get(chunkId)!.embedding)])
+            );
 
             // Vector ranking
             const rawResults: any = voy.search(queryEmbedding as any, poolSize);
@@ -732,24 +684,56 @@ self.addEventListener("message", async (e: MessageEvent) => {
             const vectorRanking: string[] = cleanHits.map((h: any) => h.id).filter((id: string) => chunkStore.has(id));
 
             // BM25 ranking
-            const allChunkIds = Array.from(chunkStore.keys());
-            const bm25Scores = bm25Score(query, allChunkIds);
+            const bm25Scores = calculateBm25Scores(
+                query,
+                allChunkIds.map(chunkId => ({ id: chunkId, text: chunkStore.get(chunkId)!.text }))
+            );
             const bm25Ranking = Array.from(bm25Scores.entries())
+                .filter(([, score]) => score > 0)
                 .sort((a, b) => b[1] - a[1])
                 .slice(0, poolSize)
                 .map(e => e[0]);
 
             // RRF fusion
-            const fusedIds = rrfFusion([vectorRanking, bm25Ranking]);
+            const fused = rrfFusion([vectorRanking, bm25Ranking]);
+            const evidenceIds = fused.ranking.filter(chunkId => {
+                const entry = chunkStore.get(chunkId);
+                if (!entry) return false;
+                const relevance: RAGRelevanceScores = {
+                    vector: vectorScores.get(chunkId) ?? null,
+                    bm25: bm25Scores.get(chunkId) ?? null,
+                    fused: fused.scores.get(chunkId) ?? null,
+                };
+                return hasSufficientEvidence(query, entry.text, relevance);
+            });
 
             // MMR reranking
-            const rerankedIds = mmrRerank(queryEmbedding, fusedIds, limit);
-            const chunks = rerankedIds.map(cid => chunkStore.get(cid)?.text || "").filter(Boolean);
+            const rerankedIds = mmrRerank(queryEmbedding, evidenceIds, limit);
+            const chunks: RAGSearchResult[] = rerankedIds.flatMap(chunkId => {
+                const entry = chunkStore.get(chunkId);
+                if (!entry) return [];
+                return [
+                    {
+                        documentId: entry.documentId,
+                        documentName: entry.documentName,
+                        chunkIndex: entry.chunkIndex,
+                        text: entry.text,
+                        relevance: {
+                            vector: vectorScores.get(chunkId) ?? null,
+                            bm25: bm25Scores.get(chunkId) ?? null,
+                            fused: fused.scores.get(chunkId) ?? null,
+                        },
+                    },
+                ];
+            });
 
             self.postMessage({ id, result: chunks, done: true });
         } else if (action === "REMOVE_FILE") {
             const { fileKey } = payload;
             if (fileKey) {
+                // IndexedDB is the durable source of truth. Do not mutate the
+                // live index until its persistent record has been deleted.
+                await deleteVectorsFromCache(fileKey);
                 for (const chunkId of Array.from(chunkStore.keys())) {
                     if (chunkId.startsWith(`${fileKey}-`)) {
                         chunkStore.delete(chunkId);
@@ -760,6 +744,8 @@ self.addEventListener("message", async (e: MessageEvent) => {
             }
             self.postMessage({ id, result: true, done: true });
         } else if (action === "CLEAR") {
+            // Commit durable deletion before making the live index appear empty.
+            await clearVectorsCache();
             voy = null;
             chunkStore.clear();
             self.postMessage({ id, result: true, done: true });
@@ -771,4 +757,13 @@ self.addEventListener("message", async (e: MessageEvent) => {
         console.error("Worker Error:", err);
         self.postMessage({ id, error: err.message || "Unknown error", done: true });
     }
+}
+
+// Embedding, search, and destructive cache operations share one in-memory
+// index. Process them in arrival order so a late ADD cannot resurrect content
+// after REMOVE/CLEAR has reported success.
+let workerQueue = Promise.resolve();
+self.addEventListener("message", (event: MessageEvent) => {
+    workerQueue = workerQueue.then(() => handleWorkerMessage(event));
+    return workerQueue;
 });

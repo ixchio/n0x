@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width,initial-scale=1" />
+        <meta name="theme-color" content="#0a0a0a" />
+        <title>N0X is offline</title>
+        <style>
+            :root {
+                color-scheme: dark;
+                font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+                background: #0a0a0a;
+                color: #f4f4f5;
+            }
+            body {
+                min-height: 100vh;
+                margin: 0;
+                display: grid;
+                place-items: center;
+                padding: 24px;
+                box-sizing: border-box;
+            }
+            main {
+                width: min(100%, 520px);
+                border: 1px solid #27272a;
+                border-radius: 16px;
+                background: #111113;
+                padding: 28px;
+            }
+            p {
+                color: #a1a1aa;
+                line-height: 1.6;
+            }
+            a {
+                display: inline-flex;
+                min-height: 44px;
+                align-items: center;
+                margin-top: 8px;
+                border-radius: 8px;
+                background: #fafafa;
+                color: #09090b;
+                padding: 0 16px;
+                font-weight: 700;
+                text-decoration: none;
+            }
+        </style>
+    </head>
+    <body>
+        <main>
+            <small>N0X</small>
+            <h1>You are offline</h1>
+            <p>
+                This page was not cached. Reconnect and retry; previously cached model weights remain separate and are
+                not deleted by app-shell updates.
+            </p>
+            <a href="/chat">Retry the workbench</a>
+        </main>
+    </body>
+</html>

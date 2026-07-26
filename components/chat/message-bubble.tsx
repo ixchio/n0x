@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -35,9 +35,14 @@ import {
     Sparkles,
     Search,
     FileText,
+    HelpCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ChatMessageMeta } from "@/lib/chat/useChatStore";
+import { buildSandboxHtml } from "@/lib/runtime/artifactSandbox";
+import { CitationEvidence } from "@/components/chat/citation-evidence";
+
+export { buildSandboxHtml } from "@/lib/runtime/artifactSandbox";
 
 interface MessageBubbleProps {
     role: "user" | "assistant";
@@ -100,6 +105,83 @@ const PY_BLOCKLIST = [
     "paramiko",
 ];
 
+export function codeResultKey(code: string): string {
+    return code;
+}
+
+function isLocalMarkdownImageSource(src: string): boolean {
+    const source = src.trim();
+    if (!source) return false;
+    // Relative assets and non-network payloads cannot contact a third-party
+    // host. Absolute HTTP(S) URLs always require approval; using a made-up
+    // comparison origin here would let that hostname bypass the gate.
+    if ((source.startsWith("/") && !source.startsWith("//")) || /^\.\.?(?:\/|$)/.test(source)) return true;
+    return source.startsWith("data:") || source.startsWith("blob:");
+}
+
+function externalImageHost(src: string): string {
+    try {
+        const url = new URL(src);
+        return url.protocol === "http:" || url.protocol === "https:" ? url.hostname : "external source";
+    } catch {
+        return "external source";
+    }
+}
+
+function SafeMarkdownImage({ src = "", alt = "", ...props }: React.ComponentPropsWithoutRef<"img">) {
+    const [approved, setApproved] = useState(false);
+    const source = typeof src === "string" ? src : "";
+
+    if (isLocalMarkdownImageSource(source)) {
+        return <img {...props} src={source} alt={alt} loading="lazy" decoding="async" />;
+    }
+
+    if (!approved) {
+        return (
+            <span className="not-prose my-3 flex flex-wrap items-center gap-3 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-amber-100">
+                <EyeOff className="h-4 w-4 shrink-0" aria-hidden="true" />
+                <span className="min-w-0 flex-1">
+                    External image blocked
+                    <span className="ml-1 text-amber-200/70">({externalImageHost(source)})</span>
+                </span>
+                <button
+                    type="button"
+                    onClick={() => setApproved(true)}
+                    className="min-h-11 rounded-md border border-amber-400/30 px-3 py-2 font-medium text-amber-100 transition hover:bg-amber-400/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-200"
+                >
+                    Load once
+                </button>
+            </span>
+        );
+    }
+
+    return (
+        <img
+            {...props}
+            src={source}
+            alt={alt}
+            loading="lazy"
+            decoding="async"
+            crossOrigin="anonymous"
+            referrerPolicy="no-referrer"
+        />
+    );
+}
+
+function SafeMarkdownLink({ href = "", children, ...props }: React.ComponentPropsWithoutRef<"a">) {
+    const external = /^(?:https?:)?\/\//i.test(href);
+    return (
+        <a
+            {...props}
+            href={href}
+            target={external ? "_blank" : undefined}
+            rel={external ? "noopener noreferrer" : undefined}
+        >
+            {children}
+        </a>
+    );
+}
+
 function canRunPython(code: string): boolean {
     const importRe = /(?:^|\n)\s*(?:import|from)\s+([\w.]+)/g;
     let m;
@@ -111,50 +193,11 @@ function canRunPython(code: string): boolean {
     return !modules.some(mod => PY_BLOCKLIST.includes(mod));
 }
 
-function buildSandboxHtml(code: string, lang: string): string {
-    const l = lang.toLowerCase();
-
-    if (l === "javascript" || l === "js") {
-        return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
-body { background:#0a0a0a; color:#f3f4f6; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; padding:12px; margin:0; font-size:13px; }
-pre { white-space:pre-wrap; word-break:break-word; margin:0; font-family:"JetBrains Mono",monospace; }
-.err { color:#ef4444; }
-</style></head><body><pre id="out"></pre><script>
-const _log=console.log, _err=console.error, out=document.getElementById('out');
-console.log=(...a)=>{out.textContent+=a.map(x=>typeof x==='object'?JSON.stringify(x,null,2):String(x)).join(' ')+'\\n';_log(...a);};
-console.error=(...a)=>{const s=document.createElement('span');s.className='err';s.textContent=a.join(' ')+'\\n';out.appendChild(s);_err(...a);};
-try{${code}}catch(e){console.error(e.message)}
-</script></body></html>`;
-    }
-
-    if (l === "css") {
-        return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
-body{background:#0a0a0a;margin:0;padding:20px;font-family:sans-serif;color:#e0e0e0}
-${code}
-</style></head><body>
-<div class="demo"><h2>CSS Preview</h2><p>This is a paragraph.</p><button>Button</button><a href="#">Link</a>
-<ul><li>Item one</li><li>Item two</li><li>Item three</li></ul></div>
-</body></html>`;
-    }
-
-    if (l === "html" || l === "htm") {
-        const hasDoctype = code.toLowerCase().includes("<!doctype") || code.toLowerCase().includes("<html");
-        if (hasDoctype) return code;
-        return `<!DOCTYPE html><html><head><meta charset="utf-8">
-<style>body{background:#0a0a0a;color:#e0e0e0;font-family:sans-serif;margin:0;padding:16px}</style>
-<script>window.onerror=function(m){document.body.innerHTML='<pre style="color:#ef4444;padding:20px">'+m+'</pre>';}</script>
-</head><body>${code}</body></html>`;
-    }
-
-    return "";
-}
-
 const CodeBlock = ({ children, className, onRunCode, codeResults, runningCode, handleRunCode, ...props }: any) => {
     const match = /language-(\w+)/.exec(className || "");
     const code = String(children).replace(/\n$/, "");
     const [copied, setCopied] = useState(false);
     const [showPreview, setShowPreview] = useState(false);
-    const iframeRef = useRef<HTMLIFrameElement>(null);
 
     const lang = match?.[1]?.toLowerCase() || "";
     const isPython = lang === "python" || lang === "py";
@@ -182,24 +225,10 @@ const CodeBlock = ({ children, className, onRunCode, codeResults, runningCode, h
     };
 
     const handlePreview = () => {
-        const next = !showPreview;
-        setShowPreview(next);
-
-        if (next && isWeb) {
-            setTimeout(() => {
-                if (iframeRef.current) {
-                    const doc = iframeRef.current.contentDocument;
-                    if (doc) {
-                        doc.open();
-                        doc.write(buildSandboxHtml(code, lang));
-                        doc.close();
-                    }
-                }
-            }, 50);
-        }
+        setShowPreview(current => !current);
     };
 
-    const codeId = code.slice(0, 50);
+    const codeId = codeResultKey(code);
     const result = codeResults?.[codeId];
     const isRunning = runningCode === codeId;
 
@@ -278,8 +307,9 @@ const CodeBlock = ({ children, className, onRunCode, codeResults, runningCode, h
             {showPreview && isWeb && (
                 <div className={cn("relative bg-white w-full", isArtifact ? "h-[500px]" : "h-[400px]")}>
                     <iframe
-                        ref={iframeRef}
-                        sandbox="allow-scripts allow-popups allow-forms"
+                        sandbox="allow-scripts"
+                        srcDoc={buildSandboxHtml(code, lang)}
+                        referrerPolicy="no-referrer"
                         className="w-full h-full border-0 absolute inset-0"
                         title={`${lang} preview`}
                     />
@@ -323,18 +353,20 @@ function MessageMetaBadge({ meta, align = "left" }: { meta?: ChatMessageMeta; al
         privacy === "cloud"
             ? "CLOUD"
             : privacy === "mixed"
-              ? "LOCAL + NETWORK"
+              ? "NETWORK PATH"
               : privacy === "local"
                 ? "LOCAL"
                 : "UNKNOWN";
     const Icon =
-        meta.provider === "cloud"
-            ? Cloud
-            : meta.provider === "ollama"
-              ? Server
-              : meta.provider === "chrome-ai"
-                ? Sparkles
-                : Monitor;
+        privacy === "unknown"
+            ? HelpCircle
+            : meta.provider === "cloud"
+              ? Cloud
+              : meta.provider === "ollama"
+                ? Server
+                : meta.provider === "chrome-ai"
+                  ? Sparkles
+                  : Monitor;
 
     return (
         <div className={cn("mb-1 flex flex-wrap items-center gap-1.5", align === "right" && "justify-end")}>
@@ -345,7 +377,9 @@ function MessageMetaBadge({ meta, align = "left" }: { meta?: ChatMessageMeta; al
                         ? "border-blue-500/25 bg-blue-500/10 text-blue-300"
                         : privacy === "mixed"
                           ? "border-amber-500/25 bg-amber-500/10 text-amber-300"
-                          : "border-emerald-500/20 bg-emerald-500/10 text-emerald-300"
+                          : privacy === "local"
+                            ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-300"
+                            : "border-zinc-700 bg-zinc-900/70 text-zinc-300"
                 )}
             >
                 <Icon className="h-2.5 w-2.5" />
@@ -378,7 +412,7 @@ function buildAnswerCard(content: string, meta?: ChatMessageMeta, timestamp?: nu
         meta?.privacy === "cloud"
             ? "Cloud provider"
             : meta?.privacy === "mixed"
-              ? "Local model with network context"
+              ? "Network involved"
               : meta?.privacy === "local"
                 ? "Local device"
                 : "Unknown";
@@ -408,6 +442,14 @@ function buildAnswerCard(content: string, meta?: ChatMessageMeta, timestamp?: nu
         "## Answer",
         "",
         content,
+        ...(meta?.citations?.length
+            ? [
+                  "",
+                  "## Evidence used",
+                  "",
+                  ...meta.citations.map(citation => `- [${citation.documentName}#chunk-${citation.chunkIndex}]`),
+              ]
+            : []),
     ].join("\n");
 }
 
@@ -421,6 +463,34 @@ function downloadText(filename: string, text: string) {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+}
+
+async function downloadImage(filename: string, source: string) {
+    let parsed: URL;
+    try {
+        parsed = new URL(source, window.location.href);
+    } catch {
+        return;
+    }
+    if (!["http:", "https:", "blob:", "data:"].includes(parsed.protocol)) return;
+
+    try {
+        const response = await fetch(parsed.href, { referrerPolicy: "no-referrer" });
+        if (!response.ok) throw new Error(`Image download failed (${response.status})`);
+        const objectUrl = URL.createObjectURL(await response.blob());
+        const anchor = document.createElement("a");
+        anchor.href = objectUrl;
+        anchor.download = filename;
+        document.body.appendChild(anchor);
+        anchor.click();
+        document.body.removeChild(anchor);
+        URL.revokeObjectURL(objectUrl);
+    } catch {
+        // Some image hosts allow display but block fetch/CORS. Keep the current
+        // workspace intact and open the source in a separate tab as a fallback.
+        const popup = window.open(parsed.href, "_blank", "noopener,noreferrer");
+        if (popup) popup.opener = null;
+    }
 }
 
 export const MessageBubble = React.memo(function MessageBubble({
@@ -442,6 +512,44 @@ export const MessageBubble = React.memo(function MessageBubble({
     const [imageError, setImageError] = useState(false);
     const [showThinking, setShowThinking] = useState(false);
     const [answerCopied, setAnswerCopied] = useState(false);
+    const runningCodeRef = useRef<string | null>(null);
+    const imageThumbnailRef = useRef<HTMLButtonElement>(null);
+    const imageToolbarRef = useRef<HTMLButtonElement>(null);
+    const imageOpenerKindRef = useRef<"thumbnail" | "toolbar">("thumbnail");
+    const imageDialogButtonRef = useRef<HTMLButtonElement>(null);
+    const imageWasZoomedRef = useRef(false);
+
+    useEffect(() => {
+        if (!imageZoomed) {
+            if (imageWasZoomedRef.current) {
+                imageWasZoomedRef.current = false;
+                const opener = imageOpenerKindRef.current === "toolbar" ? imageToolbarRef : imageThumbnailRef;
+                opener.current?.focus();
+            }
+            return;
+        }
+
+        imageWasZoomedRef.current = true;
+        const previousOverflow = document.body.style.overflow;
+        document.body.style.overflow = "hidden";
+        imageDialogButtonRef.current?.focus();
+
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key === "Escape") {
+                event.preventDefault();
+                setImageZoomed(false);
+            } else if (event.key === "Tab") {
+                event.preventDefault();
+                imageDialogButtonRef.current?.focus();
+            }
+        };
+        document.addEventListener("keydown", handleKeyDown);
+
+        return () => {
+            document.body.style.overflow = previousOverflow;
+            document.removeEventListener("keydown", handleKeyDown);
+        };
+    }, [imageZoomed]);
 
     let thinking = "";
     let finalContent = content;
@@ -455,8 +563,13 @@ export const MessageBubble = React.memo(function MessageBubble({
     }
 
     const handleRunCode = async (code: string) => {
-        if (!onRunCode || runningCode) return;
-        const codeId = code.slice(0, 50);
+        const inFlight = runningCodeRef.current;
+        // React may commit the completed result one tick before it commits the
+        // matching `runningCode = null`. Once that result exists, the prior
+        // invocation is complete and must not swallow a click on another block.
+        if (!onRunCode || (inFlight && !codeResults[inFlight])) return;
+        const codeId = codeResultKey(code);
+        runningCodeRef.current = codeId;
         setRunningCode(codeId);
         try {
             const result = await onRunCode(code);
@@ -464,6 +577,7 @@ export const MessageBubble = React.memo(function MessageBubble({
         } catch (error: any) {
             setCodeResults(prev => ({ ...prev, [codeId]: { output: "", error: error.message, duration: 0 } }));
         } finally {
+            if (runningCodeRef.current === codeId) runningCodeRef.current = null;
             setRunningCode(null);
         }
     };
@@ -514,29 +628,19 @@ export const MessageBubble = React.memo(function MessageBubble({
             </div>
 
             <div className="flex-1 min-w-0 max-w-4xl space-y-4 pt-1.5 relative">
-                {onBranch && (
-                    <button
-                        onClick={onBranch}
-                        aria-label="Branch conversation from this message"
-                        title="Branch conversation from here"
-                        className="absolute -left-14 top-0 flex h-11 w-11 items-center justify-center rounded-lg text-zinc-400 opacity-60 transition-opacity hover:bg-zinc-800 hover:text-white focus:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white sm:opacity-0 sm:group-hover:opacity-100"
-                    >
-                        <GitBranch className="w-3.5 h-3.5" />
-                    </button>
-                )}
                 <MessageMetaBadge meta={meta} />
                 {image && (
                     <div className="relative inline-block">
                         {/* Loading skeleton */}
                         {imageLoading && !imageError && (
-                            <div className="max-w-md w-[300px] h-[300px] rounded-xl bg-zinc-900 border border-zinc-800 flex flex-col items-center justify-center gap-3 animate-pulse">
+                            <div className="h-[300px] w-[300px] max-w-full rounded-xl border border-zinc-800 bg-zinc-900 flex flex-col items-center justify-center gap-3 animate-pulse">
                                 <div className="w-8 h-8 border-2 border-zinc-600 border-t-zinc-300 rounded-full animate-spin" />
                                 <span className="text-xs font-mono text-zinc-400">generating image…</span>
                             </div>
                         )}
                         {/* Error state with retry */}
                         {imageError && (
-                            <div className="max-w-md w-[300px] rounded-xl bg-zinc-900 border border-red-500/20 p-6 flex flex-col items-center gap-3">
+                            <div className="w-[300px] max-w-full rounded-xl bg-zinc-900 border border-red-500/20 p-6 flex flex-col items-center gap-3">
                                 <span className="text-sm text-zinc-400">Image failed to load</span>
                                 <button
                                     onClick={() => {
@@ -550,69 +654,102 @@ export const MessageBubble = React.memo(function MessageBubble({
                             </div>
                         )}
                         {/* Actual image */}
-                        <button
-                            type="button"
-                            aria-label={imageZoomed ? "Close generated image preview" : "Open generated image preview"}
-                            aria-expanded={imageZoomed}
-                            className={cn(
-                                "overflow-hidden rounded-xl border border-zinc-800 shadow-sm transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white",
-                                imageZoomed
-                                    ? "fixed inset-4 z-50 flex items-center justify-center bg-black/95 border-none"
-                                    : "max-w-md bg-zinc-900",
-                                (imageLoading || imageError) && !imageZoomed && "hidden"
-                            )}
-                            onClick={() => setImageZoomed(!imageZoomed)}
-                        >
-                            <img
-                                key={imageError ? "retry" : "initial"}
-                                src={image}
-                                alt="Generated"
-                                crossOrigin="anonymous"
-                                onLoad={() => {
-                                    setImageLoading(false);
-                                    setImageError(false);
+                        {imageZoomed ? (
+                            <div
+                                role="dialog"
+                                aria-modal="true"
+                                aria-label="Generated image preview"
+                                className="fixed inset-0 z-50 flex items-center justify-center bg-black/95 p-4 backdrop-blur-sm"
+                                onMouseDown={event => {
+                                    if (event.target === event.currentTarget) setImageZoomed(false);
                                 }}
-                                onError={() => {
-                                    setImageLoading(false);
-                                    setImageError(true);
-                                }}
+                            >
+                                <button
+                                    ref={imageDialogButtonRef}
+                                    type="button"
+                                    aria-label="Close generated image preview"
+                                    className="flex max-h-full max-w-full items-center justify-center rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                                    onClick={() => setImageZoomed(false)}
+                                >
+                                    <img
+                                        key={imageError ? "retry" : "initial"}
+                                        src={image}
+                                        alt="Generated"
+                                        crossOrigin="anonymous"
+                                        referrerPolicy="no-referrer"
+                                        onLoad={() => {
+                                            setImageLoading(false);
+                                            setImageError(false);
+                                        }}
+                                        onError={() => {
+                                            setImageLoading(false);
+                                            setImageError(true);
+                                        }}
+                                        className="max-h-[calc(100vh-2rem)] max-w-full rounded-xl object-contain"
+                                    />
+                                </button>
+                            </div>
+                        ) : (
+                            <button
+                                ref={imageThumbnailRef}
+                                type="button"
+                                aria-label="Open generated image preview"
+                                aria-haspopup="dialog"
                                 className={cn(
-                                    "w-full h-auto",
-                                    imageZoomed && "max-w-full max-h-full object-contain rounded-xl"
+                                    "max-w-md overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900 shadow-sm transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white",
+                                    (imageLoading || imageError) && "hidden"
                                 )}
-                            />
-                        </button>
+                                onClick={() => {
+                                    imageOpenerKindRef.current = "thumbnail";
+                                    setImageZoomed(true);
+                                }}
+                            >
+                                <img
+                                    key={imageError ? "retry" : "initial"}
+                                    src={image}
+                                    alt="Generated"
+                                    crossOrigin="anonymous"
+                                    referrerPolicy="no-referrer"
+                                    onLoad={() => {
+                                        setImageLoading(false);
+                                        setImageError(false);
+                                    }}
+                                    onError={() => {
+                                        setImageLoading(false);
+                                        setImageError(true);
+                                    }}
+                                    className="h-auto w-full"
+                                />
+                            </button>
+                        )}
                         {!imageZoomed && !imageLoading && !imageError && (
                             <div className="absolute bottom-3 right-3 flex gap-1.5 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100">
                                 <button
+                                    ref={imageToolbarRef}
                                     onClick={e => {
                                         e.stopPropagation();
+                                        imageOpenerKindRef.current = "toolbar";
                                         setImageZoomed(true);
                                     }}
-                                    aria-label="Open generated image preview"
+                                    aria-label="Expand generated image preview"
                                     className="flex h-11 w-11 items-center justify-center rounded-lg bg-black/70 text-white backdrop-blur transition-colors hover:bg-black/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
                                 >
                                     <ZoomIn className="w-4 h-4" />
                                 </button>
-                                <a
-                                    href={image}
-                                    download={`n0x-${Date.now()}.png`}
-                                    onClick={e => e.stopPropagation()}
+                                <button
+                                    type="button"
+                                    onClick={event => {
+                                        event.stopPropagation();
+                                        void downloadImage(`n0x-${timestamp || Date.now()}.png`, image);
+                                    }}
                                     aria-label="Download generated image"
                                     className="flex h-11 w-11 items-center justify-center rounded-lg bg-black/70 text-white backdrop-blur transition-colors hover:bg-black/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
                                 >
                                     <Download className="w-4 h-4" />
-                                </a>
+                                </button>
                             </div>
                         )}
                     </div>
-                )}
-
-                {imageZoomed && (
-                    <div
-                        className="fixed inset-0 z-40 bg-black/90 backdrop-blur-sm"
-                        onClick={() => setImageZoomed(false)}
-                    />
                 )}
 
                 {thinking && (
@@ -635,7 +772,12 @@ export const MessageBubble = React.memo(function MessageBubble({
                         {showThinking && (
                             <div className="px-4 pb-4 pt-2 border-t border-zinc-800/80 bg-[#0a0a0a]/50">
                                 <div className="my-2 max-w-none whitespace-pre-wrap border-l-2 border-zinc-800 py-1 pl-4 font-serif text-[13px] italic leading-relaxed text-zinc-400">
-                                    <ReactMarkdown remarkPlugins={REMARK_PLUGINS}>{thinking}</ReactMarkdown>
+                                    <ReactMarkdown
+                                        remarkPlugins={REMARK_PLUGINS}
+                                        components={{ img: SafeMarkdownImage, a: SafeMarkdownLink }}
+                                    >
+                                        {thinking}
+                                    </ReactMarkdown>
                                 </div>
                             </div>
                         )}
@@ -647,6 +789,8 @@ export const MessageBubble = React.memo(function MessageBubble({
                         <ReactMarkdown
                             remarkPlugins={REMARK_PLUGINS}
                             components={{
+                                img: SafeMarkdownImage,
+                                a: SafeMarkdownLink,
                                 code: props => (
                                     <CodeBlock
                                         {...props}
@@ -667,8 +811,20 @@ export const MessageBubble = React.memo(function MessageBubble({
                         </ReactMarkdown>
                     </div>
                 )}
+                {finalContent && <CitationEvidence citations={meta?.citations} />}
                 {finalContent && (
                     <div className="flex flex-wrap items-center gap-2 border-t border-zinc-900/80 pt-2 text-xs font-mono text-zinc-400">
+                        {onBranch && (
+                            <button
+                                onClick={onBranch}
+                                aria-label="Branch conversation from this message"
+                                className="inline-flex min-h-11 items-center gap-1 rounded-md px-3 py-2 transition-colors hover:bg-zinc-900 hover:text-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                                title="Branch conversation from here"
+                            >
+                                <GitBranch className="h-3 w-3" />
+                                Branch
+                            </button>
+                        )}
                         <button
                             onClick={handleCopyAnswerCard}
                             className="inline-flex min-h-11 items-center gap-1 rounded-md px-3 py-2 transition-colors hover:bg-zinc-900 hover:text-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"

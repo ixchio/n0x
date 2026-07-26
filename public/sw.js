@@ -1,6 +1,8 @@
 const SHELL_CACHE_PREFIX = "n0x-shell-";
-const CACHE = `${SHELL_CACHE_PREFIX}v3`;
-const SHELL = ["/", "/chat", "/manifest.json"];
+const CACHE = `${SHELL_CACHE_PREFIX}v4`;
+const SHELL = ["/", "/chat", "/manifest.json", "/offline.html"];
+const SHELL_PATHS = new Set(SHELL);
+const STATIC_ASSET = /\.(?:js|mjs|css|woff2|png|jpe?g|webp|avif|svg)$/;
 
 function isOldN0xShellCache(name) {
     const isCurrentPrefix = name.startsWith(SHELL_CACHE_PREFIX);
@@ -27,32 +29,51 @@ self.addEventListener("fetch", (e) => {
     // don't touch api routes, live Vercel telemetry, or third-party stuff
     if (url.pathname.startsWith("/api/") || url.pathname.startsWith("/_vercel/") || url.origin !== self.location.origin)
         return;
+    if (e.request.method !== "GET") return;
 
     if (e.request.mode === "navigate") {
         // pages: network first, fall back to cache
         e.respondWith(
-            fetch(e.request)
-                .then(res => {
-                    const copy = res.clone();
-                    caches.open(CACHE).then(c => c.put(e.request, copy));
-                    return res;
-                })
-                .catch(() => caches.match(e.request).then(r => r || caches.match("/chat")))
+            (async () => {
+                try {
+                    const response = await fetch(e.request);
+                    const cacheControl = response.headers.get("cache-control") || "";
+                    if (response.ok && !cacheControl.includes("no-store") && !url.search && SHELL_PATHS.has(url.pathname)) {
+                        try {
+                            const cache = await caches.open(CACHE);
+                            await cache.put(url.pathname, response.clone());
+                        } catch {
+                            // A cache quota/permission failure must never hide a
+                            // valid network response from the user.
+                        }
+                    }
+                    return response;
+                } catch {
+                    return (await caches.match(url.pathname)) || (await caches.match("/offline.html")) || Response.error();
+                }
+            })()
         );
         return;
     }
 
     // assets: cache first
     e.respondWith(
-        caches.match(e.request).then(hit => {
+        (async () => {
+            const cacheable = !url.search && STATIC_ASSET.test(url.pathname);
+            const hit = cacheable ? await caches.match(url.pathname) : undefined;
             if (hit) return hit;
-            return fetch(e.request).then(res => {
-                if (res.ok && /\.(js|css|woff2|png|svg)$/.test(url.pathname)) {
-                    const copy = res.clone();
-                    caches.open(CACHE).then(c => c.put(e.request, copy));
+
+            const response = await fetch(e.request);
+            const cacheControl = response.headers.get("cache-control") || "";
+            if (cacheable && response.ok && !cacheControl.includes("no-store")) {
+                try {
+                    const cache = await caches.open(CACHE);
+                    await cache.put(url.pathname, response.clone());
+                } catch {
+                    // Best-effort acceleration only; the fetched asset is valid.
                 }
-                return res;
-            });
-        })
+            }
+            return response;
+        })()
     );
 });

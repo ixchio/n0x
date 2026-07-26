@@ -29,12 +29,12 @@ export function RAGPanel() {
                 </div>
                 <div className="flex items-center gap-1">
                     <button
+                        disabled={rag.isIndexing}
                         onClick={async () => {
-                            await rag.clearCache();
-                            rag.clear();
+                            await rag.clear();
                         }}
                         aria-label="Clear all documents and vector cache"
-                        className="flex h-11 w-11 items-center justify-center rounded text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-red-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                        className="flex h-11 w-11 items-center justify-center rounded text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-red-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white disabled:cursor-not-allowed disabled:opacity-40"
                         title="Clear Vector Cache"
                     >
                         <Database className="w-3.5 h-3.5" />
@@ -87,13 +87,20 @@ export function RAGPanel() {
                         {rag.status}
                     </div>
                 ) : (
-                    <button
-                        onClick={() => fileInputRef.current?.click()}
-                        className="flex min-h-11 w-full items-center justify-center gap-1.5 rounded border border-crt-border px-3 py-2 text-xs font-mono text-zinc-300 transition-all hover:border-phosphor-dim hover:text-phosphor focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
-                    >
-                        <Plus className="w-3 h-3" />
-                        add document
-                    </button>
+                    <div className="space-y-2">
+                        {rag.storageError && (
+                            <p role="alert" aria-live="assertive" className="text-xs font-mono text-red-300">
+                                {rag.storageError}
+                            </p>
+                        )}
+                        <button
+                            onClick={() => fileInputRef.current?.click()}
+                            className="flex min-h-11 w-full items-center justify-center gap-1.5 rounded border border-crt-border px-3 py-2 text-xs font-mono text-zinc-300 transition-all hover:border-phosphor-dim hover:text-phosphor focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                        >
+                            <Plus className="w-3 h-3" />
+                            add document
+                        </button>
+                    </div>
                 )}
                 <input
                     type="file"

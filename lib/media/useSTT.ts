@@ -11,12 +11,19 @@ interface STTState {
     transcript: string;
     interimTranscript: string;
     error: string | null;
+    init: () => boolean;
     start: () => void;
     stop: () => void;
     clear: () => void;
 }
 
 let recognition: any = null;
+let finalSegments = new Map<number, string>();
+
+function getSpeechRecognition() {
+    if (typeof window === "undefined") return null;
+    return (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition || null;
+}
 
 export const useSTT = create<STTState>((set, get) => ({
     isListening: false,
@@ -25,13 +32,16 @@ export const useSTT = create<STTState>((set, get) => ({
     interimTranscript: "",
     error: null,
 
+    init: () => {
+        const isSupported = typeof getSpeechRecognition() === "function";
+        set({ isSupported });
+        return isSupported;
+    },
+
     start: () => {
         if (get().isListening) return;
 
-        const SpeechRecognition =
-            (typeof window !== "undefined" &&
-                ((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition)) ||
-            null;
+        const SpeechRecognition = getSpeechRecognition();
 
         if (!SpeechRecognition) {
             set({ error: "Speech recognition not supported", isSupported: false });
@@ -39,6 +49,7 @@ export const useSTT = create<STTState>((set, get) => ({
         }
 
         set({ isSupported: true });
+        finalSegments = new Map();
 
         recognition = new SpeechRecognition();
         recognition.continuous = true;
@@ -48,17 +59,23 @@ export const useSTT = create<STTState>((set, get) => ({
         recognition.onstart = () => set({ isListening: true, error: null });
 
         recognition.onresult = (event: any) => {
-            let final = "";
-            let interim = "";
+            const interim: string[] = [];
             for (let i = 0; i < event.results.length; i++) {
                 const result = event.results[i];
+                const text = String(result[0]?.transcript || "").trim();
                 if (result.isFinal) {
-                    final += result[0].transcript + " ";
+                    finalSegments.set(i, text);
                 } else {
-                    interim += result[0].transcript;
+                    finalSegments.delete(i);
+                    if (text) interim.push(text);
                 }
             }
-            set({ transcript: final.trim(), interimTranscript: interim });
+            const transcript = [...finalSegments.entries()]
+                .sort(([first], [second]) => first - second)
+                .map(([, text]) => text)
+                .filter(Boolean)
+                .join(" ");
+            set({ transcript, interimTranscript: interim.join(" ") });
         };
 
         recognition.onerror = (event: any) => {
@@ -87,6 +104,7 @@ export const useSTT = create<STTState>((set, get) => ({
     },
 
     clear: () => {
+        finalSegments = new Map();
         set({ transcript: "", interimTranscript: "", error: null });
     },
 }));

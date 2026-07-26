@@ -6,6 +6,19 @@ import type { ExecutionPrivacyPath, ExecutionProvider } from "./executionPlan";
 export type ChatProvider = ExecutionProvider;
 export type ChatPrivacyPath = ExecutionPrivacyPath;
 
+export interface ChatCitation {
+    documentId: string;
+    documentName: string;
+    chunkIndex: number;
+    /** Exact untrusted passage supplied to the model for this answer. */
+    text: string;
+    relevance?: {
+        vector: number | null;
+        bm25: number | null;
+        fused: number | null;
+    };
+}
+
 export interface ChatMessageMeta {
     provider?: ChatProvider;
     providerLabel?: string;
@@ -15,11 +28,17 @@ export interface ChatMessageMeta {
     usedSearch?: boolean;
     usedDocs?: boolean;
     usedMemory?: boolean;
+    usedPython?: boolean;
     agent?: boolean;
     requestId?: string;
     conversationId?: string;
     routeReason?: string;
     contextBudget?: number;
+    contextWindow?: number;
+    outputReserve?: number;
+    maxOutputTokens?: number;
+    /** Evidence snapshot used for this answer, persisted with chat history. */
+    citations?: ChatCitation[];
 }
 
 export interface ChatMessage {
@@ -43,6 +62,10 @@ const DB_NAME = "n0x_chat";
 const DB_VER = 1;
 const STORE = "conversations";
 const ACTIVE_KEY = "n0x_activeConv";
+const CHAT_LOAD_ERROR = "Chat history is unavailable. Check this site's storage permission and reload.";
+const CHAT_SAVE_ERROR = "Chat history could not be saved. Free browser storage or allow site storage, then try again.";
+const CHAT_DELETE_ERROR =
+    "The conversation could not be deleted from this device. Check browser storage and try again.";
 
 let messageIdCounter = 0;
 
@@ -126,6 +149,7 @@ export function useChatStore() {
     const [conversations, setConversations] = useState<Conversation[]>([]);
     const [activeId, _setActiveId] = useState<string | null>(null);
     const [isLoaded, setIsLoaded] = useState(false);
+    const [storageError, setStorageError] = useState<string | null>(null);
 
     // Refs make request pinning/getters synchronous, including between React
     // renders and while an async generation is in flight.
@@ -196,16 +220,21 @@ export function useChatStore() {
                         const store = repairTx.objectStore(STORE);
                         all.forEach((conv: Conversation) => store.put(conv));
                         repairTx.oncomplete = () => db?.close();
-                        repairTx.onerror = () => db?.close();
+                        repairTx.onerror = repairTx.onabort = () => {
+                            setStorageError(CHAT_SAVE_ERROR);
+                            db?.close();
+                        };
                     } else {
                         db?.close();
                     }
                 };
-                tx.onerror = () => {
+                tx.onerror = tx.onabort = () => {
+                    setStorageError(CHAT_LOAD_ERROR);
                     setIsLoaded(true);
                     db?.close();
                 };
             } catch {
+                setStorageError(CHAT_LOAD_ERROR);
                 setIsLoaded(true);
                 db?.close();
             }
@@ -222,12 +251,14 @@ export function useChatStore() {
         const databaseFactory = indexedDB;
         const pending = previous
             .catch(() => {})
-            .then(() =>
-                deletedConversationIdsRef.current.has(conv.id)
-                    ? Promise.resolve()
-                    : putConversation(conv, databaseFactory)
-            )
-            .catch(() => {});
+            .then(async () => {
+                if (deletedConversationIdsRef.current.has(conv.id)) return;
+                await putConversation(conv, databaseFactory);
+                setStorageError(null);
+            })
+            .catch(() => {
+                setStorageError(CHAT_SAVE_ERROR);
+            });
         persistQueuesRef.current.set(conv.id, pending);
         void pending.finally(() => {
             if (persistQueuesRef.current.get(conv.id) === pending) persistQueuesRef.current.delete(conv.id);
@@ -390,23 +421,34 @@ export function useChatStore() {
 
     const deleteConversation = useCallback(
         async (id: string) => {
+            const wasActive = activeRef.current === id;
             deletedConversationIdsRef.current.add(id);
-            setConversations(prev => {
-                const next = prev.filter(c => c.id !== id);
-                conversationsRef.current = next;
-                return next;
-            });
-            if (activeRef.current === id) setActiveId(null);
+            if (wasActive) setActiveId(null);
 
             await persistQueuesRef.current.get(id);
             let db: IDBDatabase | null = null;
             try {
                 db = await openDB();
-                const tx = db.transaction(STORE, "readwrite");
-                tx.objectStore(STORE).delete(id);
-                tx.oncomplete = () => db?.close();
-                tx.onerror = () => db?.close();
+                await new Promise<void>((resolve, reject) => {
+                    const tx = db!.transaction(STORE, "readwrite");
+                    tx.oncomplete = () => resolve();
+                    tx.onerror = tx.onabort = () => reject(tx.error);
+                    tx.objectStore(STORE).delete(id);
+                });
+                setConversations(prev => {
+                    const next = prev.filter(c => c.id !== id);
+                    conversationsRef.current = next;
+                    return next;
+                });
+                setStorageError(null);
             } catch {
+                deletedConversationIdsRef.current.delete(id);
+                // A failed durable delete must not strand a still-existing
+                // conversation off-screen. Do not override a different chat
+                // the user selected while the transaction was pending.
+                if (wasActive && activeRef.current === null) setActiveId(id);
+                setStorageError(CHAT_DELETE_ERROR);
+            } finally {
                 db?.close();
             }
         },
@@ -418,6 +460,7 @@ export function useChatStore() {
         activeId,
         messages,
         isLoaded,
+        storageError,
         activeConversation: active,
         pinConversation,
         getConversationMessages,

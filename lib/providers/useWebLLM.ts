@@ -4,6 +4,7 @@ import { create } from "zustand";
 import type { MLCEngine, WebWorkerMLCEngine } from "@mlc-ai/web-llm";
 import { trackFunnelEvent } from "@/lib/core/analytics";
 import { logger } from "@/lib/core/logger";
+import type { GenerationOptions } from "@/lib/chat/executionPrompt";
 
 // Curated from the model IDs in the installed WebLLM prebuilt app config.
 // Keep this static so rendering the selector does not load the WebLLM runtime.
@@ -209,6 +210,9 @@ interface WebLLMState {
     isMobile: boolean;
     stats: WebLLMStats;
     loadingStats: LoadingStats;
+    contextWindow: number;
+    maxOutputTokens: number;
+    runtimeRevision: number;
 
     // Actions
     init: () => Promise<void>;
@@ -216,9 +220,9 @@ interface WebLLMState {
     generate: (
         messages: ChatMessage[],
         onToken?: (token: string) => void,
-        responseFormat?: { type: string; schema?: object }
+        options?: GenerationOptions
     ) => Promise<string>;
-    stop: () => void;
+    stop: (requestId?: string) => void;
     unload: () => Promise<void>;
 }
 
@@ -229,7 +233,13 @@ type WebLLMRuntime = typeof import("@mlc-ai/web-llm");
 let engine: MLCEngine | WebWorkerMLCEngine | null = null;
 let runtimePromise: Promise<WebLLMRuntime> | null = null;
 let abortController: AbortController | null = null;
+let activeRequestId: string | null = null;
 let isLoadingModel = false;
+let engineWorker: Worker | null = null;
+let loadAttemptId = 0;
+
+export const MODEL_LOAD_STALL_MS = 30_000;
+const WORKER_INIT_TIMEOUT_MS = 5_000;
 
 function loadWebLLMRuntime(): Promise<WebLLMRuntime> {
     if (!runtimePromise) {
@@ -254,18 +264,31 @@ function createAbortError(): Error {
 function throwIfAborted(signal: AbortSignal) {
     if (signal.aborted) throw createAbortError();
 }
-// Cumulative token counter persisted to localStorage for cost savings display
+
+function estimatePromptTokens(messages: ChatMessage[]): number {
+    return messages.reduce((total, message) => total + Math.ceil(message.content.length / 4) + 4, 2);
+}
+// Keep total usage for backwards-compatible stats, but track local inference
+// separately so the UI never calls Cloud/remote-provider tokens "local".
 const TOKENS_KEY = "n0x_total_tokens";
-export function getTotalTokens(): number {
+const LOCAL_TOKENS_KEY = "n0x_local_tokens";
+function readTokenCounter(key: string): number {
     try {
-        return parseInt(localStorage.getItem(TOKENS_KEY) || "0", 10) || 0;
+        return parseInt(localStorage.getItem(key) || "0", 10) || 0;
     } catch {
         return 0;
     }
 }
-export function addTokens(n: number) {
+export function getTotalTokens(): number {
+    return readTokenCounter(TOKENS_KEY);
+}
+export function getLocalTokens(): number {
+    return readTokenCounter(LOCAL_TOKENS_KEY);
+}
+export function addTokens(n: number, local = true) {
     try {
         localStorage.setItem(TOKENS_KEY, String(getTotalTokens() + n));
+        if (local) localStorage.setItem(LOCAL_TOKENS_KEY, String(getLocalTokens() + n));
     } catch {}
 }
 
@@ -288,6 +311,9 @@ export const useWebLLM = create<WebLLMState>((set, get) => ({
     isMobile: false,
     stats: { tps: 0, totalTokens: 0, lastTokenTime: 0 },
     loadingStats: { startTime: 0, estimatedTimeRemaining: null, downloadSpeed: null },
+    contextWindow: 4_096,
+    maxOutputTokens: 1_024,
+    runtimeRevision: 0,
 
     init: async () => {
         if (typeof navigator === "undefined") return;
@@ -396,6 +422,10 @@ export const useWebLLM = create<WebLLMState>((set, get) => ({
         }
 
         isLoadingModel = true;
+        const attemptId = ++loadAttemptId;
+        let stallWatchdog: ReturnType<typeof setInterval> | null = null;
+        let workerInitTimeout: ReturnType<typeof setTimeout> | null = null;
+        let candidateWorker: Worker | null = null;
         try {
             const selectedModel = WEBLLM_MODELS.find(m => m.id === modelId);
             trackFunnelEvent("model_load_started", {
@@ -421,100 +451,149 @@ export const useWebLLM = create<WebLLMState>((set, get) => ({
                 }
                 engine = null;
             }
+            engineWorker?.terminate();
+            engineWorker = null;
 
             const webllm = await loadWebLLMRuntime();
 
-            // Progress stall watchdog — detect if download freezes + calculate ETA
             let lastProgress = 0;
-            let stallCount = 0;
             let lastProgressTime = startTime;
-            const stallWatchdog = setInterval(() => {
-                const cur = get().loadProgress;
-                const now = Date.now();
+            let stallRejected = false;
+            let rejectStall!: (error: Error) => void;
+            const stallFailure = new Promise<never>((_, reject) => {
+                rejectStall = reject;
+            });
+            stallWatchdog = setInterval(() => {
+                if (stallRejected || attemptId !== loadAttemptId) return;
+                if (Date.now() - lastProgressTime < MODEL_LOAD_STALL_MS) return;
 
-                if (cur > lastProgress && cur > 0 && cur < 1) {
-                    // Calculate ETA based on progress velocity
-                    const elapsedSec = (now - lastProgressTime) / 1000;
-                    const progressDelta = cur - lastProgress;
-                    const remainingProgress = 1 - cur;
-                    const estimatedTimeRemaining = (remainingProgress / progressDelta) * elapsedSec;
-                    const downloadSpeed = progressDelta / elapsedSec; // progress per second
+                stallRejected = true;
+                candidateWorker?.terminate();
+                const error = new Error(
+                    `Model download stalled at ${Math.round(lastProgress * 100)}%. Try a smaller model or check your connection.`
+                );
+                error.name = "ModelLoadStalledError";
+                rejectStall(error);
+            }, 1_000);
 
-                    set({
-                        loadingStats: {
-                            startTime,
-                            estimatedTimeRemaining: Math.round(estimatedTimeRemaining),
-                            downloadSpeed,
-                        },
-                    });
-
-                    lastProgress = cur;
-                    lastProgressTime = now;
-                    stallCount = 0;
-                } else if (cur === lastProgress && cur < 1 && cur > 0) {
-                    stallCount++;
-                    if (stallCount >= 3) {
-                        // 30s with no progress — likely OOM or network issue
+            const initOpts = {
+                initProgressCallback: (progress: any) => {
+                    if (attemptId !== loadAttemptId) return;
+                    const current = Number(progress.progress) || 0;
+                    const now = Date.now();
+                    if (current > lastProgress) {
+                        const elapsedSec = Math.max(0.001, (now - lastProgressTime) / 1_000);
+                        const progressDelta = current - lastProgress;
                         set({
-                            error: `Download stalled at ${Math.round(cur * 100)}%. Your device may not have enough memory for this model. Try a smaller model or use Cloud API for instant access.`,
+                            loadingStats: {
+                                startTime,
+                                estimatedTimeRemaining:
+                                    current < 1 ? Math.round(((1 - current) / progressDelta) * elapsedSec) : 0,
+                                downloadSpeed: progressDelta / elapsedSec,
+                            },
                         });
+                        lastProgress = current;
+                        lastProgressTime = now;
                     }
-                }
-            }, 10000);
+                    set({ loadProgress: current });
+                },
+            };
 
-            try {
-                // Try Web Worker engine first (keeps UI at 60fps during inference)
-                // Falls back to main-thread engine if Worker isn't available
-                const initOpts = {
-                    initProgressCallback: (progress: any) => {
-                        set({ loadProgress: progress.progress });
-                    },
-                };
-                if (typeof Worker === "undefined") {
-                    engine = await webllm.CreateMLCEngine(modelId, initOpts);
-                } else {
-                    try {
-                        const worker = new Worker(new URL("./webllm.worker.ts", import.meta.url), { type: "module" });
-                        // Race against a timeout — if the Worker hangs, fall back
-                        let workerInitTimeout: ReturnType<typeof setTimeout> | undefined;
-                        try {
-                            engine = await Promise.race([
-                                webllm.CreateWebWorkerMLCEngine(worker, modelId, initOpts),
-                                new Promise<never>((_, reject) => {
-                                    workerInitTimeout = setTimeout(() => {
-                                        // Only reject if still at 0% (Worker never responded)
-                                        if (get().loadProgress === 0) {
-                                            worker.terminate();
-                                            reject(new Error("Worker init timeout"));
-                                        }
-                                    }, 5000);
-                                }),
-                            ]);
-                        } finally {
-                            if (workerInitTimeout) clearTimeout(workerInitTimeout);
+            let nextEngine: MLCEngine | WebWorkerMLCEngine;
+            if (typeof Worker === "undefined") {
+                const mainEnginePromise = webllm.CreateMLCEngine(modelId, initOpts);
+                void mainEnginePromise
+                    .then(lateEngine => {
+                        if (stallRejected || attemptId !== loadAttemptId) {
+                            return lateEngine.unload().catch(() => undefined);
                         }
-                    } catch {
-                        // Worker failed — fall back to main thread engine
-                        engine = await webllm.CreateMLCEngine(modelId, initOpts);
-                    }
+                    })
+                    .catch(() => undefined);
+                nextEngine = await Promise.race([mainEnginePromise, stallFailure]);
+            } else {
+                candidateWorker = new Worker(new URL("./webllm.worker.ts", import.meta.url), { type: "module" });
+                engineWorker = candidateWorker;
+                let workerSuperseded = false;
+                try {
+                    const initialWorkerTimeout = new Promise<never>((_, reject) => {
+                        workerInitTimeout = setTimeout(() => {
+                            if (lastProgress > 0) return;
+                            const error = new Error("Worker init timeout");
+                            error.name = "WorkerInitTimeoutError";
+                            reject(error);
+                        }, WORKER_INIT_TIMEOUT_MS);
+                    });
+                    const workerEnginePromise = webllm.CreateWebWorkerMLCEngine(candidateWorker, modelId, initOpts);
+                    void workerEnginePromise
+                        .then(lateEngine => {
+                            if (workerSuperseded || stallRejected || attemptId !== loadAttemptId) {
+                                return lateEngine.unload().catch(() => undefined);
+                            }
+                        })
+                        .catch(() => undefined);
+                    nextEngine = await Promise.race([workerEnginePromise, initialWorkerTimeout, stallFailure]);
+                } catch (error) {
+                    workerSuperseded = true;
+                    candidateWorker.terminate();
+                    if (engineWorker === candidateWorker) engineWorker = null;
+                    candidateWorker = null;
+                    if (!(error instanceof Error) || error.name !== "WorkerInitTimeoutError") throw error;
+
+                    // A worker that never starts can fall back. A worker that
+                    // starts and later stalls is terminated and reported.
+                    lastProgress = 0;
+                    lastProgressTime = Date.now();
+                    set({ loadProgress: 0 });
+                    const mainEnginePromise = webllm.CreateMLCEngine(modelId, initOpts);
+                    void mainEnginePromise
+                        .then(lateEngine => {
+                            if (stallRejected || attemptId !== loadAttemptId) {
+                                return lateEngine.unload().catch(() => undefined);
+                            }
+                        })
+                        .catch(() => undefined);
+                    nextEngine = await Promise.race([mainEnginePromise, stallFailure]);
+                } finally {
+                    if (workerInitTimeout) clearTimeout(workerInitTimeout);
+                    workerInitTimeout = null;
                 }
-            } finally {
-                clearInterval(stallWatchdog); // Always cleanup
             }
+
+            if (attemptId !== loadAttemptId) {
+                await nextEngine.unload().catch(() => undefined);
+                throw createAbortError();
+            }
+            engine = nextEngine;
+            if (!candidateWorker) engineWorker = null;
 
             // Extract context window size dynamically for agent budgeting
             const windowSize = (engine.chat as any).config?.context_window_size || 4096;
             // Update the exported module variable so useAgent can read it directly
             contextCharsLimit = Math.floor(windowSize * 4 * 0.85);
 
-            set({ loadedModel: modelId, loadingModel: null, status: "ready" });
+            const configuredMaxOutput = Number((engine.chat as any).config?.max_output_tokens);
+            const maxOutputTokens =
+                configuredMaxOutput > 0
+                    ? Math.min(configuredMaxOutput, windowSize - 1)
+                    : Math.min(4_096, windowSize / 4);
+            set(state => ({
+                loadedModel: modelId,
+                loadingModel: null,
+                status: "ready",
+                contextWindow: windowSize,
+                maxOutputTokens: Math.max(1, Math.floor(maxOutputTokens)),
+                runtimeRevision: state.runtimeRevision + 1,
+            }));
             trackFunnelEvent("model_load_succeeded", {
                 provider: "browser",
                 modelCategory: selectedModel?.category || "unknown",
             });
         } catch (e: any) {
+            if (attemptId !== loadAttemptId || e?.name === "AbortError") return;
             logger.error("Model load error:", e);
             engine = null;
+            engineWorker?.terminate();
+            engineWorker = null;
             // Make error messages human-readable
             const raw = e.message || "Failed to load model";
             const friendly =
@@ -531,23 +610,48 @@ export const useWebLLM = create<WebLLMState>((set, get) => ({
                 reason: friendly.slice(0, 80),
             });
         } finally {
+            if (stallWatchdog) clearInterval(stallWatchdog);
+            if (workerInitTimeout) clearTimeout(workerInitTimeout);
             isLoadingModel = false;
         }
     },
 
-    generate: async (
-        messages: ChatMessage[],
-        onToken?: (token: string) => void,
-        responseFormat?: { type: string; schema?: object }
-    ) => {
-        const { status } = get();
+    generate: async (messages: ChatMessage[], onToken?: (token: string) => void, options?: GenerationOptions) => {
+        const { status, loadedModel, contextWindow, maxOutputTokens } = get();
         if (!engine || status !== "ready") {
             throw new Error("Model not loaded");
+        }
+        if (options?.model && options.model !== loadedModel) {
+            throw new Error("WebLLM provider contract changed: the planned model is no longer loaded");
+        }
+        if (options?.signal.aborted) throw createAbortError();
+
+        const promptTokens = estimatePromptTokens(messages);
+        const availableOutputTokens = contextWindow - promptTokens;
+        if (availableOutputTokens < 1) {
+            throw new Error("Prompt exceeds the loaded WebLLM model context window");
+        }
+        const requestedMaxTokens = options?.maxTokens || maxOutputTokens;
+        const safeMaxTokens = Math.max(1, Math.min(requestedMaxTokens, maxOutputTokens, availableOutputTokens));
+
+        if (abortController) {
+            abortController.abort();
+            void Promise.resolve(engine.interruptGenerate()).catch(() => undefined);
         }
 
         const activeEngine = engine;
         const controller = new AbortController();
         abortController = controller;
+        const requestId = options?.requestId || `webllm_${Date.now()}`;
+        activeRequestId = requestId;
+        const abortFromPlan = () => {
+            controller.abort();
+            void Promise.resolve(activeEngine.interruptGenerate()).catch(error => {
+                logger.warn("Failed to interrupt WebLLM generation:", error);
+            });
+        };
+        options?.signal.addEventListener("abort", abortFromPlan, { once: true });
+        throwIfAborted(controller.signal);
         set({ status: "generating", error: null });
 
         // Stats tracking
@@ -563,12 +667,12 @@ export const useWebLLM = create<WebLLMState>((set, get) => ({
                 stream: true,
                 temperature: 0.25,
                 top_p: 0.9,
-                max_tokens: 4096,
+                max_tokens: safeMaxTokens,
             };
 
             // Add structured output if requested
-            if (responseFormat) {
-                createOpts.response_format = responseFormat;
+            if (options?.responseFormat) {
+                createOpts.response_format = options.responseFormat;
             }
 
             const asyncGenerator = (await activeEngine.chat.completions.create(createOpts)) as any;
@@ -610,21 +714,27 @@ export const useWebLLM = create<WebLLMState>((set, get) => ({
             }
             throw e;
         } finally {
+            options?.signal.removeEventListener("abort", abortFromPlan);
             const now = performance.now();
             const duration = (now - startTime) / 1000;
             const tps = duration > 0 ? Math.round(tokenCount / duration) : 0;
-            set(state => ({
-                stats: { tps, totalTokens: tokenCount, lastTokenTime: now },
-                ...(state.status === "generating" ? { status: "ready" as const } : {}),
-            }));
+            if (abortController === controller) {
+                set({
+                    stats: { tps, totalTokens: tokenCount, lastTokenTime: now },
+                    status: "ready",
+                });
+            }
             if (tokenCount > 0) addTokens(tokenCount);
-            if (abortController === controller) abortController = null;
+            if (abortController === controller) {
+                abortController = null;
+                activeRequestId = null;
+            }
         }
     },
 
-    stop: () => {
+    stop: (requestId?: string) => {
         const controller = abortController;
-        if (!controller) return;
+        if (!controller || (requestId && requestId !== activeRequestId)) return;
 
         controller.abort();
         try {
@@ -639,10 +749,14 @@ export const useWebLLM = create<WebLLMState>((set, get) => ({
     },
 
     unload: async () => {
+        loadAttemptId += 1;
+        isLoadingModel = false;
+        engineWorker?.terminate();
+        engineWorker = null;
         if (engine) {
             await engine.unload();
             engine = null;
         }
-        set({ loadedModel: null, status: "unloaded" });
+        set(state => ({ loadedModel: null, status: "unloaded", runtimeRevision: state.runtimeRevision + 1 }));
     },
 }));

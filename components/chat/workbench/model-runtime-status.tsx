@@ -51,13 +51,13 @@ export function ModelRuntimeStatus({
                             onClick={() => void onModelChange("SmolLM2-360M-Instruct-q4f16_1-MLC")}
                             className="flex min-h-11 w-full items-center justify-center gap-2 rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2.5 text-xs text-zinc-200 transition-colors hover:bg-zinc-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
                         >
-                            <Zap className="h-3.5 w-3.5 text-neon-amber" /> Try SmolLM2 360M (tiny, works everywhere)
+                            <Zap className="h-3.5 w-3.5 text-neon-amber" /> Try SmolLM2 360M (smallest, ~360MB)
                         </button>
                         <button
                             onClick={onUseCloud}
                             className="flex min-h-11 w-full items-center justify-center gap-2 rounded-lg border border-blue-500/30 bg-blue-500/15 px-4 py-2.5 text-xs font-bold text-blue-300 transition-colors hover:bg-blue-500/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
                         >
-                            <Cloud className="h-3.5 w-3.5" /> Use Cloud API for this session
+                            <Cloud className="h-3.5 w-3.5" /> Configure Cloud API (network)
                         </button>
                         {webllm.error.includes("Hardware Restricted") && (
                             <button
@@ -78,9 +78,11 @@ export function ModelRuntimeStatus({
 
     if (!webllm.isSupported || webllm.status !== "loading" || messageCount > 0) return null;
 
-    const loadingLabel =
-        WEBLLM_MODELS.find(model => model.id === (webllm.loadingModel || webllm.loadedModel || defaultModel))?.label ||
-        "model";
+    const loadingModel = WEBLLM_MODELS.find(
+        model => model.id === (webllm.loadingModel || webllm.loadedModel || defaultModel)
+    );
+    const loadingLabel = loadingModel?.label || "model";
+    const loadingSize = loadingModel?.size || "the model weights";
 
     return (
         <div role="status" aria-live="polite" className="flex h-full flex-col items-center justify-center">
@@ -118,13 +120,13 @@ export function ModelRuntimeStatus({
                         </>
                     ) : (
                         <>
-                            <p className="text-xs text-zinc-300">
-                                First time? This downloads once, then it is instant on later visits.
+                            <p className="text-xs text-zinc-300">First use downloads {loadingSize} of model weights.</p>
+                            <p className="text-xs text-zinc-400">
+                                The browser can reuse cached weights later, but model initialization still takes time.
                             </p>
                             <p className="text-xs text-zinc-400">
-                                Model weights are cached in your browser. No server or account is required.
+                                Clearing site data or browser cache eviction requires another download.
                             </p>
-                            <p className="text-xs text-zinc-400">Do not refresh; the download will restart.</p>
                         </>
                     )}
                 </div>

@@ -29,13 +29,20 @@ const META_KEYS = new Set([
     "sizeBucket",
 ]);
 
-export function analyticsEnabled(): boolean {
-    if (typeof window === "undefined") return false;
+export function analyticsConsent(): boolean | null {
+    if (typeof window === "undefined") return null;
     try {
-        return localStorage.getItem(OPT_IN_KEY) === "1";
+        const stored = localStorage.getItem(OPT_IN_KEY);
+        if (stored === "1") return true;
+        if (stored === "0") return false;
+        return null;
     } catch {
-        return false;
+        return null;
     }
+}
+
+export function analyticsEnabled(): boolean {
+    return analyticsConsent() === true;
 }
 
 export function setAnalyticsEnabled(enabled: boolean) {
@@ -46,8 +53,8 @@ export function setAnalyticsEnabled(enabled: boolean) {
     } catch {}
 }
 
-export function trackFunnelEvent(event: FunnelEvent, meta: AnalyticsMeta = {}) {
-    if (typeof window === "undefined" || !analyticsEnabled()) return;
+export function trackFunnelEvent(event: FunnelEvent, meta: AnalyticsMeta = {}): boolean {
+    if (typeof window === "undefined" || !analyticsEnabled()) return false;
 
     const body = JSON.stringify({
         event,
@@ -58,26 +65,30 @@ export function trackFunnelEvent(event: FunnelEvent, meta: AnalyticsMeta = {}) {
 
     try {
         if (navigator.sendBeacon) {
-            navigator.sendBeacon("/api/analytics", new Blob([body], { type: "application/json" }));
-            return;
+            const queued = navigator.sendBeacon("/api/analytics", new Blob([body], { type: "application/json" }));
+            if (queued) return true;
         }
-        fetch("/api/analytics", {
+        void fetch("/api/analytics", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body,
             keepalive: true,
         }).catch(() => {});
-    } catch {}
+        return true;
+    } catch {
+        return false;
+    }
 }
 
-export function trackFirstMessage(meta: AnalyticsMeta = {}) {
-    if (typeof window === "undefined") return;
+export function trackFirstMessage(meta: AnalyticsMeta = {}): boolean {
+    if (typeof window === "undefined" || !analyticsEnabled()) return false;
     try {
-        if (localStorage.getItem(FIRST_MESSAGE_KEY) === "1") return;
-        localStorage.setItem(FIRST_MESSAGE_KEY, "1");
-        trackFunnelEvent("first_message_sent", meta);
+        if (localStorage.getItem(FIRST_MESSAGE_KEY) === "1") return false;
+        const tracked = trackFunnelEvent("first_message_sent", meta);
+        if (tracked) localStorage.setItem(FIRST_MESSAGE_KEY, "1");
+        return tracked;
     } catch {
-        trackFunnelEvent("first_message_sent", meta);
+        return trackFunnelEvent("first_message_sent", meta);
     }
 }
 

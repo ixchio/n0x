@@ -1,20 +1,21 @@
 "use client";
 
-import React, { type ElementType, useEffect, useRef } from "react";
+import React, { useEffect, useRef } from "react";
 import {
     AlertTriangle,
+    CheckCircle2,
     Database,
     ExternalLink,
     FileText,
     HardDrive,
     KeyRound,
     Lock,
-    Search,
     Shield,
     Wifi,
 } from "lucide-react";
 
 import { PixelNoxMark } from "@/components/brand/pixel-nox-mark";
+import { isNetworkedEndpoint } from "@/lib/chat/executionPlan";
 import { cn } from "@/lib/utils";
 
 export type AIProvider = "browser" | "ollama" | "cloud" | "chrome-ai";
@@ -49,6 +50,7 @@ interface OllamaDependency {
     isSupported: boolean;
     models: unknown[];
     error: string | null;
+    baseUrl?: string;
 }
 
 interface CloudAIDependency {
@@ -85,6 +87,9 @@ export function ProviderSetupBanner({ setup }: { setup: ProviderSetup | null }) 
     return (
         <div className="border-b border-zinc-900 bg-background/80 px-2 py-1 backdrop-blur sm:px-4 sm:py-2">
             <div
+                role={setup.tone === "red" ? "alert" : "status"}
+                aria-live={setup.tone === "red" ? "assertive" : "polite"}
+                aria-atomic="true"
                 className={cn(
                     "mx-auto flex max-w-5xl flex-col gap-1.5 rounded-lg border px-2 py-1.5 text-xs sm:flex-row sm:items-center sm:justify-between sm:px-3 sm:py-2",
                     setupToneClasses(setup.tone)
@@ -119,40 +124,16 @@ export function ProviderSetupBanner({ setup }: { setup: ProviderSetup | null }) 
     );
 }
 
-interface EmptyStateCardProps {
-    icon: ElementType;
-    title: string;
-    detail: string;
-    onClick: () => void;
-    disabled?: boolean;
-}
-
-function EmptyStateCard({ icon: Icon, title, detail, onClick, disabled }: EmptyStateCardProps) {
-    return (
-        <button
-            onClick={onClick}
-            disabled={disabled}
-            className={cn(
-                "group flex min-h-[86px] items-start gap-3 rounded-lg border border-zinc-900 bg-zinc-950/45 p-3 text-left transition-colors",
-                disabled
-                    ? "cursor-not-allowed opacity-45"
-                    : "hover:border-zinc-700 hover:bg-zinc-900/70 focus:outline-none focus:ring-1 focus:ring-zinc-700"
-            )}
-        >
-            <Icon className="mt-0.5 h-4 w-4 shrink-0 text-zinc-400 transition-colors group-hover:text-zinc-200" />
-            <span className="min-w-0">
-                <span className="block text-sm font-semibold text-zinc-200">{title}</span>
-                <span className="mt-1 block text-xs leading-relaxed text-zinc-400">{detail}</span>
-            </span>
-        </button>
-    );
-}
-
 interface WorkbenchEmptyStateProps {
     provider: AIProvider;
     recommendedLabel: string;
     recommendedReason: string;
+    recommendedSize: string;
     localModelDisabled: boolean;
+    providerReady: boolean;
+    ollamaEndpoint?: string;
+    documentCount: number;
+    documentBusy?: boolean;
     onAttachDocs: () => void;
     onBestLocalModel: () => void;
     onSampleDocDemo: () => void;
@@ -164,7 +145,12 @@ export function WorkbenchEmptyState({
     provider,
     recommendedLabel,
     recommendedReason,
+    recommendedSize,
     localModelDisabled,
+    providerReady,
+    ollamaEndpoint,
+    documentCount,
+    documentBusy = false,
     onAttachDocs,
     onBestLocalModel,
     onSampleDocDemo,
@@ -175,120 +161,134 @@ export function WorkbenchEmptyState({
         provider === "cloud"
             ? "Cloud only runs after you add a key. Local paths stay available."
             : provider === "ollama"
-              ? "Ollama stays on your machine when the local server is reachable."
+              ? isNetworkedEndpoint(ollamaEndpoint)
+                  ? "Ollama is using a remote HTTPS endpoint, so prompts and enabled context leave this device."
+                  : "Ollama is using localhost, so prompts stay on this machine."
               : provider === "chrome-ai"
                 ? "Chrome AI is local when Gemini Nano is ready in this browser."
-                : "Browser mode keeps docs and prompts on this machine.";
+                : "Browser inference stays on-device; enabled search and automatic cloud routing are separate paths.";
+
+    const hasDocuments = documentCount > 0;
 
     return (
-        <div className="min-h-full px-1 py-8 sm:px-4">
-            <div className="mx-auto flex w-full max-w-3xl flex-col gap-5">
-                <div className="flex items-start gap-3">
-                    <PixelNoxMark className="mt-1 h-5 w-10 text-zinc-300" />
-                    <div className="min-w-0">
-                        <h2 className="text-xl font-semibold text-zinc-100">Drop files or ask a question</h2>
-                        <p className="mt-1 max-w-xl text-sm leading-relaxed text-zinc-400">
-                            Start with docs, notes, logs, or a plain question. The provider badge tells you when context
-                            stays local or goes to a configured cloud endpoint.
-                        </p>
+        <section
+            aria-labelledby="document-start-title"
+            className="mx-auto flex min-h-full w-full max-w-3xl flex-col justify-center gap-4 px-1 py-4 sm:px-4 sm:py-8"
+        >
+            <div className="flex items-start gap-3">
+                <PixelNoxMark className="mt-1 h-5 w-10 shrink-0 text-emerald-300" />
+                <div className="min-w-0">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-emerald-300">
+                        Private document Q&amp;A
+                    </p>
+                    <h2 id="document-start-title" className="mt-1 text-xl font-semibold text-zinc-100 sm:text-2xl">
+                        {hasDocuments
+                            ? "Document ready. Ask a cited question."
+                            : "Start with one confidential document."}
+                    </h2>
+                    <p className="mt-1 max-w-2xl text-sm leading-6 text-zinc-400">
+                        {hasDocuments
+                            ? documentCount +
+                              " document" +
+                              (documentCount === 1 ? " is" : "s are") +
+                              " indexed in this browser. Write a question below and verify the answer against its citation."
+                            : "Choose a file or load the sample. N0X retrieves evidence locally and labels it with filename and chunk citations."}
+                    </p>
+                </div>
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-[1.15fr_0.85fr]">
+                <div className="rounded-xl border border-zinc-800 bg-zinc-950/70 p-4">
+                    <div className="flex items-center gap-2 text-sm font-semibold text-white">
+                        {hasDocuments ? (
+                            <CheckCircle2 className="h-4 w-4 text-emerald-300" aria-hidden="true" />
+                        ) : (
+                            <FileText className="h-4 w-4 text-zinc-300" aria-hidden="true" />
+                        )}
+                        1. {hasDocuments ? "Document indexed" : "Choose a document"}
+                    </div>
+                    <p className="mt-2 text-xs leading-5 text-zinc-400">
+                        PDF, DOCX, Markdown, text, CSV, HTML, and JSON are supported. Browser mode keeps extraction and
+                        retrieval on this device.
+                    </p>
+                    <div className="mt-4 flex flex-col gap-2 min-[420px]:flex-row">
+                        <button
+                            onClick={onAttachDocs}
+                            disabled={documentBusy}
+                            className="inline-flex min-h-11 flex-1 items-center justify-center rounded-lg bg-white px-4 py-2 text-sm font-semibold text-black hover:bg-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                            {hasDocuments ? "Add another document" : "Choose a document"}
+                        </button>
+                        {!hasDocuments && (
+                            <button
+                                onClick={onSampleDocDemo}
+                                disabled={documentBusy}
+                                className="inline-flex min-h-11 flex-1 items-center justify-center rounded-lg border border-zinc-700 px-4 py-2 text-sm font-semibold text-zinc-200 hover:border-zinc-500 hover:bg-zinc-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                                Try the sample
+                            </button>
+                        )}
                     </div>
                 </div>
 
-                <div className="grid gap-2 sm:grid-cols-2">
-                    <EmptyStateCard
-                        icon={FileText}
-                        title="Attach docs"
-                        detail="PDFs, notes, CSVs, logs. Build context before you ask."
-                        onClick={onAttachDocs}
-                    />
-                    <EmptyStateCard
-                        icon={HardDrive}
-                        title="Best local model"
-                        detail={`${recommendedLabel}. ${recommendedReason}.`}
-                        onClick={onBestLocalModel}
-                        disabled={localModelDisabled}
-                    />
-                    <EmptyStateCard
-                        icon={FileText}
-                        title="Private docs demo"
-                        detail="Load a sample brief and get a useful first prompt."
-                        onClick={onSampleDocDemo}
-                    />
-                    <EmptyStateCard
-                        icon={Search}
-                        title="Search web"
-                        detail="Turn on web context when local docs are not enough."
-                        onClick={onSearchWeb}
-                    />
+                <div className="rounded-xl border border-zinc-800 bg-zinc-950/70 p-4">
+                    <div className="flex items-center gap-2 text-sm font-semibold text-white">
+                        {providerReady ? (
+                            <CheckCircle2 className="h-4 w-4 text-emerald-300" aria-hidden="true" />
+                        ) : (
+                            <HardDrive className="h-4 w-4 text-zinc-300" aria-hidden="true" />
+                        )}
+                        2. {providerReady ? "Provider ready" : "Load a local model"}
+                    </div>
+                    <p className="mt-2 text-xs leading-5 text-zinc-400">
+                        {providerReady
+                            ? providerNote
+                            : localModelDisabled
+                              ? "WebGPU is unavailable here. Choose Chrome AI, Ollama, or Cloud from the provider menu."
+                              : recommendedLabel +
+                                " downloads " +
+                                recommendedSize +
+                                " on first use. Cached weights avoid most re-downloads, but the model still initializes each visit."}
+                    </p>
+                    {!providerReady && !localModelDisabled && (
+                        <button
+                            onClick={onBestLocalModel}
+                            className="mt-4 inline-flex min-h-11 w-full items-center justify-center rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2 text-sm font-semibold text-zinc-100 hover:border-zinc-500 hover:bg-zinc-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                            title={recommendedReason}
+                        >
+                            Load {recommendedLabel}
+                        </button>
+                    )}
                 </div>
+            </div>
 
-                <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-400">
-                    <span>{providerNote}</span>
+            <div className="flex flex-col gap-3 rounded-xl border border-zinc-900 bg-black/20 p-3 text-xs text-zinc-400 sm:flex-row sm:items-center sm:justify-between">
+                <p className="leading-5">
+                    <strong className="text-zinc-300">3. Ask and verify.</strong> Supported claims cite{" "}
+                    <span className="font-mono text-emerald-300">[filename#chunk-N]</span>. Advanced tools remain in the
+                    composer.
+                </p>
+                <div className="flex shrink-0 flex-wrap gap-2">
+                    <button
+                        onClick={onSearchWeb}
+                        className="min-h-11 rounded-md px-3 py-2 text-zinc-300 hover:bg-zinc-900 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                    >
+                        Search web
+                    </button>
                     <button
                         onClick={onPrivacyInspector}
-                        className="min-h-11 rounded-md border border-zinc-800 px-3 py-2 text-zinc-300 transition hover:border-zinc-600 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                        className="min-h-11 rounded-md px-3 py-2 text-zinc-300 hover:bg-zinc-900 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
                     >
-                        Open privacy inspector
+                        Privacy details
                     </button>
                 </div>
             </div>
-        </div>
-    );
-}
-
-interface StartHereStripProps {
-    show: boolean;
-    localModelDisabled: boolean;
-    onBestLocalModel: () => void;
-    onAttachDocs: () => void;
-    onCloudSetup: () => void;
-    onPrivacyInspector: () => void;
-}
-
-export function StartHereStrip({
-    show,
-    localModelDisabled,
-    onBestLocalModel,
-    onAttachDocs,
-    onCloudSetup,
-    onPrivacyInspector,
-}: StartHereStripProps) {
-    if (!show) return null;
-
-    const actions = [
-        { label: "Best local model", onClick: onBestLocalModel, disabled: localModelDisabled },
-        { label: "Attach docs", onClick: onAttachDocs },
-        { label: "Configure cloud", onClick: onCloudSetup },
-        { label: "Open privacy inspector", onClick: onPrivacyInspector },
-    ];
-
-    return (
-        <div className="px-2 pb-1 sm:px-4">
-            <div className="mx-auto flex max-w-4xl items-center gap-2 overflow-hidden rounded-lg border border-zinc-900 bg-zinc-950/70 px-2 py-1.5 sm:justify-between sm:px-3">
-                <span className="sr-only text-xs font-semibold text-zinc-400 sm:not-sr-only">Start here</span>
-                <div className="flex min-w-0 flex-1 gap-1.5 overflow-x-auto no-scrollbar sm:flex-none sm:overflow-visible">
-                    {actions.map(action => (
-                        <button
-                            key={action.label}
-                            onClick={action.onClick}
-                            disabled={action.disabled}
-                            className={cn(
-                                "h-11 shrink-0 whitespace-nowrap rounded-md border border-zinc-800 px-3 py-2 text-xs font-medium text-zinc-300 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white",
-                                action.disabled
-                                    ? "cursor-not-allowed opacity-45"
-                                    : "hover:border-zinc-700 hover:bg-zinc-900 hover:text-white"
-                            )}
-                        >
-                            {action.label}
-                        </button>
-                    ))}
-                </div>
-            </div>
-        </div>
+        </section>
     );
 }
 
 function DependencyFallbackPanel({ provider, webllm, chromeAI, ollama, cloudAI, searchError }: DependencyProps) {
+    const ollamaRemote = isNetworkedEndpoint(ollama.baseUrl);
     const rows = [
         {
             name: "WebGPU",
@@ -311,9 +311,9 @@ function DependencyFallbackPanel({ provider, webllm, chromeAI, ollama, cloudAI, 
             name: "Ollama",
             status: ollama.isSupported ? "ready" : provider === "ollama" ? "issue" : "optional",
             detail: ollama.isSupported
-                ? `${ollama.models.length} local model(s)`
-                : ollama.error || "Local server not reachable",
-            fallback: "Run ollama serve, or use WebGPU/Cloud.",
+                ? `${ollama.models.length} model(s) · ${ollamaRemote ? "remote HTTPS endpoint" : "localhost"}`
+                : ollama.error || "Configured endpoint not reachable",
+            fallback: "Start or check the configured Ollama endpoint, or use WebGPU/Cloud.",
         },
         {
             name: "Cloud key",
@@ -363,18 +363,24 @@ interface PrivacyInspectorProps extends DependencyProps {
     open: boolean;
     onClose: () => void;
     ragCount: number;
+    ragEnabled: boolean;
     cloudKeySet: boolean;
     deepSearchEnabled: boolean;
     memoryEnabled: boolean;
+    autoRouteEnabled: boolean;
+    pythonEnabled: boolean;
 }
 
 export function PrivacyInspector({
     open,
     onClose,
     ragCount,
+    ragEnabled,
     cloudKeySet,
     deepSearchEnabled,
     memoryEnabled,
+    autoRouteEnabled,
+    pythonEnabled,
     provider,
     webllm,
     chromeAI,
@@ -418,6 +424,23 @@ export function PrivacyInspector({
 
     if (!open) return null;
 
+    const remoteOllama = provider === "ollama" && isNetworkedEndpoint(ollama.baseUrl);
+    const currentPath =
+        provider === "cloud"
+            ? "cloud provider receives the selected prompt and enabled context"
+            : remoteOllama
+              ? "remote Ollama host receives the selected prompt and enabled context"
+              : deepSearchEnabled
+                ? "local provider plus a network search query and returned search context"
+                : autoRouteEnabled && Boolean(cloudAI.apiKey)
+                  ? "local by default; automatic routing may select the configured cloud provider"
+                  : provider === "ollama"
+                    ? "loopback Ollama path on this device"
+                    : "on-device provider path";
+    const currentPathWithTools = deepSearchEnabled
+        ? `${currentPath}; search also sends the query to N0X search providers`
+        : currentPath;
+
     const rows = [
         {
             icon: Database,
@@ -432,17 +455,12 @@ export function PrivacyInspector({
         {
             icon: Lock,
             label: "Current chat path",
-            value:
-                provider === "cloud"
-                    ? "cloud provider receives selected prompt/context"
-                    : deepSearchEnabled
-                      ? "local model plus network search context"
-                      : "local provider path",
+            value: currentPathWithTools,
         },
         {
             icon: Wifi,
-            label: "Network toggles",
-            value: `search ${deepSearchEnabled ? "on" : "off"} · memory recall ${memoryEnabled ? "on" : "off"}`,
+            label: "Request controls",
+            value: `docs ${ragEnabled ? `on (${ragCount} attached)` : `off (${ragCount} attached)`} · search ${deepSearchEnabled ? "on (network)" : "off"} · memory ${memoryEnabled ? "on (local)" : "off"} · auto-route ${autoRouteEnabled ? "on" : "off"} · Python ${pythonEnabled ? "available locally with per-run approval" : "off"}`,
         },
     ];
 

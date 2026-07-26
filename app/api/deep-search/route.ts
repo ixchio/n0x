@@ -1,6 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { logger } from "@/lib/core/logger";
 import { checkRateLimit } from "@/lib/server/rate-limit";
+import { apiRequestErrorResponse, assertSameOriginRequest, readBoundedJson } from "@/lib/server/request-policy";
+import {
+    abortableDelay,
+    createRequestBudget,
+    normalizePublicHttpsUrl,
+    readBoundedResponseJson,
+    readBoundedResponseText,
+    type RequestBudget,
+} from "@/lib/server/outbound-http";
 
 export const maxDuration = 30;
 
@@ -46,6 +55,10 @@ const SEARXNG_INSTANCES = [
 ];
 
 const BRAVE_SEARCH_ENDPOINT = "https://api.search.brave.com/res/v1/web/search";
+const SEARCH_DEADLINE_MS = 24_000;
+const SEARCH_JSON_LIMIT = 1_000_000;
+const JINA_TEXT_LIMIT = 500_000;
+const SEARX_HEDGE_DELAY_MS = 250;
 // Brave API key is optional - use if you have one for better results
 
 const CURRENT_YEAR = new Date().getFullYear();
@@ -146,6 +159,10 @@ const AI_MODEL_USAGE_SOURCES: SearchResult[] = [
         source: "curated",
     },
 ];
+
+function boundedString(value: unknown, maxLength: number): string {
+    return typeof value === "string" ? value.slice(0, maxLength) : "";
+}
 
 function cleanQuery(input: string): string {
     let q = input.trim().replace(/\s+/g, " ");
@@ -397,14 +414,15 @@ function rankContent(query: string, content: string[], aiModelRanking: boolean, 
 }
 
 function addUniqueResult(results: SearchResult[], seenUrls: Set<string>, result: SearchResult): void {
-    if (!result.url || seenUrls.has(result.url)) return;
-    results.push(result);
-    seenUrls.add(result.url);
+    const url = normalizePublicHttpsUrl(result.url);
+    if (!url || seenUrls.has(url)) return;
+    results.push({ ...result, url });
+    seenUrls.add(url);
 }
 
 function sourceFromContent(content: string): string | null {
     const match = content.match(/^\[Source:\s*([^\]]+)]/);
-    return match?.[1]?.trim() || null;
+    return normalizePublicHttpsUrl(match?.[1]?.trim());
 }
 
 function cleanReaderMarkdown(text: string): string {
@@ -430,51 +448,69 @@ function isUsefulReaderLine(line: string): boolean {
     return true;
 }
 
-async function searchSearXNG(query: string, timeout = 6000): Promise<{ results: SearchResult[]; content: string[] }> {
-    for (const instance of SEARXNG_INSTANCES) {
-        try {
-            const url = `${instance}/search?q=${encodeURIComponent(query)}&format=json&categories=general&language=en&time_range=&safesearch=0`;
-            const res = await fetch(url, {
-                headers: {
-                    Accept: "application/json",
-                    "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/120.0.0.0",
+async function searchSearXNG(
+    query: string,
+    budget: RequestBudget
+): Promise<{ results: SearchResult[]; content: string[] }> {
+    const losers = new AbortController();
+    const attempts = SEARXNG_INSTANCES.map(async (instance, index) => {
+        const combinedSignal = AbortSignal.any([budget.signal, losers.signal]);
+        if (index > 0) await abortableDelay(index * SEARX_HEDGE_DELAY_MS, combinedSignal);
+
+        const url = `${instance}/search?q=${encodeURIComponent(query)}&format=json&categories=general&language=en&time_range=&safesearch=0`;
+        const res = await fetch(url, {
+            cache: "no-store",
+            headers: {
+                Accept: "application/json",
+                "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/120.0.0.0",
+            },
+            redirect: "error",
+            signal: AbortSignal.any([budget.childSignal(6_000), losers.signal]),
+        });
+        if (!res.ok) throw new Error("SearXNG unavailable");
+
+        const data = await readBoundedResponseJson<{ results?: unknown }>(res, SEARCH_JSON_LIMIT);
+        const rows = Array.isArray(data.results) ? data.results : [];
+        const normalizedRows = rows.slice(0, 8).flatMap(row => {
+            if (!row || typeof row !== "object") return [];
+            const item = row as Record<string, unknown>;
+            const resultUrl = normalizePublicHttpsUrl(item.url);
+            if (!resultUrl) return [];
+            return [
+                {
+                    title: typeof item.title === "string" ? item.title.slice(0, 300) : "",
+                    url: resultUrl,
+                    text: typeof item.content === "string" ? item.content.slice(0, 1_500) : "",
                 },
-                signal: AbortSignal.timeout(timeout),
-            });
+            ];
+        });
+        const results: SearchResult[] = normalizedRows.map(row => ({
+            title: row.title,
+            url: row.url,
+            snippet: row.text.slice(0, 300),
+            source: "searxng",
+        }));
+        if (results.length === 0) throw new Error("SearXNG returned no usable results");
 
-            if (!res.ok) continue;
-            const data = await res.json();
+        const content = normalizedRows
+            .filter(result => result.text.length > 40)
+            .slice(0, 5)
+            .map(result => `[Source: ${result.url}]\n[${result.title}]\n${result.text}`);
+        return { results, content };
+    });
 
-            if (!data.results || data.results.length === 0) continue;
-
-            const results: SearchResult[] = data.results.slice(0, 8).map((r: any) => ({
-                title: r.title || "",
-                url: r.url || "",
-                snippet: (r.content || "").slice(0, 300),
-                source: "searxng",
-            }));
-
-            const content: string[] = data.results
-                .filter((r: any) => r.content && r.content.length > 40)
-                .slice(0, 5)
-                .map((r: any) => {
-                    const text = r.content.slice(0, 1500);
-                    return `[Source: ${r.url || ""}]\n[${r.title}]\n${text}`;
-                });
-
-            if (results.length > 0) {
-                return { results, content };
-            }
-        } catch {
-            continue;
-        }
+    try {
+        return await Promise.any(attempts);
+    } catch {
+        return { results: [], content: [] };
+    } finally {
+        losers.abort(new DOMException("SearXNG winner selected", "AbortError"));
     }
-
-    return { results: [], content: [] };
 }
 
 async function searchBrave(
-    query: string
+    query: string,
+    budget: RequestBudget
 ): Promise<{ results: SearchResult[]; content: string[]; answer?: string } | null> {
     const apiKey = process.env.BRAVE_API_KEY;
     if (!apiKey || apiKey.length < 10) return null;
@@ -482,46 +518,62 @@ async function searchBrave(
     try {
         const url = `${BRAVE_SEARCH_ENDPOINT}?q=${encodeURIComponent(query)}&count=10&text_decorations=false&search_lang=en`;
         const res = await fetch(url, {
+            cache: "no-store",
             headers: {
                 Accept: "application/json",
                 "X-Subscription-Token": apiKey,
             },
-            signal: AbortSignal.timeout(5000),
+            redirect: "error",
+            signal: budget.childSignal(5_000),
         });
 
         if (!res.ok) return null;
-        const data = await res.json();
+        const data = await readBoundedResponseJson<any>(res, SEARCH_JSON_LIMIT);
+        const rows = Array.isArray(data.web?.results) ? data.web.results.slice(0, 8) : [];
+        const normalizedRows: Array<{ title: string; url: string; description: string }> = rows.flatMap((row: any) => {
+            const url = normalizePublicHttpsUrl(row?.url);
+            if (!url) return [];
+            return [
+                {
+                    title: boundedString(row?.title, 300),
+                    url,
+                    description: boundedString(row?.description, 1_500),
+                },
+            ];
+        });
 
-        const results: SearchResult[] = (data.web?.results || []).slice(0, 8).map((r: any) => ({
-            title: r.title || "",
-            url: r.url || "",
-            snippet: r.description || "",
+        const results: SearchResult[] = normalizedRows.map(row => ({
+            title: row.title,
+            url: row.url,
+            snippet: row.description,
             source: "brave",
         }));
 
-        const content: string[] = (data.web?.results || [])
-            .filter((r: any) => r.description && r.description.length > 50)
+        const content: string[] = normalizedRows
+            .filter(row => row.description.length > 50)
             .slice(0, 5)
-            .map((r: any) => `[Source: ${r.url || ""}]\n[${r.title}]\n${r.description}`);
+            .map(row => `[Source: ${row.url}]\n[${row.title}]\n${row.description}`);
 
         // Brave's instant answer
-        const answer = data.query?.answer || data.infobox?.description || undefined;
+        const answer = boundedString(data.query?.answer || data.infobox?.description, 4_000) || undefined;
 
         return { results, content, answer };
-    } catch (e) {
-        logger.error("Brave search error:", e);
+    } catch {
+        if (!budget.signal.aborted) logger.warn("Brave search provider unavailable");
         return null;
     }
 }
 
 async function searchTavily(
-    query: string
+    query: string,
+    budget: RequestBudget
 ): Promise<{ results: SearchResult[]; content: string[]; summary?: string } | null> {
     const apiKey = process.env.TAVILY_API_KEY;
     if (!apiKey || apiKey.includes("xxxxxxx") || apiKey.length < 10) return null;
 
     try {
         const res = await fetch("https://api.tavily.com/search", {
+            cache: "no-store",
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -532,66 +584,90 @@ async function searchTavily(
                 include_answer: true,
                 include_raw_content: false,
             }),
-            signal: AbortSignal.timeout(6000),
+            redirect: "error",
+            signal: budget.childSignal(6_000),
         });
         if (!res.ok) return null;
-        const response = await res.json();
+        const response = await readBoundedResponseJson<any>(res, SEARCH_JSON_LIMIT);
+        const rows = Array.isArray(response.results) ? response.results.slice(0, 8) : [];
+        const normalizedRows: Array<{ title: string; url: string; content: string }> = rows.flatMap((row: any) => {
+            const url = normalizePublicHttpsUrl(row?.url);
+            if (!url) return [];
+            return [
+                {
+                    title: boundedString(row?.title, 300),
+                    url,
+                    content: boundedString(row?.content, 1_500),
+                },
+            ];
+        });
 
-        const results: SearchResult[] = (response.results || []).map((r: any) => ({
-            title: r.title || "",
-            url: r.url || "",
-            snippet: r.content?.slice(0, 200) || "",
+        const results: SearchResult[] = normalizedRows.map(row => ({
+            title: row.title,
+            url: row.url,
+            snippet: row.content.slice(0, 200),
             source: "tavily",
         }));
 
-        const content: string[] = (response.results || [])
-            .filter((r: any) => r.content && r.content.length > 50)
+        const content: string[] = normalizedRows
+            .filter(row => row.content.length > 50)
             .slice(0, 4)
-            .map((r: any) => `[Source: ${r.url || ""}]\n${r.content.slice(0, 1500)}`);
+            .map(row => `[Source: ${row.url}]\n${row.content}`);
 
         return {
             results,
             content,
-            summary: response.answer || undefined,
+            summary: boundedString(response.answer, 4_000) || undefined,
         };
-    } catch (e) {
-        logger.error("Tavily error:", e);
+    } catch {
+        if (!budget.signal.aborted) logger.warn("Tavily search provider unavailable");
         return null;
     }
 }
 
-async function getDDGInstant(query: string): Promise<{ summary: string | null; results: SearchResult[] }> {
+async function getDDGInstant(
+    query: string,
+    budget: RequestBudget
+): Promise<{ summary: string | null; results: SearchResult[] }> {
     try {
         const res = await fetch(
             `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1&skip_disambig=1`,
-            { signal: AbortSignal.timeout(4000) }
+            { cache: "no-store", redirect: "error", signal: budget.childSignal(4_000) }
         );
-        const data = await res.json();
+        if (!res.ok) return { summary: null, results: [] };
+        const data = await readBoundedResponseJson<any>(res, 500_000);
 
         let summary: string | null = null;
         const results: SearchResult[] = [];
 
-        if (data.Abstract && data.Abstract.length > 30) {
-            summary = data.Abstract;
-            results.push({
-                title: data.Heading || query,
-                url: data.AbstractURL || "",
-                snippet: data.Abstract.slice(0, 200),
-                source: "duckduckgo",
-            });
+        const abstract = boundedString(data.Abstract, 4_000);
+        if (abstract.length > 30) {
+            summary = abstract;
+            const abstractUrl = normalizePublicHttpsUrl(data.AbstractURL);
+            if (abstractUrl) {
+                results.push({
+                    title: boundedString(data.Heading, 300) || query,
+                    url: abstractUrl,
+                    snippet: abstract.slice(0, 200),
+                    source: "duckduckgo",
+                });
+            }
         }
 
-        if (data.Answer && !summary) {
-            summary = data.Answer;
+        const directAnswer = boundedString(data.Answer, 4_000);
+        if (directAnswer && !summary) {
+            summary = directAnswer;
         }
 
-        if (data.RelatedTopics) {
+        if (Array.isArray(data.RelatedTopics)) {
             for (const topic of data.RelatedTopics.slice(0, 4)) {
-                if (topic.Text && topic.FirstURL) {
+                if (typeof topic?.Text === "string" && typeof topic?.FirstURL === "string") {
+                    const topicUrl = normalizePublicHttpsUrl(topic.FirstURL);
+                    if (!topicUrl) continue;
                     results.push({
-                        title: topic.Text.slice(0, 80),
-                        url: topic.FirstURL,
-                        snippet: topic.Text.slice(0, 200),
+                        title: boundedString(topic.Text, 80),
+                        url: topicUrl,
+                        snippet: boundedString(topic.Text, 200),
                         source: "duckduckgo",
                     });
                 }
@@ -604,34 +680,53 @@ async function getDDGInstant(query: string): Promise<{ summary: string | null; r
     }
 }
 
-async function searchWikipedia(query: string): Promise<{ results: SearchResult[]; content: string[] }> {
+async function searchWikipedia(
+    query: string,
+    budget: RequestBudget
+): Promise<{ results: SearchResult[]; content: string[] }> {
     try {
         const searchUrl = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&format=json&srlimit=3&origin=*`;
-        const searchRes = await fetch(searchUrl, { signal: AbortSignal.timeout(5000) });
-        const searchData = await searchRes.json();
+        const searchRes = await fetch(searchUrl, {
+            cache: "no-store",
+            redirect: "error",
+            signal: budget.childSignal(5_000),
+        });
+        if (!searchRes.ok) return { results: [], content: [] };
+        const searchData = await readBoundedResponseJson<any>(searchRes, 500_000);
 
-        const pages = searchData.query?.search || [];
+        const pages = Array.isArray(searchData.query?.search) ? searchData.query.search.slice(0, 3) : [];
         if (pages.length === 0) return { results: [], content: [] };
 
-        const titles = pages.map((p: any) => p.title).join("|");
+        const titles = pages
+            .map((page: any) => boundedString(page?.title, 300))
+            .filter(Boolean)
+            .join("|");
+        if (!titles) return { results: [], content: [] };
         const extractUrl = `https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(titles)}&prop=extracts&exintro=false&explaintext=true&exchars=2000&format=json&origin=*`;
-        const extractRes = await fetch(extractUrl, { signal: AbortSignal.timeout(5000) });
-        const extractData = await extractRes.json();
+        const extractRes = await fetch(extractUrl, {
+            cache: "no-store",
+            redirect: "error",
+            signal: budget.childSignal(5_000),
+        });
+        if (!extractRes.ok) return { results: [], content: [] };
+        const extractData = await readBoundedResponseJson<any>(extractRes, SEARCH_JSON_LIMIT);
 
         const results: SearchResult[] = [];
         const content: string[] = [];
 
         if (extractData.query?.pages) {
-            for (const page of Object.values(extractData.query.pages) as any[]) {
-                if (page.extract && page.extract.length > 50) {
-                    const wikiUrl = `https://en.wikipedia.org/wiki/${encodeURIComponent(page.title.replace(/ /g, "_"))}`;
+            for (const page of (Object.values(extractData.query.pages) as any[]).slice(0, 3)) {
+                const title = boundedString(page?.title, 300);
+                const extract = boundedString(page?.extract, 2_000);
+                if (title && extract.length > 50) {
+                    const wikiUrl = `https://en.wikipedia.org/wiki/${encodeURIComponent(title.replace(/ /g, "_"))}`;
                     results.push({
-                        title: page.title,
+                        title,
                         url: wikiUrl,
-                        snippet: page.extract.slice(0, 200),
+                        snippet: extract.slice(0, 200),
                         source: "wikipedia",
                     });
-                    content.push(`[Source: ${wikiUrl}]\n[Wikipedia: ${page.title}]\n${page.extract.slice(0, 1500)}`);
+                    content.push(`[Source: ${wikiUrl}]\n[Wikipedia: ${title}]\n${extract.slice(0, 1_500)}`);
                 }
             }
         }
@@ -644,20 +739,22 @@ async function searchWikipedia(query: string): Promise<{ results: SearchResult[]
 
 // ── Jina Reader for deep content extraction ──
 
-async function extractWithJina(url: string): Promise<string> {
+async function extractWithJina(url: string, budget: RequestBudget): Promise<string> {
     try {
         const res = await fetch(`https://r.jina.ai/${url}`, {
+            cache: "no-store",
             headers: {
                 Accept: "text/plain",
                 "X-Return-Format": "text",
                 "X-Timeout": "5",
             },
-            signal: AbortSignal.timeout(8000),
+            redirect: "error",
+            signal: budget.childSignal(8_000),
         });
 
         if (!res.ok) return "";
 
-        const text = cleanReaderMarkdown(await res.text());
+        const text = cleanReaderMarkdown(await readBoundedResponseText(res, JINA_TEXT_LIMIT));
         const lines = text.split("\n").filter(isUsefulReaderLine);
         const clean = lines.join("\n").slice(0, 3500);
 
@@ -730,6 +827,12 @@ function synthesizeAnswer(query: string, allContent: string[], summary?: string)
 // ── Main Handler ──
 
 export async function POST(request: NextRequest) {
+    try {
+        assertSameOriginRequest(request);
+    } catch (error) {
+        return apiRequestErrorResponse(error)!;
+    }
+
     const limit = checkRateLimit(request, {
         key: "deep-search",
         limit: 20,
@@ -737,13 +840,9 @@ export async function POST(request: NextRequest) {
     });
     if (!limit.allowed) return limit.response;
 
-    const contentLength = Number(request.headers.get("content-length") || "0");
-    if (contentLength > 16_384) {
-        return NextResponse.json({ error: "Payload too large" }, { status: 413, headers: limit.headers });
-    }
-
+    const budget = createRequestBudget(request.signal, SEARCH_DEADLINE_MS);
     try {
-        const { query: rawQuery } = await request.json();
+        const { query: rawQuery } = await readBoundedJson<{ query?: unknown }>(request, 16_384);
         if (typeof rawQuery !== "string" || !rawQuery.trim()) {
             return NextResponse.json({ error: "Query required" }, { status: 400, headers: limit.headers });
         }
@@ -760,13 +859,13 @@ export async function POST(request: NextRequest) {
 
         // Run ALL search engines in parallel for maximum speed
         const [tavilyResult, braveResult, searxResult, ddgResult, wikiResult] = await Promise.all([
-            searchTavily(refinedQuery).catch(() => null),
-            searchBrave(refinedQuery).catch(() => null),
-            searchSearXNG(refinedQuery).catch(() => ({ results: [], content: [] })),
-            getDDGInstant(refinedQuery).catch(() => ({ summary: null, results: [] })),
+            searchTavily(refinedQuery, budget).catch(() => null),
+            searchBrave(refinedQuery, budget).catch(() => null),
+            searchSearXNG(refinedQuery, budget).catch(() => ({ results: [], content: [] })),
+            getDDGInstant(refinedQuery, budget).catch(() => ({ summary: null, results: [] })),
             aiModelSearch
                 ? Promise.resolve({ results: [], content: [] })
-                : searchWikipedia(refinedQuery).catch(() => ({ results: [], content: [] })),
+                : searchWikipedia(refinedQuery, budget).catch(() => ({ results: [], content: [] })),
         ]);
 
         // Priority hierarchy: Tavily > Brave > SearXNG > Wikipedia > DDG
@@ -845,7 +944,7 @@ export async function POST(request: NextRequest) {
 
             if (jinaUrls.length > 0) {
                 jinaAttempted = true;
-                const extracts = await Promise.all(jinaUrls.map(extractWithJina));
+                const extracts = await Promise.all(jinaUrls.map(url => extractWithJina(url, budget)));
                 for (let i = 0; i < extracts.length; i++) {
                     if (extracts[i].length > 100 && allContent.length < 8) {
                         jinaHits++;
@@ -895,7 +994,7 @@ export async function POST(request: NextRequest) {
             {
                 name: "SearXNG",
                 status: searxResult.results.length > 0 || searxResult.content.length > 0 ? "ok" : "failed",
-                detail: `${SEARXNG_INSTANCES.length} public instance(s) tried`,
+                detail: `hedged across up to ${SEARXNG_INSTANCES.length} public instances`,
             },
             {
                 name: "DuckDuckGo",
@@ -953,7 +1052,9 @@ export async function POST(request: NextRequest) {
 
         return NextResponse.json(response, { headers: limit.headers });
     } catch (error) {
-        logger.error("Deep search error:", error);
+        const policyResponse = apiRequestErrorResponse(error, limit.headers);
+        if (policyResponse) return policyResponse;
+        logger.error("Deep search route failed");
         return NextResponse.json(
             {
                 query: "",
@@ -971,5 +1072,8 @@ export async function POST(request: NextRequest) {
             },
             { headers: limit.headers }
         );
+    } finally {
+        budget.abort();
+        budget.dispose();
     }
 }

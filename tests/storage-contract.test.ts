@@ -50,7 +50,7 @@ describe("IndexedDB storage contract", () => {
     it("keeps stable database and object-store names", () => {
         const chat = source("lib/chat/useChatStore.ts");
         const memory = source("lib/memory/useMemory.ts");
-        const rag = source("lib/retrieval/rag.worker.ts");
+        const rag = source("lib/retrieval/rag-cache.ts");
 
         expect([stringConstant(chat, "DB_NAME"), stringConstant(chat, "STORE")]).toEqual(["n0x_chat", "conversations"]);
         expect([stringConstant(memory, "DB_NAME"), stringConstant(memory, "STORE_NAME")]).toEqual([

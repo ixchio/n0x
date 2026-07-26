@@ -41,4 +41,25 @@ describe("chat composer keyboard behavior", () => {
 
         expect(onSend).toHaveBeenCalledOnce();
     });
+
+    it("does not expose a dead send action for an attached document without a question", () => {
+        const onSend = vi.fn();
+        render(
+            <ChatInput
+                input=""
+                setInput={vi.fn()}
+                onSend={onSend}
+                isStreaming={false}
+                deepSearchEnabled={false}
+                toggleDeepSearch={vi.fn()}
+                memoryEnabled={false}
+                toggleMemory={vi.fn()}
+                attachedFiles={[{ id: "doc-1", name: "policy.pdf", size: 100, type: "application/pdf" }]}
+            />
+        );
+
+        expect((screen.getByRole("button", { name: "Send message" }) as HTMLButtonElement).disabled).toBe(true);
+        fireEvent.keyDown(screen.getByRole("textbox", { name: "Message n0x" }), { key: "Enter" });
+        expect(onSend).not.toHaveBeenCalled();
+    });
 });

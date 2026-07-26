@@ -23,7 +23,7 @@ export function AnalyticsPreferences() {
         <div className="flex items-center justify-between gap-4 rounded-xl border border-zinc-800 bg-zinc-900/60 p-4">
             <div>
                 <p className="font-medium text-zinc-200">Anonymous analytics</p>
-                <p className="mt-1 text-sm text-zinc-500">Change takes effect immediately on this browser.</p>
+                <p className="mt-1 text-sm text-zinc-400">Change takes effect immediately on this browser.</p>
             </div>
             <button
                 type="button"

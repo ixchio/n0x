@@ -14,7 +14,7 @@ export function modelSizeInGB(size?: string): number {
 }
 
 export function hasOpenOverlay(): boolean {
-    return Boolean(document.querySelector('[role="dialog"], [role="menu"]'));
+    return Boolean(document.querySelector('[role="dialog"], [role="menu"], [data-chat-popover="true"]'));
 }
 
 export function shouldToggleShortcuts(shortcutsOpen: boolean): boolean {
@@ -164,7 +164,7 @@ export function CommandMenu({
                             className="flex min-h-11 cursor-pointer items-center gap-2 rounded px-2 py-2 text-xs text-zinc-300 hover:bg-crt-hover hover:text-phosphor data-[selected=true]:bg-crt-hover data-[selected=true]:text-phosphor"
                         >
                             <Database className="w-3 h-3" />
-                            {ragEnabled ? "close knowledge base" : "open knowledge base"}
+                            {ragEnabled ? "disable document context" : "enable document context"}
                         </Command.Item>
                         <Command.Item
                             onSelect={() => {

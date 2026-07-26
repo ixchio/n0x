@@ -4,6 +4,7 @@ import "./globals.css";
 import { PWARegister } from "@/components/system/pwa-register";
 import { ErrorBoundary } from "@/components/system/error-boundary";
 import { VercelAnalytics } from "@/components/system/vercel-analytics";
+import { AnalyticsConsentBanner } from "@/components/system/analytics-consent-banner";
 
 const inter = Inter({
     subsets: ["latin"],
@@ -19,9 +20,9 @@ const jetbrainsMono = JetBrains_Mono({
 
 export const metadata: Metadata = {
     metadataBase: new URL("https://n0xth.vercel.app"),
-    title: "N0X — The Full AI Stack in One Browser Tab",
+    title: "N0X — Private Document Q&A With Citations",
     description:
-        "In-browser AI workstation for local models, documents, code, and memory. Local by default. Search, image and cloud paths are explicit.",
+        "Ask confidential documents questions in your browser and get filename/chunk citations. Local model, search, and cloud boundaries stay explicit.",
     manifest: "/manifest.json",
     appleWebApp: {
         capable: true,
@@ -36,9 +37,9 @@ export const metadata: Metadata = {
         "mobile-web-app-capable": "yes",
     },
     openGraph: {
-        title: "N0X — The Full AI Stack in One Browser Tab",
+        title: "N0X — Private Document Q&A With Citations",
         description:
-            "In-browser AI workstation for local models, documents, code, and memory. Local by default. Search, image and cloud paths are explicit.",
+            "Ask confidential documents questions in your browser and get filename/chunk citations. Local and network paths stay explicit.",
         type: "website",
         url: "https://n0xth.vercel.app",
         images: [
@@ -46,15 +47,15 @@ export const metadata: Metadata = {
                 url: "/og-image.png",
                 width: 1200,
                 height: 630,
-                alt: "N0X — The Full AI Stack in One Browser Tab",
+                alt: "N0X private document Q&A workbench",
             },
         ],
         siteName: "N0X",
     },
     twitter: {
         card: "summary_large_image",
-        title: "N0X — The Full AI Stack in One Browser Tab",
-        description: "Local by default. Search, image and cloud paths are explicit.",
+        title: "N0X — Private Document Q&A With Citations",
+        description: "Ask documents locally and verify answers with filename/chunk citations.",
         images: ["/og-image.png"],
         creator: "@ixchio",
     },
@@ -75,7 +76,7 @@ export default function RootLayout({
         "@context": "https://schema.org",
         "@type": "SoftwareApplication",
         name: "N0X",
-        applicationCategory: "DeveloperApplication",
+        applicationCategory: "ProductivityApplication",
         operatingSystem: "Web Browser",
         offers: {
             "@type": "Offer",
@@ -83,16 +84,17 @@ export default function RootLayout({
             priceCurrency: "USD",
         },
         description:
-            "In-browser AI workstation for local models, document retrieval, code execution, and memory. Local by default. Search, image and cloud paths are explicit.",
+            "Local-first browser document Q&A with filename/chunk citations. Browser inference is available through WebGPU; cloud, search, image, speech, and remote-provider features can use network paths.",
         featureList: [
+            "Document Q&A with filename/chunk citations",
+            "Local PDF, DOCX, and text extraction",
+            "BM25 retrieval for short documents and hybrid vector/keyword retrieval for larger documents",
             "Local LLM inference via WebGPU",
-            "Multi-source web search",
-            "Document Q&A with RAG",
-            "Python code execution",
-            "Image generation",
-            "Semantic memory",
-            "Text-to-speech",
-            "Speech-to-text",
+            "Optional Chrome AI, Ollama, and OpenAI-compatible providers",
+            "Agent mode with per-call approval for agent-initiated Python",
+            "Optional multi-source web search and image-generation network routes",
+            "Origin-scoped conversation and optional semantic-memory storage",
+            "Browser speech input/output; offline operation is not guaranteed",
         ],
         screenshot: "https://n0xth.vercel.app/og-image.png",
     };
@@ -106,6 +108,7 @@ export default function RootLayout({
                 {/* Background layer */}
                 <div className="fixed inset-0 z-[-1] bg-[#0a0a0a]" />
                 <ErrorBoundary>{children}</ErrorBoundary>
+                <AnalyticsConsentBanner />
                 <PWARegister />
                 <VercelAnalytics />
             </body>

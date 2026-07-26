@@ -50,6 +50,7 @@ interface ChatInputProps {
     attachedFiles?: AttachedFile[];
     onRemoveFile?: (id: string) => void;
     fileStatus?: string | null;
+    fileBusy?: boolean;
     agentEnabled?: boolean;
     toggleAgent?: () => void;
     sttSupported?: boolean;
@@ -91,6 +92,7 @@ export function ChatInput({
     attachedFiles = [],
     onRemoveFile,
     fileStatus,
+    fileBusy = false,
     agentEnabled,
     toggleAgent,
     sttSupported,
@@ -120,7 +122,7 @@ export function ChatInput({
         if (e.nativeEvent.isComposing || e.keyCode === 229) return;
         if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault();
-            onSend();
+            if (input.trim()) onSend();
         }
     };
 
@@ -139,22 +141,22 @@ export function ChatInput({
             e.preventDefault();
             e.stopPropagation();
             setIsDragging(false);
-            if (!onFileDrop) return;
+            if (!onFileDrop || isStreaming || fileBusy) return;
             const files = e.dataTransfer.files;
             if (files.length > 0) {
                 for (let i = 0; i < files.length; i++) onFileDrop(files[i]);
             }
         },
-        [onFileDrop]
+        [fileBusy, isStreaming, onFileDrop]
     );
 
     const handleFileSelect = useCallback(
         (e: React.ChangeEvent<HTMLInputElement>) => {
-            if (!onFileDrop || !e.target.files) return;
+            if (!onFileDrop || !e.target.files || isStreaming || fileBusy) return;
             for (let i = 0; i < e.target.files.length; i++) onFileDrop(e.target.files[i]);
             e.target.value = "";
         },
-        [onFileDrop]
+        [fileBusy, isStreaming, onFileDrop]
     );
 
     const features = [
@@ -217,7 +219,7 @@ export function ChatInput({
         >
             <div className="relative flex flex-col overflow-hidden rounded-xl border border-zinc-700 bg-zinc-900/40 px-2.5 pb-1.5 pt-2 shadow-[0_4px_24px_rgba(0,0,0,0.2)] transition-colors focus-within:border-zinc-500 sm:rounded-2xl sm:px-4 sm:pb-2 sm:pt-3">
                 {attachedFiles.length > 0 && (
-                    <div className="mb-2 flex flex-wrap gap-2 sm:mb-3">
+                    <div className="mb-2 flex max-h-28 flex-wrap gap-2 overflow-y-auto pr-1 sm:mb-3">
                         {attachedFiles.map(file => (
                             <div
                                 key={file.id}
@@ -230,8 +232,9 @@ export function ChatInput({
                                     <button
                                         type="button"
                                         onClick={() => onRemoveFile(file.id)}
+                                        disabled={isStreaming || fileBusy}
                                         aria-label={`Remove ${file.name}`}
-                                        className="ml-1 flex h-11 w-11 items-center justify-center rounded-md text-zinc-300 opacity-70 transition hover:bg-zinc-800 hover:text-red-300 focus:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white sm:opacity-0 sm:group-hover:opacity-100"
+                                        className="ml-1 flex h-11 w-11 items-center justify-center rounded-md text-zinc-300 opacity-70 transition hover:bg-zinc-800 hover:text-red-300 focus:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white disabled:cursor-not-allowed disabled:opacity-30 sm:opacity-0 sm:group-hover:opacity-100"
                                     >
                                         <X className="w-3.5 h-3.5" />
                                     </button>
@@ -262,9 +265,10 @@ export function ChatInput({
                             <button
                                 type="button"
                                 onClick={() => fileInputRef.current?.click()}
+                                disabled={isStreaming || fileBusy}
                                 aria-label="Attach files"
                                 title="Attach files"
-                                className="flex h-11 min-w-11 shrink-0 items-center justify-center gap-1.5 rounded-md px-2 text-xs font-medium text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white sm:px-2.5"
+                                className="flex h-11 min-w-11 shrink-0 items-center justify-center gap-1.5 rounded-md px-2 text-xs font-medium text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white disabled:cursor-not-allowed disabled:opacity-40 sm:px-2.5"
                             >
                                 <Upload className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
                                 <span className="hidden sm:inline">Attach</span>
@@ -275,11 +279,12 @@ export function ChatInput({
                                 type="button"
                                 key={f.key}
                                 onClick={f.action}
+                                disabled={isStreaming}
                                 aria-label={f.active ? `${f.label}, enabled` : f.label}
                                 aria-pressed={f.key === "image" ? undefined : f.active}
                                 title={f.label}
                                 className={cn(
-                                    "flex h-11 min-w-11 shrink-0 items-center justify-center gap-1.5 rounded-md px-2 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white sm:px-2.5",
+                                    "flex h-11 min-w-11 shrink-0 items-center justify-center gap-1.5 rounded-md px-2 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white disabled:cursor-not-allowed disabled:opacity-40 sm:px-2.5",
                                     f.active
                                         ? "bg-white text-black"
                                         : "text-zinc-300 hover:bg-zinc-800 hover:text-white"
@@ -321,7 +326,7 @@ export function ChatInput({
                             <button
                                 type="button"
                                 onClick={onSend}
-                                disabled={isStreaming || (!input.trim() && attachedFiles.length === 0)}
+                                disabled={isStreaming || !input.trim()}
                                 aria-label="Send message"
                                 className="flex h-11 w-11 items-center justify-center rounded-full bg-white text-black transition-colors hover:bg-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-500"
                             >
@@ -344,6 +349,7 @@ export function ChatInput({
                 id={fileInputId}
                 type="file"
                 ref={fileInputRef}
+                disabled={isStreaming || fileBusy}
                 onChange={handleFileSelect}
                 className="hidden"
                 accept=".pdf,.txt,.md,.json,.csv,.docx,.html,.htm,.xml,.log,.yaml,.yml,.toml,.ini,.cfg,.conf,.rst,.tex"

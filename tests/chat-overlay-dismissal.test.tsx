@@ -19,9 +19,12 @@ afterEach(() => {
 
 const dependencyProps = {
     ragCount: 0,
+    ragEnabled: false,
     cloudKeySet: false,
     deepSearchEnabled: false,
     memoryEnabled: false,
+    autoRouteEnabled: false,
+    pythonEnabled: false,
     provider: "browser" as const,
     webllm: { isSupported: true, gpuTier: "medium", error: null },
     chromeAI: { status: "unavailable", error: null },
@@ -56,6 +59,21 @@ describe("chat overlay dismissal", () => {
         expect(onClose).toHaveBeenCalledTimes(2);
     });
 
+    it("does not describe a remote Ollama endpoint as local", () => {
+        render(
+            <PrivacyInspector
+                open
+                onClose={vi.fn()}
+                {...dependencyProps}
+                provider="ollama"
+                ollama={{ ...dependencyProps.ollama, isSupported: true, baseUrl: "https://ollama.example.com" }}
+            />
+        );
+
+        expect(screen.getByText(/remote Ollama host receives the selected prompt/i)).toBeTruthy();
+        expect(screen.getByText(/memory off/i)).toBeTruthy();
+    });
+
     it("closes an open sidebar with Escape", () => {
         const onClose = vi.fn();
         render(<Sidebar isOpen currentModel={null} onClose={onClose} onNewChat={vi.fn()} conversations={[]} />);
@@ -64,6 +82,32 @@ describe("chat overlay dismissal", () => {
 
         expect(onClose).toHaveBeenCalledOnce();
         expect(screen.getByRole("complementary", { name: "Workspace navigation" })).toBeTruthy();
+    });
+
+    it("closes the mobile sidebar after starting or switching a conversation", async () => {
+        vi.stubGlobal("matchMedia", vi.fn().mockReturnValue({ matches: false }));
+        const onClose = vi.fn();
+        const onNewChat = vi.fn();
+        const onSwitch = vi.fn();
+        render(
+            <Sidebar
+                isOpen
+                currentModel={null}
+                onClose={onClose}
+                onNewChat={onNewChat}
+                onSwitch={onSwitch}
+                conversations={[{ id: "conv-1", title: "Retention policy", createdAt: 1, updatedAt: 1 }]}
+            />
+        );
+        await waitFor(() => expect(screen.getByRole("button", { name: "New Session" })).toBeTruthy());
+
+        fireEvent.click(screen.getByRole("button", { name: "New Session" }));
+        expect(onNewChat).toHaveBeenCalledOnce();
+        expect(onClose).toHaveBeenCalledTimes(1);
+
+        fireEvent.click(screen.getByRole("button", { name: /Retention policy/ }));
+        expect(onSwitch).toHaveBeenCalledWith("conv-1");
+        expect(onClose).toHaveBeenCalledTimes(2);
     });
 
     it("keeps a docked sidebar open and lets a higher overlay consume Escape", () => {

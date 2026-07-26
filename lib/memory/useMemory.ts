@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 
 interface Memory {
     id: string;
@@ -13,6 +13,9 @@ interface Memory {
 
 const DB_NAME = "n0x_memory";
 const STORE_NAME = "memories";
+const MEMORY_LOAD_ERROR = "Memory is unavailable. Check this site's storage permission and reload.";
+const MEMORY_SAVE_ERROR = "Memory could not be saved. Free browser storage or allow site storage, then try again.";
+const MEMORY_DELETE_ERROR = "Memory could not be deleted from this device. Check browser storage and try again.";
 
 const STOP_WORDS = new Set([
     "the",
@@ -205,9 +208,25 @@ function openDB(): Promise<IDBDatabase> {
     });
 }
 
+async function writeMemory(operation: (store: IDBObjectStore) => void): Promise<void> {
+    const db = await openDB();
+    try {
+        await new Promise<void>((resolve, reject) => {
+            const tx = db.transaction(STORE_NAME, "readwrite");
+            tx.oncomplete = () => resolve();
+            tx.onerror = tx.onabort = () => reject(tx.error);
+            operation(tx.objectStore(STORE_NAME));
+        });
+    } finally {
+        db.close();
+    }
+}
+
 export function useMemory() {
     const [memories, setMemories] = useState<Memory[]>([]);
     const [isLoaded, setIsLoaded] = useState(false);
+    const [storageError, setStorageError] = useState<string | null>(null);
+    const deletedMemoryIdsRef = useRef(new Set<string>());
 
     // Load on mount
     useEffect(() => {
@@ -223,15 +242,31 @@ export function useMemory() {
                         ...m,
                         keywords: m.keywords || extractKeywords(m.content),
                     }));
-                    setMemories(mems);
+                    setMemories(current => {
+                        const merged = new Map<string, Memory>();
+                        for (const memory of mems) {
+                            if (!deletedMemoryIdsRef.current.has(memory.id)) merged.set(memory.id, memory);
+                        }
+                        // A save may commit before the initial getAll callback.
+                        // In-memory writes are newer and must win that hydration race.
+                        for (const memory of current) {
+                            if (!deletedMemoryIdsRef.current.has(memory.id)) merged.set(memory.id, memory);
+                        }
+                        return [...merged.values()];
+                    });
                     setIsLoaded(true);
                     if (db) db.close();
                 };
-                req.onerror = tx.onerror = () => {
+                const handleLoadError = () => {
+                    setStorageError(MEMORY_LOAD_ERROR);
                     setIsLoaded(true);
                     if (db) db.close();
                 };
+                req.onerror = handleLoadError;
+                tx.onerror = handleLoadError;
+                tx.onabort = handleLoadError;
             } catch (e) {
+                setStorageError(MEMORY_LOAD_ERROR);
                 setIsLoaded(true);
                 if (db) db.close();
             }
@@ -248,32 +283,27 @@ export function useMemory() {
             tags,
         };
 
-        let db: IDBDatabase | null = null;
         try {
-            db = await openDB();
-            const tx = db.transaction(STORE_NAME, "readwrite");
-            tx.objectStore(STORE_NAME).add(memory);
-            tx.oncomplete = () => db?.close();
-            tx.onerror = () => db?.close();
+            await writeMemory(store => store.add(memory));
             setMemories(prev => [...prev, memory]);
+            setStorageError(null);
             return memory;
         } catch {
-            db?.close();
+            setStorageError(MEMORY_SAVE_ERROR);
             return null;
         }
     }, []);
 
     const deleteMemory = useCallback(async (id: string) => {
-        let db: IDBDatabase | null = null;
         try {
-            db = await openDB();
-            const tx = db.transaction(STORE_NAME, "readwrite");
-            tx.objectStore(STORE_NAME).delete(id);
-            tx.oncomplete = () => db?.close();
-            tx.onerror = () => db?.close();
+            await writeMemory(store => store.delete(id));
+            deletedMemoryIdsRef.current.add(id);
             setMemories(prev => prev.filter(m => m.id !== id));
+            setStorageError(null);
+            return true;
         } catch {
-            db?.close();
+            setStorageError(MEMORY_DELETE_ERROR);
+            return false;
         }
     }, []);
 
@@ -326,6 +356,7 @@ export function useMemory() {
     return {
         memories,
         isLoaded,
+        storageError,
         saveMemory,
         deleteMemory,
         searchMemories,

@@ -16,26 +16,61 @@ interface MemoryPanelProps {
     isOpen: boolean;
     onClose: () => void;
     memories: Memory[];
-    onSave: (content: string) => void;
-    onDelete: (id: string) => void;
+    onSave: (content: string) => unknown | Promise<unknown>;
+    onDelete: (id: string) => unknown | Promise<unknown>;
     onSearch: (query: string) => Memory[];
+    busy?: boolean;
 }
 
-export function MemoryPanel({ isOpen, onClose, memories, onSave, onDelete, onSearch }: MemoryPanelProps) {
+export function MemoryPanel({ isOpen, onClose, memories, onSave, onDelete, onSearch, busy = false }: MemoryPanelProps) {
     const [newMemory, setNewMemory] = useState("");
     const [searchQuery, setSearchQuery] = useState("");
     const [searchResults, setSearchResults] = useState<Memory[] | null>(null);
+    const [isSaving, setIsSaving] = useState(false);
+    const [deletingId, setDeletingId] = useState<string | null>(null);
+    const [operationError, setOperationError] = useState<string | null>(null);
 
     if (!isOpen) return null;
 
-    const handleSave = () => {
-        if (newMemory.trim()) {
-            onSave(newMemory.trim());
+    const handleSave = async () => {
+        const content = newMemory.trim();
+        if (!content || isSaving || busy) return;
+
+        setIsSaving(true);
+        setOperationError(null);
+        try {
+            const result = await onSave(content);
+            if (result === false || result === null) {
+                setOperationError("Memory was not saved. Check browser storage and try again.");
+                return;
+            }
             setNewMemory("");
+        } catch {
+            setOperationError("Memory was not saved. Check browser storage and try again.");
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const handleDelete = async (id: string) => {
+        if (deletingId || busy) return;
+
+        setDeletingId(id);
+        setOperationError(null);
+        try {
+            const result = await onDelete(id);
+            if (result === false || result === null) {
+                setOperationError("Memory was not deleted. It remains stored on this device.");
+            }
+        } catch {
+            setOperationError("Memory was not deleted. It remains stored on this device.");
+        } finally {
+            setDeletingId(null);
         }
     };
 
     const handleSearch = () => {
+        if (busy) return;
         if (searchQuery.trim()) {
             setSearchResults(onSearch(searchQuery));
         } else {
@@ -48,7 +83,8 @@ export function MemoryPanel({ isOpen, onClose, memories, onSave, onDelete, onSea
     return (
         <section
             aria-label="Memory bank"
-            className="absolute bottom-20 left-6 z-20 w-80 overflow-hidden rounded border border-crt-border bg-crt-surface animate-slide-up"
+            aria-busy={busy || isSaving || deletingId !== null}
+            className="absolute inset-x-3 bottom-20 z-20 w-auto overflow-hidden rounded border border-crt-border bg-crt-surface animate-slide-up sm:left-6 sm:right-auto sm:w-80"
         >
             {/* Header */}
             <div className="flex items-center justify-between px-3 py-2.5 border-b border-crt-border">
@@ -74,12 +110,14 @@ export function MemoryPanel({ isOpen, onClose, memories, onSave, onDelete, onSea
                     onKeyDown={e => e.key === "Enter" && handleSearch()}
                     placeholder="search memories..."
                     aria-label="Search memories"
+                    disabled={busy}
                     className="min-h-11 flex-1 bg-transparent text-xs font-mono text-txt-primary outline-none placeholder:text-zinc-500"
                 />
                 <button
                     onClick={handleSearch}
                     aria-label="Search memories"
-                    className="flex h-11 w-11 items-center justify-center rounded text-zinc-300 hover:bg-zinc-800 hover:text-phosphor focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                    disabled={busy}
+                    className="flex h-11 w-11 items-center justify-center rounded text-zinc-300 hover:bg-zinc-800 hover:text-phosphor focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white disabled:cursor-not-allowed disabled:opacity-40"
                 >
                     <Search className="w-3 h-3" />
                 </button>
@@ -103,9 +141,10 @@ export function MemoryPanel({ isOpen, onClose, memories, onSave, onDelete, onSea
                                 </div>
                             </div>
                             <button
-                                onClick={() => onDelete(m.id)}
+                                onClick={() => void handleDelete(m.id)}
+                                disabled={busy || deletingId !== null}
                                 aria-label={`Delete memory: ${m.content.slice(0, 40)}`}
-                                className="flex h-11 w-11 shrink-0 items-center justify-center rounded text-zinc-300 opacity-60 transition-all hover:bg-zinc-800 hover:text-red-300 focus:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white sm:opacity-0 sm:group-hover:opacity-100"
+                                className="flex h-11 w-11 shrink-0 items-center justify-center rounded text-zinc-300 opacity-60 transition-all hover:bg-zinc-800 hover:text-red-300 focus:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white disabled:cursor-wait disabled:opacity-30 sm:opacity-0 sm:group-hover:opacity-100"
                             >
                                 <Trash2 className="w-3 h-3" />
                             </button>
@@ -115,23 +154,33 @@ export function MemoryPanel({ isOpen, onClose, memories, onSave, onDelete, onSea
             </div>
 
             {/* Add memory */}
-            <div className="p-2 border-t border-crt-border flex gap-2">
-                <input
-                    value={newMemory}
-                    onChange={e => setNewMemory(e.target.value)}
-                    onKeyDown={e => e.key === "Enter" && handleSave()}
-                    placeholder="add memory..."
-                    aria-label="New memory"
-                    className="min-h-11 flex-1 bg-transparent text-xs font-mono text-txt-primary outline-none placeholder:text-zinc-500"
-                />
-                <button
-                    onClick={handleSave}
-                    disabled={!newMemory.trim()}
-                    aria-label="Save memory"
-                    className="flex h-11 w-11 items-center justify-center rounded text-zinc-300 hover:bg-zinc-800 hover:text-phosphor focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white disabled:opacity-30"
-                >
-                    <Plus className="w-3.5 h-3.5" />
-                </button>
+            <div className="border-t border-crt-border p-2">
+                {operationError && (
+                    <p role="alert" aria-live="assertive" className="mb-2 px-1 text-xs leading-5 text-red-300">
+                        {operationError}
+                    </p>
+                )}
+                <div className="flex gap-2">
+                    <input
+                        value={newMemory}
+                        onChange={e => setNewMemory(e.target.value)}
+                        onKeyDown={e => {
+                            if (e.key === "Enter") void handleSave();
+                        }}
+                        placeholder="add memory..."
+                        aria-label="New memory"
+                        disabled={busy || isSaving}
+                        className="min-h-11 flex-1 bg-transparent text-xs font-mono text-txt-primary outline-none placeholder:text-zinc-500 disabled:cursor-wait disabled:opacity-60"
+                    />
+                    <button
+                        onClick={() => void handleSave()}
+                        disabled={busy || !newMemory.trim() || isSaving}
+                        aria-label={isSaving ? "Saving memory" : "Save memory"}
+                        className="flex h-11 w-11 items-center justify-center rounded text-zinc-300 hover:bg-zinc-800 hover:text-phosphor focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white disabled:opacity-30"
+                    >
+                        <Plus className="w-3.5 h-3.5" />
+                    </button>
+                </div>
             </div>
         </section>
     );

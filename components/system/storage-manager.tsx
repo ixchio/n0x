@@ -6,11 +6,28 @@ import { Database, Trash2, HardDrive, RefreshCw, X, AlertTriangle, CheckCircle2 
 
 type ClearTarget = "n0x_chat" | "n0x_memory" | "n0x_rag_cache" | "webllm_cache";
 
-export function StorageManager() {
+export function deleteDatabaseDurably(
+    factory: Pick<IDBFactory, "deleteDatabase">,
+    dbName: string,
+    onBlocked: () => void
+): Promise<void> {
+    return new Promise((resolve, reject) => {
+        const request = factory.deleteDatabase(dbName);
+        request.onsuccess = () => resolve();
+        request.onerror = () => reject(request.error ?? new Error(`Could not clear ${dbName}`));
+        // onblocked is a pending state, not a cancellation. The same request
+        // may succeed after another tab closes its connection.
+        request.onblocked = onBlocked;
+    });
+}
+
+export function StorageManager({ disabled = false }: { disabled?: boolean }) {
     const [isOpen, setIsOpen] = useState(false);
     const [clearing, setClearing] = useState<ClearTarget | null>(null);
     // confirmTarget: which row is pending confirmation
     const [confirmTarget, setConfirmTarget] = useState<ClearTarget | null>(null);
+    const [blockedTarget, setBlockedTarget] = useState<ClearTarget | null>(null);
+    const [operationError, setOperationError] = useState<string | null>(null);
     const triggerRef = useRef<HTMLButtonElement>(null);
     const closeRef = useRef<HTMLButtonElement>(null);
     const dialogRef = useRef<HTMLDivElement>(null);
@@ -21,20 +38,21 @@ export function StorageManager() {
 
         closeRef.current?.focus();
         const handleKeyDown = (event: KeyboardEvent) => {
-            if (event.key !== "Escape") return;
+            if (event.key !== "Escape" || clearing) return;
             setIsOpen(false);
             setConfirmTarget(null);
             triggerRef.current?.focus();
         };
         document.addEventListener("keydown", handleKeyDown);
         return () => document.removeEventListener("keydown", handleKeyDown);
-    }, [isOpen]);
+    }, [clearing, isOpen]);
 
     useEffect(() => {
         if (confirmTarget) cancelConfirmRef.current?.focus();
     }, [confirmTarget]);
 
     const closeDialog = () => {
+        if (clearing) return;
         setIsOpen(false);
         setConfirmTarget(null);
         requestAnimationFrame(() => triggerRef.current?.focus());
@@ -61,26 +79,17 @@ export function StorageManager() {
 
     const clearDatabase = async (dbName: string, target: ClearTarget) => {
         setClearing(target);
+        setBlockedTarget(null);
+        setOperationError(null);
         setConfirmTarget(null);
         try {
-            await new Promise<void>((resolve, reject) => {
-                const req = indexedDB.deleteDatabase(dbName);
-                req.onsuccess = () => resolve();
-                req.onerror = () => reject(req.error);
-                // onblocked fires when another tab has the DB open
-                req.onblocked = () => {
-                    setClearing(null);
-                    setConfirmTarget(null);
-                    alert(
-                        `Cannot clear ${dbName}: it's being used in another tab.\n\nClose other n0x tabs and try again.`
-                    );
-                    reject(new Error("Blocked by another tab"));
-                };
-            });
-            setTimeout(() => window.location.reload(), 600);
+            await deleteDatabaseDurably(indexedDB, dbName, () => setBlockedTarget(target));
+            window.location.reload();
         } catch (e) {
             logger.error(`[StorageManager] Failed to clear ${dbName}:`, e);
             setClearing(null);
+            setBlockedTarget(null);
+            setOperationError(`Could not clear ${dbName}. Check browser storage permissions and try again.`);
         }
     };
 
@@ -98,10 +107,11 @@ export function StorageManager() {
                     name.startsWith("n0x-model")
             );
             await Promise.all(webllmCaches.map(name => caches.delete(name)));
-            setTimeout(() => window.location.reload(), 600);
+            window.location.reload();
         } catch (e) {
             logger.error("[StorageManager] Failed to clear Cache API:", e);
             setClearing(null);
+            setOperationError("Could not clear model weights. Check browser storage permissions and try again.");
         }
     };
 
@@ -109,7 +119,7 @@ export function StorageManager() {
         {
             target: "n0x_chat",
             title: "Chat History",
-            desc: "All saved conversations · IndexedDB: n0x_chat",
+            desc: "Conversations and their cited evidence snapshots · IndexedDB: n0x_chat",
             onConfirm: () => clearDatabase("n0x_chat", "n0x_chat"),
         },
         {
@@ -137,7 +147,8 @@ export function StorageManager() {
             <button
                 ref={triggerRef}
                 onClick={() => setIsOpen(true)}
-                className="mt-1 flex min-h-11 w-full items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                disabled={disabled}
+                className="mt-1 flex min-h-11 w-full items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white disabled:cursor-not-allowed disabled:opacity-40"
             >
                 <HardDrive className="w-3.5 h-3.5" />
                 Storage Manager
@@ -179,6 +190,15 @@ export function StorageManager() {
                         </div>
 
                         <div className="p-4 space-y-3">
+                            {operationError && (
+                                <p
+                                    role="alert"
+                                    aria-live="assertive"
+                                    className="rounded-lg border border-red-500/20 bg-red-500/10 p-3 text-xs text-red-200"
+                                >
+                                    {operationError}
+                                </p>
+                            )}
                             {/* Info banner */}
                             <div
                                 id="storage-manager-description"
@@ -211,7 +231,9 @@ export function StorageManager() {
                                                 className="flex min-h-11 shrink-0 items-center gap-1.5 text-xs text-zinc-300"
                                             >
                                                 <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                                                Clearing…
+                                                {blockedTarget === row.target
+                                                    ? "Waiting for other n0x tabs to close…"
+                                                    : "Clearing…"}
                                             </div>
                                         ) : confirmTarget === row.target ? (
                                             <div className="flex shrink-0 items-center gap-1.5">

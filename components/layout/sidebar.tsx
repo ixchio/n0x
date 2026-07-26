@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Plus, Trash2, MessageSquare, TrendingDown, Search, X } from "lucide-react";
-import { WEBLLM_MODELS, getTotalTokens } from "@/lib/providers/useWebLLM";
+import { WEBLLM_MODELS, getLocalTokens } from "@/lib/providers/useWebLLM";
 import { cn } from "@/lib/utils";
 import { StorageManager } from "@/components/system/storage-manager";
 import { PixelNoxMark } from "@/components/brand/pixel-nox-mark";
@@ -19,6 +19,8 @@ interface SidebarProps {
     isOpen: boolean;
     currentModel: string | null;
     provider?: "browser" | "ollama" | "cloud" | "chrome-ai";
+    providerReady?: boolean;
+    busy?: boolean;
     onClose?: () => void;
     onNewChat: () => void;
     conversations?: Conversation[];
@@ -43,6 +45,8 @@ export function Sidebar({
     isOpen,
     currentModel,
     provider = "browser",
+    providerReady = false,
+    busy = false,
     onClose,
     onNewChat,
     conversations = [],
@@ -91,9 +95,9 @@ export function Sidebar({
 
         const handleKeyDown = (event: KeyboardEvent) => {
             if (event.key !== "Escape") return;
-            const hasHigherOverlay = Array.from(document.querySelectorAll('[role="dialog"], [role="menu"]')).some(
-                overlay => overlay !== asideRef.current
-            );
+            const hasHigherOverlay = Array.from(
+                document.querySelectorAll('[role="dialog"], [role="menu"], [data-chat-popover="true"]')
+            ).some(overlay => overlay !== asideRef.current);
             if (hasHigherOverlay) return;
             event.preventDefault();
             onClose();
@@ -167,7 +171,10 @@ export function Sidebar({
                 {/* New chat */}
                 <div className="p-3">
                     <button
-                        onClick={onNewChat}
+                        onClick={() => {
+                            onNewChat();
+                            if (isDesktop === false) onClose?.();
+                        }}
                         className="flex min-h-11 w-full items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900/50 px-3 py-2 text-xs font-medium text-zinc-300 shadow-sm transition-all hover:border-zinc-700 hover:bg-zinc-800 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
                     >
                         <Plus className="w-3.5 h-3.5" />
@@ -208,7 +215,10 @@ export function Sidebar({
                         >
                             <button
                                 type="button"
-                                onClick={() => onSwitch?.(conv.id)}
+                                onClick={() => {
+                                    onSwitch?.(conv.id);
+                                    if (isDesktop === false) onClose?.();
+                                }}
                                 aria-current={activeId === conv.id ? "page" : undefined}
                                 className="flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white"
                             >
@@ -252,7 +262,7 @@ export function Sidebar({
                                 aria-hidden="true"
                                 className={cn(
                                     "w-2 h-2 rounded-full",
-                                    currentModel || provider !== "browser"
+                                    providerReady
                                         ? "bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.4)] animate-pulse"
                                         : "bg-zinc-700"
                                 )}
@@ -263,7 +273,7 @@ export function Sidebar({
                                         ? WEBLLM_MODELS.find(m => m.id === currentModel)?.label || "Loaded"
                                         : "No model selected"
                                     : provider === "ollama"
-                                      ? "Ollama (local)"
+                                      ? "Ollama"
                                       : provider === "cloud"
                                         ? "Cloud API"
                                         : provider === "chrome-ai"
@@ -274,7 +284,7 @@ export function Sidebar({
                     </div>
                     {/* Cost savings counter */}
                     {(() => {
-                        const tokens = getTotalTokens();
+                        const tokens = getLocalTokens();
                         if (tokens < 100) return null;
                         // Average cloud cost: ~$0.30 per 1M tokens (blended input/output)
                         const saved = (tokens / 1_000_000) * 0.3;
@@ -295,7 +305,7 @@ export function Sidebar({
                     })()}
 
                     <div className="pt-2 border-t border-zinc-900/50 mt-2">
-                        <StorageManager />
+                        <StorageManager disabled={busy} />
                     </div>
                 </div>
             </aside>

@@ -26,7 +26,7 @@ vi.mock("@mlc-ai/web-llm", () => ({
     CreateMLCEngine: runtime.createMainThreadEngine,
 }));
 
-import { WEBLLM_MODELS, useWebLLM } from "@/lib/providers/useWebLLM";
+import { MODEL_LOAD_STALL_MS, WEBLLM_MODELS, useWebLLM } from "@/lib/providers/useWebLLM";
 
 describe("browser WebLLM provider generation", () => {
     beforeAll(async () => {
@@ -80,6 +80,29 @@ describe("browser WebLLM provider generation", () => {
         expect(useWebLLM.getState().status).toBe("ready");
     });
 
+    it("caps max_tokens to the loaded model's remaining context", async () => {
+        runtime.createCompletion.mockResolvedValue(
+            (async function* () {
+                yield { choices: [{ delta: { content: "ok" } }] };
+            })()
+        );
+        useWebLLM.setState({ contextWindow: 4_096, maxOutputTokens: 1_024 });
+        const model = useWebLLM.getState().loadedModel!;
+        const controller = new AbortController();
+
+        await useWebLLM.getState().generate([{ role: "user", content: "x".repeat(14_000) }], undefined, {
+            requestId: "bounded",
+            model,
+            maxTokens: 5_000,
+            signal: controller.signal,
+        });
+
+        const options = runtime.createCompletion.mock.calls[0][0];
+        expect(options.max_tokens).toBeGreaterThan(0);
+        expect(options.max_tokens).toBeLessThanOrEqual(590);
+        expect(options.max_tokens).toBeLessThanOrEqual(1_024);
+    });
+
     it("interrupts GPU decoding and rejects an in-flight stream as aborted", async () => {
         let rejectPending!: (reason: unknown) => void;
         let firstChunk!: () => void;
@@ -107,5 +130,44 @@ describe("browser WebLLM provider generation", () => {
         await expect(generation).rejects.toMatchObject({ name: "AbortError" });
         expect(runtime.interruptGenerate).toHaveBeenCalledOnce();
         expect(useWebLLM.getState().status).toBe("ready");
+    });
+
+    it("terminates a stalled worker load and allows a clean retry", async () => {
+        await useWebLLM.getState().unload();
+        vi.useFakeTimers();
+        const workers: Array<{ terminated: boolean; terminate: () => void }> = [];
+        class FakeWorker {
+            terminated = false;
+            constructor() {
+                workers.push(this);
+            }
+            terminate() {
+                this.terminated = true;
+            }
+        }
+        vi.stubGlobal("Worker", FakeWorker);
+        runtime.createWorkerEngine.mockImplementationOnce((...args: any[]) => {
+            args[2].initProgressCallback?.({ progress: 0.2 });
+            return new Promise(() => undefined);
+        });
+
+        const loading = useWebLLM.getState().loadModel(WEBLLM_MODELS[0].id, true);
+        for (let index = 0; index < 10 && runtime.createWorkerEngine.mock.calls.length === 0; index++) {
+            await Promise.resolve();
+        }
+        await vi.advanceTimersByTimeAsync(MODEL_LOAD_STALL_MS + 1_000);
+        await loading;
+
+        expect(useWebLLM.getState().status).toBe("error");
+        expect(useWebLLM.getState().error).toMatch(/stalled/i);
+        expect(workers[0].terminated).toBe(true);
+
+        runtime.createWorkerEngine.mockImplementationOnce(async (...args: any[]) => {
+            args[2].initProgressCallback?.({ progress: 1 });
+            return runtime.engine;
+        });
+        await useWebLLM.getState().loadModel(WEBLLM_MODELS[0].id, true);
+        expect(useWebLLM.getState().status).toBe("ready");
+        vi.useRealTimers();
     });
 });

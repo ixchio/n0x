@@ -61,7 +61,9 @@ module.exports = {
                 txt: {
                     primary: "#ededed",
                     secondary: "#a1a1aa",
-                    tertiary: "#52525b",
+                    // Small labels use this token throughout the workbench;
+                    // keep them above WCAG AA contrast on the #0a0a0a canvas.
+                    tertiary: "#a1a1aa",
                 },
             },
             fontFamily: {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { logger } from "@/lib/core/logger";
 import { checkRateLimit } from "@/lib/server/rate-limit";
+import { apiRequestErrorResponse, assertSameOriginRequest, readBoundedJson } from "@/lib/server/request-policy";
 
 const EVENTS = new Set([
     "visit",
@@ -28,6 +29,12 @@ const META_KEYS = new Set([
 ]);
 
 export async function POST(request: NextRequest) {
+    try {
+        assertSameOriginRequest(request);
+    } catch (error) {
+        return apiRequestErrorResponse(error)!;
+    }
+
     const limit = checkRateLimit(request, {
         key: "analytics",
         limit: 120,
@@ -35,14 +42,10 @@ export async function POST(request: NextRequest) {
     });
     if (!limit.allowed) return limit.response;
 
-    const contentLength = Number(request.headers.get("content-length") || "0");
-    if (contentLength > 8_192) {
-        return NextResponse.json({ error: "Payload too large" }, { status: 413, headers: limit.headers });
-    }
-
     try {
-        const body = await request.json();
-        if (!EVENTS.has(body?.event)) {
+        const body = await readBoundedJson<Record<string, unknown>>(request, 8_192);
+        const event = typeof body.event === "string" ? body.event : "";
+        if (!EVENTS.has(event)) {
             return NextResponse.json({ error: "Invalid event" }, { status: 400, headers: limit.headers });
         }
 
@@ -55,14 +58,16 @@ export async function POST(request: NextRequest) {
         );
 
         logger.info("n0x_analytics", {
-            event: body.event,
+            event,
             path: typeof body.path === "string" ? body.path.slice(0, 120) : "",
             ts: typeof body.ts === "number" ? body.ts : Date.now(),
             meta: sanitized,
         });
 
         return new NextResponse(null, { status: 204, headers: limit.headers });
-    } catch {
+    } catch (error) {
+        const policyResponse = apiRequestErrorResponse(error, limit.headers);
+        if (policyResponse) return policyResponse;
         return NextResponse.json({ error: "Invalid payload" }, { status: 400, headers: limit.headers });
     }
 }

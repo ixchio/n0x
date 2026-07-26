@@ -5,7 +5,7 @@ import { cleanup, fireEvent, render, renderHook, screen, waitFor } from "@testin
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ModelRuntimeStatus } from "@/components/chat/workbench/model-runtime-status";
-import { StartHereStrip } from "@/components/chat/workbench/workbench-panels";
+import { WorkbenchEmptyState } from "@/components/chat/workbench/workbench-panels";
 import { useWorkbenchPreferences } from "@/components/chat/workbench/use-workbench-preferences";
 import { CommandMenu, hasOpenOverlay, modelSizeInGB, shouldToggleShortcuts } from "@/components/chat/command-menu";
 import { waitForWebLLMGenerationToSettle } from "@/components/chat/workbench/model-switch";
@@ -60,22 +60,34 @@ describe("responsive workbench UI", () => {
         await waitFor(() => expect(result.current.sidebarOpen).toBe(true));
     });
 
-    it("renders the mobile start actions as one scrollable row with 44px controls", () => {
+    it("renders one mobile-friendly document path without a duplicate start strip", () => {
+        const onAttachDocs = vi.fn();
+        const onSampleDocDemo = vi.fn();
         render(
-            <StartHereStrip
-                show
+            <WorkbenchEmptyState
+                provider="browser"
+                recommendedLabel="SmolLM2 360M"
+                recommendedReason="smallest local model"
+                recommendedSize="~360MB"
                 localModelDisabled={false}
+                providerReady={false}
+                documentCount={0}
                 onBestLocalModel={vi.fn()}
-                onAttachDocs={vi.fn()}
-                onCloudSetup={vi.fn()}
+                onAttachDocs={onAttachDocs}
+                onSampleDocDemo={onSampleDocDemo}
+                onSearchWeb={vi.fn()}
                 onPrivacyInspector={vi.fn()}
             />
         );
 
-        const firstAction = screen.getByRole("button", { name: "Best local model" });
-        expect(firstAction.className).toContain("h-11");
-        expect(firstAction.parentElement?.className).toContain("overflow-x-auto");
-        expect(screen.getAllByRole("button")).toHaveLength(4);
+        const chooseDocument = screen.getByRole("button", { name: "Choose a document" });
+        expect(chooseDocument.className).toContain("min-h-11");
+        expect(screen.getAllByRole("button", { name: "Choose a document" })).toHaveLength(1);
+        fireEvent.click(chooseDocument);
+        fireEvent.click(screen.getByRole("button", { name: "Try the sample" }));
+        expect(onAttachDocs).toHaveBeenCalledOnce();
+        expect(onSampleDocDemo).toHaveBeenCalledOnce();
+        expect(screen.getByText("[filename#chunk-N]")).toBeTruthy();
     });
 
     it("announces model download progress with a numeric value", () => {
@@ -100,6 +112,8 @@ describe("responsive workbench UI", () => {
 
         expect(screen.getByRole("progressbar", { name: /Downloading/i }).getAttribute("aria-valuenow")).toBe("42");
         expect(screen.getByRole("status")).toBeTruthy();
+        expect(screen.getByText("First use downloads ~1GB of model weights.")).toBeTruthy();
+        expect(screen.getByText(/model initialization still takes time/i)).toBeTruthy();
     });
 
     it("does not offer a second model load while a download is stalled", () => {

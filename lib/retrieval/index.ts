@@ -1,2 +1,2 @@
 export { useDeepSearch } from "./useDeepSearch";
-export { useRAG } from "./useRAG";
+export { useRAG, type RAGDocument, type RAGSearchResult, type RAGState } from "./useRAG";

@@ -9,12 +9,12 @@ const contentSecurityPolicy = [
     "object-src 'none'",
     "frame-ancestors 'none'",
     "form-action 'self'",
-    "script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' https://cdn.jsdelivr.net https://cdn.tailwindcss.com",
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' https://cdn.jsdelivr.net/pyodide/v0.26.4/full/",
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src 'self' data: https://fonts.gstatic.com",
     "img-src 'self' data: blob: https:",
     "connect-src 'self' data: blob: https: http: ws: wss:",
-    "worker-src 'self' blob: https://cdn.jsdelivr.net",
+    "worker-src 'self' blob:",
     "child-src 'self' blob:",
     "frame-src 'self' data: blob:",
     "media-src 'self' data: blob: https:",
@@ -24,6 +24,10 @@ const contentSecurityPolicy = [
 const nextConfig = {
     reactStrictMode: true,
     poweredByHeader: false,
+    // N0X metadata is static. Blocking the tiny metadata render keeps title,
+    // description, OG, and Twitter tags in <head> for every crawler and audit
+    // client instead of relying on Next's streamed body-tag relocation.
+    htmlLimitedBots: /.*/,
     output: "standalone", // Required for Docker
     outputFileTracingRoot: __dirname,
     experimental: {
@@ -75,7 +79,7 @@ const nextConfig = {
     // COEP "credentialless" allows cross-origin resources (Ollama, Cloud APIs,
     // Pollinations images, Pyodide CDN) WITHOUT requiring CORP headers on every
     // response. "require-corp" was blocking all of those — this is the fix.
-    // SharedArrayBuffer (needed by WebContainers) still works with credentialless.
+    // SharedArrayBuffer-backed browser runtimes still work with credentialless.
     async headers() {
         return [
             {

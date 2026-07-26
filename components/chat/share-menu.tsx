@@ -155,7 +155,16 @@ export function ShareMenu({ messages = [], modelName, appUrl = REPO, label }: Sh
     const [copied, setCopied] = useState(false);
     const [cardStatus, setCardStatus] = useState<"idle" | "generating" | "done">("idle");
     const triggerRef = useRef<HTMLButtonElement>(null);
+    const dialogRef = useRef<HTMLDivElement>(null);
+    const closeRef = useRef<HTMLButtonElement>(null);
     const cardRef = useRef<Blob | null>(null);
+    const closeMenu = useCallback(() => {
+        // Restore focus while the trigger is still mounted. Waiting for the next
+        // animation frame is unreliable in background tabs and test/browser
+        // environments that throttle animation frames.
+        triggerRef.current?.focus();
+        setOpen(false);
+    }, []);
 
     const hasChat = messages.length > 0;
 
@@ -262,20 +271,42 @@ export function ShareMenu({ messages = [], modelName, appUrl = REPO, label }: Sh
 
     useEffect(() => {
         if (!open) return;
+        const focusFrame = requestAnimationFrame(() => closeRef.current?.focus());
         const handleKeyDown = (event: KeyboardEvent) => {
-            if (event.key !== "Escape") return;
-            setOpen(false);
-            requestAnimationFrame(() => triggerRef.current?.focus());
+            if (event.key === "Escape") {
+                event.preventDefault();
+                closeMenu();
+                return;
+            }
+            if (event.key !== "Tab") return;
+            const focusable = Array.from(
+                dialogRef.current?.querySelectorAll<HTMLElement>(
+                    'button:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])'
+                ) || []
+            );
+            const first = focusable[0];
+            const last = focusable.at(-1);
+            if (!first || !last) return;
+            if (event.shiftKey && document.activeElement === first) {
+                event.preventDefault();
+                last.focus();
+            } else if (!event.shiftKey && document.activeElement === last) {
+                event.preventDefault();
+                first.focus();
+            }
         };
         document.addEventListener("keydown", handleKeyDown);
-        return () => document.removeEventListener("keydown", handleKeyDown);
-    }, [open]);
+        return () => {
+            cancelAnimationFrame(focusFrame);
+            document.removeEventListener("keydown", handleKeyDown);
+        };
+    }, [closeMenu, open]);
 
     return (
         <div className="relative">
             <button
                 ref={triggerRef}
-                onClick={() => setOpen(!open)}
+                onClick={() => (open ? closeMenu() : setOpen(true))}
                 aria-label="Share or export conversation"
                 aria-haspopup="dialog"
                 aria-expanded={open}
@@ -291,16 +322,23 @@ export function ShareMenu({ messages = [], modelName, appUrl = REPO, label }: Sh
 
             {open && (
                 <>
-                    <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} aria-hidden="true" />
+                    <div className="fixed inset-0 z-40" onClick={closeMenu} aria-hidden="true" />
                     <div
+                        ref={dialogRef}
                         role="dialog"
                         aria-label="Share and export conversation"
-                        className="absolute right-0 top-full z-50 mt-2 max-h-[min(32rem,calc(100dvh-5rem))] w-64 overflow-y-auto rounded border border-crt-border bg-crt-surface shadow-lg shadow-black/50"
+                        className={cn(
+                            "z-50 overflow-y-auto rounded border border-crt-border bg-crt-surface shadow-lg shadow-black/50",
+                            label
+                                ? "fixed inset-x-2 bottom-2 max-h-[calc(100dvh-1rem)] w-auto"
+                                : "absolute right-0 top-full mt-2 max-h-[min(32rem,calc(100dvh-5rem))] w-64"
+                        )}
                     >
                         <div className="px-3 py-2 border-b border-crt-border flex items-center justify-between">
                             <span className="text-xs font-mono uppercase tracking-wider text-zinc-400">share n0x</span>
                             <button
-                                onClick={() => setOpen(false)}
+                                ref={closeRef}
+                                onClick={closeMenu}
                                 aria-label="Close share menu"
                                 className="flex h-11 w-11 items-center justify-center rounded-md text-zinc-300 hover:bg-zinc-800 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
                             >
@@ -315,7 +353,7 @@ export function ShareMenu({ messages = [], modelName, appUrl = REPO, label }: Sh
                                     href={l.href}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    onClick={() => setOpen(false)}
+                                    onClick={closeMenu}
                                     className={cn(
                                         "flex min-h-11 items-center gap-3 rounded px-3 py-2 text-xs font-mono text-zinc-300 transition-all hover:bg-crt-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white",
                                         l.hover
@@ -358,7 +396,7 @@ export function ShareMenu({ messages = [], modelName, appUrl = REPO, label }: Sh
                                 <button
                                     onClick={() => {
                                         nativeShare();
-                                        setOpen(false);
+                                        closeMenu();
                                     }}
                                     className="flex min-h-11 w-full items-center gap-3 rounded px-3 py-2 text-xs font-mono text-zinc-300 transition-all hover:bg-crt-hover hover:text-phosphor focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
                                 >
@@ -396,7 +434,7 @@ export function ShareMenu({ messages = [], modelName, appUrl = REPO, label }: Sh
                                             a.download = `n0x-chat-${Date.now()}.md`;
                                             a.click();
                                             URL.revokeObjectURL(url);
-                                            setOpen(false);
+                                            closeMenu();
                                         }}
                                         className="flex min-h-11 w-full items-center gap-3 rounded px-3 py-2 text-xs font-mono text-zinc-300 transition-all hover:bg-crt-hover hover:text-phosphor focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
                                     >
@@ -420,7 +458,7 @@ export function ShareMenu({ messages = [], modelName, appUrl = REPO, label }: Sh
                                             a.download = `n0x-chat-${Date.now()}.json`;
                                             a.click();
                                             URL.revokeObjectURL(url);
-                                            setOpen(false);
+                                            closeMenu();
                                         }}
                                         className="flex min-h-11 w-full items-center gap-3 rounded px-3 py-2 text-xs font-mono text-zinc-300 transition-all hover:bg-crt-hover hover:text-phosphor focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
                                     >

@@ -149,7 +149,6 @@ export function PersonaSelector({
                 ref={triggerRef}
                 onClick={() => setOpen(!open)}
                 aria-label={`Choose persona. Current persona: ${current?.name || "Default"}`}
-                aria-haspopup="menu"
                 aria-expanded={open}
                 className="flex min-h-11 items-center gap-1.5 rounded border border-crt-border px-2.5 py-1 text-xs font-mono text-zinc-300 transition-all hover:border-zinc-500 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
             >
@@ -161,7 +160,8 @@ export function PersonaSelector({
                 <>
                     <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} aria-hidden="true" />
                     <div
-                        role="menu"
+                        role="region"
+                        data-chat-popover="true"
                         aria-label="Personas"
                         className={cn(
                             "absolute z-50 w-64 overflow-hidden rounded border border-crt-border bg-crt-surface",
@@ -176,8 +176,7 @@ export function PersonaSelector({
                             {personas.map(p => (
                                 <button
                                     key={p.id}
-                                    role="menuitemradio"
-                                    aria-checked={activeId === p.id}
+                                    aria-pressed={activeId === p.id}
                                     onClick={() => {
                                         selectPersona(p.id);
                                         setOpen(false);
