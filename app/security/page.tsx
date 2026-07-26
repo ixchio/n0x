@@ -2,7 +2,8 @@ import Link from "next/link";
 
 export const metadata = {
     title: "Security | N0X",
-    description: "Security model, sandboxing boundaries, rate limits, and provider risks for N0X.",
+    description:
+        "Security model for N0X private document Q&A, browser storage, generated content, Python, and network providers.",
 };
 
 export default function SecurityPage() {
@@ -10,10 +11,18 @@ export default function SecurityPage() {
         {
             surface: "IndexedDB",
             boundary:
-                "Conversations and document cache data stay in the browser origin. Memories are saved and retrieved only while Memory is enabled.",
+                "Conversations and document chunk/vector cache data stay in the browser origin. Memories are saved and retrieved only while Memory is enabled.",
             risk: "Any same-origin XSS could read local app data. Browser profile compromise is also out of the app's control.",
             mitigation:
-                "Rendered markdown is constrained, file text is sanitized before indexing, and no document text is sent unless a network feature is used.",
+                "Storage failures are announced without echoing content. Clear controls remove each owned database, but browser storage is not a defense against same-origin script.",
+        },
+        {
+            surface: "RAG identity and deletion",
+            boundary:
+                "A local SHA-256 digest of file bytes keys vector records and deduplicates identical content. Removing or clearing waits for IndexedDB to commit before updating the UI.",
+            risk: "Cached chunks include extracted document text. A browser can evict records, and an exact commit/ack failure can still require a retry or reattachment.",
+            mitigation:
+                "Legacy metadata-derived cache keys are purged on schema upgrade. RAG timeouts terminate the worker so it cannot continue a reported-failed mutation in the background.",
         },
         {
             surface: "sessionStorage keys",
@@ -23,26 +32,44 @@ export default function SecurityPage() {
                 "Treat extensions and pasted scripts as part of your trust boundary. Crash and session-restore retention depends on the browser.",
         },
         {
-            surface: "Artifact iframes",
-            boundary: "Generated HTML previews run in sandboxed iframes, separate from the app document.",
-            risk: "Previewed code can still run JavaScript inside its sandbox and may make network requests if the browser allows it.",
+            surface: "Generated Markdown",
+            boundary:
+                "Remote images are blocked by default. External links require a click and open with noopener/noreferrer.",
+            risk: "After Load once, the image host receives a network request and can observe connection metadata. Links can lead to untrusted sites.",
             mitigation:
-                "Artifacts do not get same-origin access. Review generated code before copying it into a less restricted environment.",
+                "Each remote image needs a per-image approval and then loads without cross-origin credentials or a referrer. The UI shows the destination host before approval.",
+        },
+        {
+            surface: "Artifact iframes",
+            boundary:
+                "Generated HTML previews run in opaque-origin sandboxed iframes. Their embedded CSP sets connect-src 'none' and blocks forms, frames, objects, and non-data media.",
+            risk: "Previewed code can still run JavaScript, consume CPU or memory, render deceptive content, or attempt to navigate its own frame to an external destination.",
+            mitigation:
+                "Artifacts get no same-origin access to N0X, and the CSP blocks ordinary subresource and connection paths. This is not a zero-network guarantee; review code before previewing or copying it.",
         },
         {
             surface: "Pyodide",
-            boundary: "Python runs in WebAssembly inside the tab, not as a native OS process.",
-            risk: "Code can exhaust tab resources and may use browser-permitted network APIs. Pyodide is not a hardened sandbox for untrusted code.",
+            boundary:
+                "Python runs in a terminable Web Worker with app storage globals shadowed, JS bridge modules unregistered, and run_js disabled. Egress is limited to credential-free GET requests under the pinned Pyodide 0.26.4 asset path.",
+            risk: "Pyodide is not a hardened hostile-code sandbox. Runtime escapes or CPU/memory exhaustion can still overwhelm the worker or tab before termination completes.",
             mitigation:
-                "Inline run buttons block obvious desktop/server modules as a guardrail. Review generated code and use a separate origin for hostile input.",
+                "Stop, abort, and timeout terminate the worker. Packages are limited to the pinned asset host. Every agent call shows complete code for fresh approval; manual code requires Run.",
         },
         {
-            surface: "API routes and analytics",
+            surface: "Providers and API routes",
             boundary:
-                "/api/deep-search, /api/image-gen, and /api/analytics are server routes. Opt-in page views use Vercel Web Analytics.",
-            risk: "Search queries, image prompts, and opt-in page views or funnel events leave the device when those features are used.",
+                "Cloud and remote Ollama use configured endpoints. Deep Search and images use N0X server routes before third parties. Auto-routing can select Cloud.",
+            risk: "Prompts, enabled context, search queries, or image prompts leave the device on their selected path. Providers have their own retention and security terms.",
             mitigation:
-                "Routes use best-effort in-memory rate limits. Analytics strips non-attribution query values and excludes prompt text, document text, file names, API keys, and memory contents.",
+                "Provider and privacy badges expose the path. Server routes reject reported cross-site browser calls and enforce bounded inputs, outbound allowlists, deadlines, and best-effort rate limits; this is not user authentication.",
+        },
+        {
+            surface: "Opt-in analytics",
+            boundary:
+                "Vercel page views and N0X funnel events are disabled until the user explicitly allows them in the consent banner or Privacy settings.",
+            risk: "When enabled, sanitized paths, attribution, event names, allowlisted coarse metadata, and ordinary request/service metadata leave the device.",
+            mitigation:
+                "Prompts, responses, documents, file names, API keys, and memory content are excluded. Non-attribution query values and fragments are removed from page views.",
         },
         {
             surface: "Content Security Policy",
@@ -56,39 +83,73 @@ export default function SecurityPage() {
     return (
         <main className="min-h-screen bg-[#0a0a0a] px-6 py-12 text-zinc-200">
             <div className="mx-auto max-w-5xl space-y-8">
-                <Link href="/" className="text-sm text-zinc-500 hover:text-white">
+                <Link href="/" className="text-sm text-zinc-400 hover:text-white">
                     n0x
                 </Link>
                 <section className="max-w-3xl space-y-4">
                     <h1 className="text-4xl font-bold tracking-tight text-white">Security Notes</h1>
                     <p>
-                        N0X uses browser isolation, Web Workers, sandboxed iframes, Pyodide WASM, a Content Security
-                        Policy, COOP/COEP headers, and API route rate limits. These are layered guardrails, not a
-                        replacement for reviewing generated code before running it.
+                        N0X&apos;s private-document path combines local extraction, content-addressed retrieval, and
+                        filename/chunk citations. Browser isolation, dedicated workers, sandboxed iframes, a Content
+                        Security Policy, COOP/COEP headers, and API request controls are layered guardrails—not proof
+                        that a model answer or generated program is safe or correct.
                     </p>
                 </section>
 
-                <section className="overflow-x-auto rounded-lg border border-zinc-800">
-                    <div className="grid min-w-[860px] grid-cols-[0.9fr_1.1fr_1.1fr_1.1fr] gap-px bg-zinc-800 text-sm">
-                        <div className="bg-zinc-950 p-3 font-semibold text-white">Surface</div>
-                        <div className="bg-zinc-950 p-3 font-semibold text-white">Boundary</div>
-                        <div className="bg-zinc-950 p-3 font-semibold text-white">Main Risk</div>
-                        <div className="bg-zinc-950 p-3 font-semibold text-white">Mitigation</div>
+                <section aria-label="Threat model" className="space-y-3">
+                    <div className="grid gap-3 md:hidden">
                         {threatRows.map(row => (
-                            <div key={row.surface} className="contents">
-                                <div className="bg-[#0d0d0d] p-3 text-zinc-200">{row.surface}</div>
-                                <div className="bg-[#0d0d0d] p-3 text-zinc-400">{row.boundary}</div>
-                                <div className="bg-[#0d0d0d] p-3 text-zinc-400">{row.risk}</div>
-                                <div className="bg-[#0d0d0d] p-3 text-zinc-400">{row.mitigation}</div>
-                            </div>
+                            <article key={row.surface} className="rounded-lg border border-zinc-800 bg-[#0d0d0d] p-4">
+                                <h2 className="font-semibold text-white">{row.surface}</h2>
+                                <dl className="mt-3 space-y-3 text-sm">
+                                    <div>
+                                        <dt className="font-medium text-zinc-300">Boundary</dt>
+                                        <dd className="mt-1 text-zinc-400">{row.boundary}</dd>
+                                    </div>
+                                    <div>
+                                        <dt className="font-medium text-zinc-300">Main risk</dt>
+                                        <dd className="mt-1 text-zinc-400">{row.risk}</dd>
+                                    </div>
+                                    <div>
+                                        <dt className="font-medium text-zinc-300">Mitigation</dt>
+                                        <dd className="mt-1 text-zinc-400">{row.mitigation}</dd>
+                                    </div>
+                                </dl>
+                            </article>
                         ))}
+                    </div>
+                    <div className="hidden overflow-hidden rounded-lg border border-zinc-800 md:block">
+                        <table className="w-full table-fixed text-left text-sm">
+                            <thead className="bg-zinc-950 text-white">
+                                <tr>
+                                    <th className="w-[18%] p-3">Surface</th>
+                                    <th className="p-3">Boundary</th>
+                                    <th className="p-3">Main risk</th>
+                                    <th className="p-3">Mitigation</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-zinc-800 bg-[#0d0d0d] text-zinc-400">
+                                {threatRows.map(row => (
+                                    <tr key={row.surface} className="align-top">
+                                        <th scope="row" className="p-3 font-medium text-zinc-200">
+                                            {row.surface}
+                                        </th>
+                                        <td className="p-3">{row.boundary}</td>
+                                        <td className="p-3">{row.risk}</td>
+                                        <td className="p-3">{row.mitigation}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
                     </div>
                 </section>
 
                 <div className="max-w-3xl space-y-6 text-zinc-400">
                     <p>
-                        HTML and JavaScript previews run in sandboxed iframes. Python runs in Pyodide, but CPU and
-                        memory-heavy code can still slow or crash the browser tab.
+                        HTML and JavaScript previews run in opaque-origin sandboxed iframes whose CSP blocks ordinary
+                        network subresources and connections, but same-frame navigation remains a residual network path.
+                        Python runs in a terminable Pyodide worker with runtime-only asset downloads, but CPU and
+                        memory-heavy code can still overwhelm the worker or browser tab before termination.
                     </p>
                     <p>
                         Deep Search, image generation, and analytics use in-memory server-side rate limits. These limits
@@ -98,7 +159,8 @@ export default function SecurityPage() {
                     <p>
                         Cloud API requests go directly from the browser to your configured OpenAI-compatible endpoint.
                         Deep Search and image requests use N0X server routes before reaching third-party providers. Only
-                        use providers you trust with the text you send.
+                        use providers you trust with the prompt and enabled context you send. A loopback Ollama server
+                        stays on-device; a remote Ollama URL is a network provider.
                     </p>
                 </div>
             </div>

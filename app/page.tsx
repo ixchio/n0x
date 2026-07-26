@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
-import Image from "next/image";
+import React, { useEffect } from "react";
 import Link from "next/link";
 import {
     ArrowRight,
@@ -19,7 +18,6 @@ import {
     Server,
     ShieldCheck,
     Sparkles,
-    Terminal,
     Zap,
     type LucideIcon,
 } from "lucide-react";
@@ -27,18 +25,18 @@ import { PixelNoxMark } from "@/components/brand/pixel-nox-mark";
 import { trackFunnelEvent } from "@/lib/core/analytics";
 
 const profileFacts = [
-    { label: "Category", value: "Local-first AI workspace" },
-    { label: "Best for", value: "Private docs, research, code, model testing" },
+    { label: "Primary job", value: "Confidential document Q&A with source citations" },
+    { label: "Best for", value: "Policies, contracts, reports, notes, and research files" },
     { label: "Runtime", value: "WebGPU, WASM, Chrome AI, Ollama, Cloud API" },
     { label: "Storage", value: "IndexedDB, Cache API, sessionStorage keys" },
     { label: "License", value: "MIT, open source" },
 ];
 
 const proof = [
-    { icon: Lock, label: "No forced account", detail: "Open the workspace and start local." },
-    { icon: FileText, label: "Files index in-browser", detail: "Docs live in IndexedDB and vector cache." },
-    { icon: KeyRound, label: "Session-only keys", detail: "Cloud keys stay out of localStorage." },
-    { icon: Github, label: "Source is inspectable", detail: "Open repo, MIT license, no black box." },
+    { icon: Lock, label: "No account required", detail: "Open the workbench and choose the local path." },
+    { icon: FileText, label: "Files index in-browser", detail: "Extraction and retrieval run in this tab." },
+    { icon: Search, label: "Evidence stays visible", detail: "Answers cite filename and chunk, not anonymous text." },
+    { icon: ShieldCheck, label: "Network use is explicit", detail: "Search, images, and cloud are separate choices." },
 ];
 
 const workflows = [
@@ -50,21 +48,15 @@ const workflows = [
     },
     {
         step: "02",
-        title: "Ask with context",
-        body: "Hybrid BM25 plus vector retrieval keeps exact terms and semantic matches in the answer window.",
-        icon: Search,
-    },
-    {
-        step: "03",
-        title: "Pick compute",
-        body: "Use the best local model first, then choose Chrome AI, Ollama, or cloud when the task needs it.",
+        title: "Choose the compute path",
+        body: "A browser model keeps prompts local. Its weights download on first use and initialize again on later visits.",
         icon: Cpu,
     },
     {
-        step: "04",
-        title: "Export the answer",
-        body: "Answer cards preserve provider, model, privacy path, and context flags for reproducible handoff.",
-        icon: Terminal,
+        step: "03",
+        title: "Ask, then verify",
+        body: "Hybrid keyword and vector retrieval returns focused evidence with citations such as [policy.pdf#chunk-3].",
+        icon: Search,
     },
 ];
 
@@ -80,15 +72,15 @@ const providerRows = [
         provider: "Chrome AI",
         icon: Sparkles,
         status: "On-device",
-        data: "Uses Chrome's local Gemini Nano when the browser exposes the Prompt API.",
-        bestFor: "Zero-download local fallback",
+        data: "Uses Gemini Nano when Chrome exposes the Prompt API and reports the built-in model ready.",
+        bestFor: "A built-in local path on supported Chrome installs",
     },
     {
         provider: "Ollama",
         icon: Server,
-        status: "Local server",
-        data: "Talks to your configured Ollama host on your machine or local network.",
-        bestFor: "Local larger models and dev machines",
+        status: "Configured endpoint",
+        data: "Talks to your configured Ollama URL; loopback stays local, while remote HTTPS sends prompts off-device.",
+        bestFor: "Self-hosted or remote open models",
     },
     {
         provider: "Cloud API",
@@ -101,8 +93,8 @@ const providerRows = [
 
 const boundaryRows = [
     ["Conversations", "IndexedDB", "Local browser origin"],
-    ["Uploaded docs", "IndexedDB + vector cache", "Local unless included in a cloud prompt"],
-    ["Model weights", "Browser Cache API", "Downloaded once, reused locally"],
+    ["Document index", "RAG vector cache", "Local unless included in a cloud prompt"],
+    ["Model weights", "Browser Cache API", "Cached when storage persists; initialized each visit"],
     ["Cloud keys", "sessionStorage", "Clears with the browser session"],
     ["Deep Search", "API route", "Search query leaves the device when enabled"],
     ["Image generation", "API route", "Prompt leaves the device when enabled"],
@@ -128,6 +120,55 @@ function SectionKicker({ children }: { children: React.ReactNode }) {
     return <p className="text-sm font-semibold text-orange-700">{children}</p>;
 }
 
+function DocumentOutcomeProof() {
+    return (
+        <figure className="overflow-hidden rounded-xl border border-zinc-800 bg-[#090909] text-zinc-100 shadow-[0_24px_80px_rgba(0,0,0,0.18)]">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800 px-4 py-3 text-xs sm:px-5">
+                <span className="font-semibold text-zinc-200">Private document Q&amp;A</span>
+                <span className="rounded-full border border-emerald-400/25 bg-emerald-400/10 px-2.5 py-1 text-emerald-200">
+                    Browser · local path
+                </span>
+            </div>
+            <div className="grid gap-0 lg:grid-cols-[0.82fr_1.18fr]">
+                <div className="border-b border-zinc-800 bg-zinc-950 p-5 lg:border-b-0 lg:border-r">
+                    <div className="flex items-center gap-2 text-sm font-semibold text-white">
+                        <FileText className="h-4 w-4 text-zinc-400" aria-hidden="true" />
+                        retention-policy.pdf
+                    </div>
+                    <div className="mt-5 rounded-lg border border-zinc-800 bg-black/40 p-4">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-zinc-300">Chunk 3</p>
+                        <p className="mt-2 text-sm leading-6 text-zinc-300">
+                            Customer records are retained for 30 days after account closure, then permanently deleted.
+                        </p>
+                    </div>
+                    <p className="mt-4 text-xs leading-5 text-zinc-300">
+                        Indexed in this browser. Deep Search off. Cloud API off.
+                    </p>
+                </div>
+                <div className="p-5 sm:p-7">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-zinc-300">Question</p>
+                    <p className="mt-2 text-base font-medium text-white">
+                        How long is customer data kept after I close my account?
+                    </p>
+                    <div className="mt-6 rounded-lg border border-zinc-800 bg-zinc-950/70 p-4 sm:p-5">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-emerald-300">Cited answer</p>
+                        <p className="mt-2 text-sm leading-6 text-zinc-200">
+                            Customer records are kept for 30 days after account closure, then permanently deleted.{" "}
+                            <span className="whitespace-nowrap font-mono text-emerald-300">
+                                [retention-policy.pdf#chunk-3]
+                            </span>
+                        </p>
+                    </div>
+                </div>
+            </div>
+            <figcaption className="border-t border-zinc-800 px-4 py-3 text-xs leading-5 text-zinc-300 sm:px-5">
+                Example outcome: an answer tied to a passage you can inspect. If retrieval finds no relevant evidence,
+                N0X tells the model to say so instead of inventing a document citation.
+            </figcaption>
+        </figure>
+    );
+}
+
 export default function HomePage() {
     useEffect(() => {
         trackFunnelEvent("visit", { page: "home" });
@@ -137,20 +178,23 @@ export default function HomePage() {
         <div className="min-h-screen bg-[#f5f5f2] text-zinc-950 selection:bg-zinc-950 selection:text-white">
             <header className="absolute left-0 right-0 top-0 z-30 border-b border-white/10 bg-black/35 backdrop-blur-md">
                 <div className="mx-auto flex h-14 w-full max-w-7xl items-center justify-between px-4 sm:h-16 sm:px-6">
-                    <Link href="/" className="flex items-center gap-3 text-sm font-semibold text-white">
+                    <Link
+                        href="/"
+                        className="flex items-center gap-3 rounded text-sm font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                    >
                         <PixelNoxMark className="h-5 w-9 text-emerald-300" />
                         <span>N0X</span>
                     </Link>
                     <nav className="flex items-center gap-1 text-sm">
                         <Link
                             href="/security"
-                            className="hidden rounded-md px-3 py-2 text-zinc-300 transition hover:bg-white/10 hover:text-white sm:inline-flex"
+                            className="hidden rounded-md px-3 py-2 text-zinc-300 transition hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white sm:inline-flex"
                         >
                             Security
                         </Link>
                         <Link
                             href="/known-limitations"
-                            className="hidden rounded-md px-3 py-2 text-zinc-300 transition hover:bg-white/10 hover:text-white sm:inline-flex"
+                            className="hidden rounded-md px-3 py-2 text-zinc-300 transition hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white sm:inline-flex"
                         >
                             Limits
                         </Link>
@@ -158,16 +202,16 @@ export default function HomePage() {
                             href="https://github.com/ixchio/n0x"
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="hidden rounded-md px-3 py-2 text-zinc-300 transition hover:bg-white/10 hover:text-white sm:inline-flex"
+                            className="hidden rounded-md px-3 py-2 text-zinc-300 transition hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white sm:inline-flex"
                         >
                             GitHub
                         </a>
                         <Link
                             href="/chat"
                             prefetch={false}
-                            className="inline-flex h-9 items-center gap-2 rounded-md bg-white px-3 text-sm font-semibold text-black transition hover:bg-zinc-200 sm:h-10 sm:px-4"
+                            className="inline-flex h-10 items-center gap-2 rounded-md bg-white px-3 text-sm font-semibold text-black transition hover:bg-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-black sm:px-4"
                         >
-                            Open app
+                            Ask a document
                             <ArrowRight className="h-4 w-4" />
                         </Link>
                     </nav>
@@ -184,35 +228,35 @@ export default function HomePage() {
                                 <HeroPill>Browser native</HeroPill>
                                 <HeroPill>Cloud optional</HeroPill>
                             </div>
-                            <p className="text-sm font-semibold text-orange-300">Private AI workstation</p>
+                            <p className="text-sm font-semibold text-orange-300">Confidential document Q&amp;A</p>
                             <p className="mt-3 text-5xl font-semibold text-white sm:text-7xl" aria-label="N0X">
                                 N0X
                             </p>
                             <h1 className="mt-4 max-w-2xl text-2xl font-semibold leading-tight text-zinc-100 sm:text-3xl">
-                                AI over your files without uploading the workspace to a SaaS account.
+                                Ask confidential documents questions. Get answers tied to the source.
                             </h1>
                             <p className="mt-4 max-w-2xl text-base leading-7 text-zinc-300">
-                                Local by default. Search, image and cloud paths are explicit. Drop docs, pick a local
-                                model, and export answer cards with the provider path attached.
+                                Choose the Browser provider to keep document extraction, retrieval, prompts, and
+                                inference on your device. Local model weights download on first use; search and cloud
+                                stay off until you choose them.
                             </p>
                             <div className="mt-6 flex flex-col gap-3 sm:flex-row">
                                 <Link
                                     href="/chat"
                                     prefetch={false}
-                                    className="inline-flex h-11 items-center justify-center gap-2 rounded-md bg-white px-5 text-sm font-semibold text-black transition hover:bg-zinc-200"
+                                    className="inline-flex h-11 items-center justify-center gap-2 rounded-md bg-white px-5 text-sm font-semibold text-black transition hover:bg-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-black"
                                 >
-                                    Launch workspace
+                                    Ask a document privately
                                     <ArrowRight className="h-4 w-4" />
                                 </Link>
-                                <a
-                                    href="https://github.com/ixchio/n0x"
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="inline-flex h-11 items-center justify-center gap-2 rounded-md border border-white/20 bg-black/20 px-5 text-sm font-semibold text-white transition hover:border-white/40 hover:bg-white/10"
+                                <Link
+                                    href="/chat?sample=1"
+                                    prefetch={false}
+                                    className="inline-flex h-11 items-center justify-center gap-2 rounded-md border border-white/20 bg-black/20 px-5 text-sm font-semibold text-white transition hover:border-white/40 hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
                                 >
-                                    <Github className="h-4 w-4" />
-                                    Read source
-                                </a>
+                                    <FileText className="h-4 w-4" />
+                                    Try with a sample
+                                </Link>
                             </div>
                         </div>
 
@@ -243,29 +287,21 @@ export default function HomePage() {
                         ))}
                     </div>
                     <div className="mx-auto max-w-7xl px-4 pb-10 sm:px-6">
-                        <div className="overflow-hidden rounded-lg border border-zinc-200 bg-zinc-950 shadow-[0_24px_80px_rgba(0,0,0,0.16)]">
-                            <Image
-                                src="/screenshots/chat-workbench.png"
-                                alt="N0X chat workbench empty state"
-                                width={1440}
-                                height={960}
-                                className="w-full bg-zinc-950 object-cover object-top"
-                                priority
-                            />
-                        </div>
+                        <DocumentOutcomeProof />
                     </div>
                 </section>
 
                 <section className="border-b border-zinc-200 bg-white">
                     <div className="mx-auto grid max-w-7xl gap-10 px-4 py-14 sm:px-6 lg:grid-cols-[0.65fr_1.35fr]">
                         <div>
-                            <SectionKicker>Product profile</SectionKicker>
+                            <SectionKicker>One clear job</SectionKicker>
                             <h2 className="mt-3 text-3xl font-semibold text-zinc-950">
-                                A workbench for private docs, research, and reproducible answers.
+                                Start with the document. Verify the answer against its citation.
                             </h2>
                             <p className="mt-4 text-base leading-7 text-zinc-600">
-                                The chat screen behaves like a tool surface, not a landing page: setup stays near the
-                                provider selector, the composer stays anchored, and the empty state starts with files.
+                                The first-run path leads with document upload and a sample. Provider controls, web
+                                search, Python, agents, images, and memory remain available in the workbench when you
+                                need them.
                             </p>
                         </div>
                         <div className="overflow-hidden rounded-lg border border-zinc-200 bg-[#fafafa]">
@@ -287,19 +323,19 @@ export default function HomePage() {
                         <div>
                             <SectionKicker>Workflow</SectionKicker>
                             <h2 className="mt-3 text-3xl font-semibold text-zinc-950">
-                                Built around private docs and clear provider boundaries.
+                                File → local model → cited answer.
                             </h2>
                             <p className="mt-4 text-base leading-7 text-zinc-600">
-                                First run checks hardware, recommends a local model, keeps setup compact, and shows
-                                exactly when search or cloud changes the data path.
+                                Nothing is silently uploaded. Browser model downloads are shown before they start, and
+                                the provider badge shows when a task leaves the local path.
                             </p>
                         </div>
-                        <div className="grid gap-3 sm:grid-cols-2">
+                        <div className="grid gap-3 sm:grid-cols-3">
                             {workflows.map(({ step, title, body, icon: Icon }) => (
                                 <div key={title} className="rounded-lg border border-zinc-200 bg-white p-5">
                                     <div className="flex items-center justify-between gap-3">
                                         <Icon className="h-5 w-5 text-zinc-950" />
-                                        <span className="font-mono text-xs font-semibold text-zinc-400">{step}</span>
+                                        <span className="font-mono text-xs font-semibold text-zinc-600">{step}</span>
                                     </div>
                                     <h3 className="mt-5 text-lg font-semibold text-zinc-950">{title}</h3>
                                     <p className="mt-2 text-sm leading-6 text-zinc-600">{body}</p>
@@ -336,7 +372,7 @@ export default function HomePage() {
 
                         <div className="overflow-hidden rounded-lg border border-zinc-700">
                             <div>
-                                <div className="hidden grid-cols-[0.9fr_1.15fr_1.15fr] bg-zinc-900 text-xs font-semibold text-zinc-400 md:grid">
+                                <div className="hidden grid-cols-[0.9fr_1.15fr_1.15fr] bg-zinc-900 text-xs font-semibold text-zinc-300 md:grid">
                                     <div className="px-4 py-3">Data</div>
                                     <div className="px-4 py-3">Stored in</div>
                                     <div className="px-4 py-3">Boundary</div>
@@ -347,19 +383,19 @@ export default function HomePage() {
                                         className="grid gap-3 border-t border-zinc-800 bg-zinc-950/70 p-4 text-sm md:grid-cols-[0.9fr_1.15fr_1.15fr] md:gap-0 md:p-0"
                                     >
                                         <div className="font-medium text-zinc-100 md:px-4 md:py-3">
-                                            <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-zinc-500 md:hidden">
+                                            <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-zinc-300 md:hidden">
                                                 Data
                                             </span>
                                             {data}
                                         </div>
                                         <div className="text-zinc-300 md:px-4 md:py-3 md:text-zinc-400">
-                                            <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-zinc-500 md:hidden">
+                                            <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-zinc-300 md:hidden">
                                                 Stored in
                                             </span>
                                             {storage}
                                         </div>
                                         <div className="text-zinc-300 md:px-4 md:py-3 md:text-zinc-400">
-                                            <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-zinc-500 md:hidden">
+                                            <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-zinc-300 md:hidden">
                                                 Boundary
                                             </span>
                                             {boundary}
@@ -441,28 +477,29 @@ export default function HomePage() {
                         <div>
                             <SectionKicker>30-second start</SectionKicker>
                             <h2 className="mt-3 text-3xl font-semibold text-zinc-950">
-                                Open the workspace, load the recommended model, ask over docs.
+                                Bring a document—or use the sample—and ask one grounded question.
                             </h2>
                             <p className="mt-4 max-w-2xl text-base leading-7 text-zinc-600">
-                                The product should prove itself before asking for trust. Start local, inspect provider
-                                badges, then decide if search or cloud belongs in the task.
+                                Start locally, inspect the citation, then decide whether web search or cloud belongs in
+                                the task.
                             </p>
                         </div>
                         <div className="flex flex-col gap-3 sm:flex-row lg:justify-end">
                             <Link
                                 href="/chat"
                                 prefetch={false}
-                                className="inline-flex h-12 items-center justify-center gap-2 rounded-md bg-zinc-950 px-6 text-sm font-semibold text-white transition hover:bg-zinc-800"
+                                className="inline-flex h-12 items-center justify-center gap-2 rounded-md bg-zinc-950 px-6 text-sm font-semibold text-white transition hover:bg-zinc-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950 focus-visible:ring-offset-2"
                             >
-                                Launch n0x
+                                Choose a document
                                 <ArrowRight className="h-4 w-4" />
                             </Link>
                             <Link
-                                href="/security"
-                                className="inline-flex h-12 items-center justify-center gap-2 rounded-md border border-zinc-300 bg-white px-6 text-sm font-semibold text-zinc-950 transition hover:border-zinc-500"
+                                href="/chat?sample=1"
+                                prefetch={false}
+                                className="inline-flex h-12 items-center justify-center gap-2 rounded-md border border-zinc-300 bg-white px-6 text-sm font-semibold text-zinc-950 transition hover:border-zinc-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950 focus-visible:ring-offset-2"
                             >
-                                Read security model
-                                <ShieldCheck className="h-4 w-4" />
+                                Try the sample
+                                <FileText className="h-4 w-4" />
                             </Link>
                         </div>
                     </div>

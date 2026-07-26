@@ -1,7 +1,7 @@
 {
-    "name": "N0X — AI in Your Browser",
+    "name": "N0X — Private Document Q&A",
     "short_name": "N0X",
-    "description": "An in-browser AI workstation with local WebGPU models, RAG and Python, plus optional Chrome AI, Ollama and cloud providers. Local by default. Search, image and cloud paths are explicit.",
+    "description": "Ask documents in your browser and verify answers with filename/chunk citations. Local and network paths stay explicit.",
     "start_url": "/chat",
     "display": "standalone",
     "background_color": "#0a0a0a",

@@ -1,20 +1,20 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-    title: "N0X Workspace — Local AI Chat, Docs and Tools",
+    title: "Private Document Q&A Workbench | N0X",
     description:
-        "Use local models, private document retrieval, code tools, and explicit provider controls. Local by default. Search, image and cloud paths are explicit.",
+        "Choose a document, run local retrieval, and ask questions with filename/chunk citations. Advanced tools remain available in the workbench.",
     alternates: {
         canonical: "/chat",
     },
     openGraph: {
-        title: "N0X Workspace — Local AI Chat, Docs and Tools",
-        description: "Local by default. Search, image and cloud paths are explicit.",
+        title: "Private Document Q&A Workbench | N0X",
+        description: "Ask confidential documents questions with inspectable source citations.",
         url: "/chat",
     },
     twitter: {
-        title: "N0X Workspace — Local AI Chat, Docs and Tools",
-        description: "Local by default. Search, image and cloud paths are explicit.",
+        title: "Private Document Q&A Workbench | N0X",
+        description: "Ask confidential documents questions with inspectable source citations.",
     },
 };
 

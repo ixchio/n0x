@@ -17,7 +17,7 @@ npm install
 npm run dev
 ```
 
-Use Node 20 (the CI version) and Chrome/Edge 113+ with WebGPU enabled for local-model testing.
+Use Node 20.19+ (CI tracks the latest Node 20 release) and Chrome/Edge 113+ with WebGPU enabled for local-model testing.
 
 ## Development workflow
 
@@ -79,11 +79,11 @@ chore: changes
 
 ```text
 app/             Next.js routes, metadata, and API routes
-components/      React UI grouped by brand, chat, layout, system, and primitives
+components/      React UI grouped by brand, chat, layout, and system
 lib/chat/        Chat orchestration, routing, and conversation state
 lib/providers/   WebGPU, Chrome AI, Ollama, and cloud providers
 lib/retrieval/   Document policy, RAG worker, and Deep Search
-lib/runtime/     Agent, Pyodide, and WebContainer runtimes
+lib/runtime/     Agent and isolated Pyodide runtimes
 lib/memory/      Origin-scoped semantic memory
 lib/server/      Server-route utilities such as best-effort rate limiting
 public/          Static assets, screenshots, manifest, and service worker

@@ -1,8 +1,8 @@
 <div align="center">
   <img src="https://raw.githubusercontent.com/ixchio/n0x/main/public/icon.png" width="80" alt="n0x logo" />
   <h1>n0x</h1>
-  <p><strong>Run local LLMs, agents, document retrieval, and Python in your browser.</strong></p>
-  <p>Local by default. Search, image and cloud paths are explicit.</p>
+  <p><strong>Ask documents in your browser and verify answers with filename/chunk citations.</strong></p>
+  <p>Local-first document Q&amp;A, with agents, Python, search, images, and cloud providers when you choose them.</p>
 
   <p>
     <a href="https://n0xth.vercel.app"><img src="https://img.shields.io/badge/Try%20it%20live-→-6366f1?style=for-the-badge&labelColor=0f0f0f" alt="Live demo" /></a>
@@ -29,19 +29,22 @@
 
 ## What is n0x?
 
-n0x is a local-first AI workstation. Its Browser provider uses **WebGPU** and **WebAssembly** for inference, document retrieval, and Python execution without a hosted inference account.
+n0x is a local-first document Q&A workbench and browser AI workstation. Attach a supported document, ask a question, and N0X supplies retrieved passages to the model with exact citation tags such as `[policy.pdf#chunk-3]`. Citations identify the retrieved passage; they do not make model output infallible, so inspect the cited text for important decisions.
+
+Its Browser provider uses **WebGPU** and **WebAssembly** for local inference, retrieval, and Python execution without a hosted inference account.
 
 You get:
 
-- **Local LLM inference** with 21 verified WebLLM models
-- **Autonomous agent** with a real ReAct loop and live tool use
-- **Document Q&A** with hybrid RAG (vector + BM25 + MMR reranking)
-- **Python runtime** via Pyodide WASM — runs `import numpy` in the browser
+- **Document Q&A** with filename/chunk citations and explicit no-evidence handling
+- **Local LLM inference** with 21 curated WebLLM models
+- **Hybrid retrieval** for larger documents (vector + BM25 → RRF → MMR)
+- **Autonomous agent** with a ReAct loop and permission-gated tools
+- **Python runtime** via Pyodide WASM in a dedicated, terminable worker
 - **Multi-engine web search** (SearXNG · DDG · Wikipedia · Brave · Tavily)
 - **Image generation** through an explicit Pollinations/AI Horde network route
 - **Optional persistent memory** saved and recalled only when Memory is enabled
 
-Local chat, RAG, conversation history, enabled memory, and Python execution run client-side. First-time model, embedding, and Pyodide downloads use the network. Deep Search, image generation, browser speech services, remote Ollama hosts, and Cloud API providers can also send relevant input off-device when you choose them.
+Browser-provider chat, document indexing, conversation history, enabled memory, and Python execution run client-side. First-time model, embedding, and permitted Pyodide asset downloads use the network but do not upload your document for indexing. Deep Search, image generation, approved external Markdown images, browser speech services, remote Ollama hosts, Cloud API providers, and opt-in telemetry are separate network paths.
 
 ---
 
@@ -56,7 +59,7 @@ Local chat, RAG, conversation history, enabled memory, and Python execution run 
 
 ## Quickstart
 
-**Requirements:** Chrome or Edge 113+ (WebGPU). Node 20 is recommended and used by CI.
+**Requirements:** Node 20.19+ (CI uses Node 20). Chrome or Edge 113+ is recommended for the local WebGPU provider; Ollama and Cloud API can be used without local WebGPU.
 
 ```bash
 git clone https://github.com/ixchio/n0x.git
@@ -65,17 +68,30 @@ npm install
 npm run dev
 ```
 
-Open `http://localhost:3000` and pick a model. The first load downloads the size shown in the selector (roughly 360MB–5.5GB); later loads reuse the browser cache unless the browser evicts it or you clear Model Weights. App shell updates preserve separately cached WebLLM downloads.
+Open `http://localhost:3000`, attach a document or load the sample, then choose a provider. Loading a Browser model is a separate action: the first load downloads the size shown in the selector (roughly 360MB–5.5GB). Cached weights avoid most re-downloads, but the model still initializes each visit; browser eviction, site-data clearing, or clearing Model Weights requires another download.
+
+For a production check and local production server:
+
+```bash
+npm run build
+npm run start
+```
 
 > **Just want to try it?** → [n0xth.vercel.app](https://n0xth.vercel.app) — no install needed.
 
 ### Optional env vars
+
+Put only the values you need in `.env.local`, then restart the development server. Never expose these as `NEXT_PUBLIC_*` values.
 
 ```env
 # All optional; local chat does not need them.
 TAVILY_API_KEY=tvly-xxxxx       # Research-grade search
 BRAVE_API_KEY=BSA-xxxxx         # Additional search provider
 POLLINATIONS_API_KEY=your-key   # Authenticated image route; kept server-side
+
+# Self-hosting only: enable this solely behind a trusted proxy that overwrites
+# X-Forwarded-For / X-Real-IP. It affects best-effort rate-limit identity.
+N0X_TRUST_PROXY_HEADERS=1
 ```
 
 ---
@@ -88,14 +104,13 @@ components/brand/     N0X identity marks and brand primitives
 components/chat/      Chat workbench UI, messages, panels, and sharing
 components/layout/    Shell and navigation components
 components/system/    PWA, onboarding, storage, skeletons, and boundaries
-components/ui/        Reusable low-level UI primitives
 lib/chat/             Chat orchestration, routing, and conversation state
 lib/core/             Analytics and logging utilities
 lib/media/            Speech, TTS, and interaction sound hooks
 lib/memory/           Persistent semantic memory
 lib/providers/        WebGPU, Chrome AI, Ollama, and cloud providers
 lib/retrieval/        RAG, deep search, and document workers
-lib/runtime/          Agent loop, Pyodide, and WebContainer runtime hooks
+lib/runtime/          Agent loop and isolated Pyodide runtime hooks
 public/brand/         Launch and marketplace brand assets
 public/screenshots/   Current product screenshots
 ```
@@ -106,22 +121,22 @@ public/screenshots/   Current product screenshots
 
 Four backends. You can switch mid-conversation without replacing chat history.
 
-| Provider             | What runs                                             | Setup                                       |
-| -------------------- | ----------------------------------------------------- | ------------------------------------------- |
-| **Browser (WebGPU)** | 21 curated, verified open-source models via WebLLM    | Pick a model; weights download on first use |
-| **Ollama**           | Models exposed by your configured Ollama server       | Start Ollama and allow browser CORS         |
-| **Cloud API**        | OpenAI-compatible streaming chat-completion endpoints | Paste a trusted endpoint, key, and model    |
-| **Chrome AI**        | Gemini Nano through Chrome's built-in Prompt API      | Requires Prompt API availability in Chrome  |
+| Provider             | Execution and data path                                                                     | Setup                                                                                      |
+| -------------------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| **Browser (WebGPU)** | Inference runs in this browser after model assets download                                  | Pick a model; weights download on first use                                                |
+| **Ollama**           | Prompts and enabled context go to its URL; loopback is local, remote URLs are network paths | Start Ollama, choose a model, and allow browser CORS                                       |
+| **Cloud API**        | Prompts and enabled context go to the OpenAI-compatible endpoint you configure              | Paste a trusted endpoint, key, and model                                                   |
+| **Chrome AI**        | Prompt API inference is on-device when Gemini Nano is ready                                 | Availability probe is passive; explicit selection/install can start Chrome's model install |
 
-When enabled and both paths are available, **auto-routing** classifies each message and can send more complex queries to the configured cloud provider.
+When enabled and both paths are available, **auto-routing** classifies each message and can send more complex queries—and their enabled document, memory, or search context—to the configured cloud provider. Leave auto-routing off for a strictly selected-provider workflow.
 
 ---
 
 ## Models
 
-The selector exposes 21 MLC-compiled models verified against the installed WebLLM app config. They are quantized and cached after the first download.
+The selector exposes a static list of 21 MLC-compiled model IDs curated against the installed WebLLM app config. They are quantized and cached after the first download, but host availability and device compatibility can still change.
 
-| Tier                   | Verified models                                                           | Approx. download |
+| Tier                   | Curated models                                                            | Approx. download |
 | ---------------------- | ------------------------------------------------------------------------- | ---------------- |
 | ⚡ **Tiny (4)**        | SmolLM2 360M/1.7B · Qwen 2.5 0.5B · TinyLlama 1.1B                        | 360MB–900MB      |
 | ⚖️ **Balanced (6)**    | Llama 3.2 1B/3B · Qwen 2.5 1.5B · Gemma 2 2B · Phi-3 Mini · Phi-3.5 Mini  | 700MB–2.2GB      |
@@ -129,7 +144,7 @@ The selector exposes 21 MLC-compiled models verified against the installed WebLL
 | 🧠 **Reasoning (2)**   | DeepSeek R1 Distill Qwen 7B · DeepSeek R1 Distill Llama 8B                | 4.5GB–4.8GB      |
 | 💻 **Code & math (3)** | Qwen 2.5 Coder 1.5B/7B · Qwen 2.5 Math 1.5B                               | 1GB–4GB          |
 
-**Recommended start:** Qwen 2.5 1.5B (~1GB). Loads fast, handles most tasks well.
+**Suggested desktop starting point:** Qwen 2.5 1.5B (~1GB). Mobile and low-memory devices are capped toward SmolLM2 360M; actual compatibility and speed depend on the GPU and browser.
 
 ---
 
@@ -144,7 +159,7 @@ The LLM plans, calls tools, observes results, and repeats — you watch every st
 
 - Multi-engine web search when Deep Search is enabled for the request
 - Hybrid document RAG (Vector + BM25 + MMR)
-- Python execution (Pyodide WASM runtime)
+- Python execution only when the Python toggle is enabled and its worker is ready; every autonomous call shows the complete code for fresh approval
 - Persistent memory read/write when Memory is enabled (IndexedDB)
 
 Image generation uses its own explicit network request path rather than being invoked implicitly by the agent loop.
@@ -154,6 +169,7 @@ Image generation uses its own explicit network request path rather than being in
 - Multi-strategy JSON parser — handles malformed tool calls
 - Loop detection — stops if the same tool is called 3× with the same args
 - Per-tool timeout (45s)
+- Stop/abort propagation to running tools; Python cancellation terminates its worker
 - Provider-aware context budget management
 - Max 12 iterations per run
 
@@ -162,20 +178,21 @@ Image generation uses its own explicit network request path rather than being in
 <details>
 <summary><strong>📄 Document Q&A — hybrid local RAG</strong></summary>
 
-Drop a supported text document into chat.
+Attach a supported document, then ask a question. Retrieved evidence is labeled with stable, exact tags such as `[filename.pdf#chunk-2]`; when the relevance gate finds no adequate passage, the prompt explicitly tells the model not to invent a document citation.
 
 **Pipeline:**
 
-1. Local text extraction for PDF, DOCX, and text-based formats
-2. Sentence-boundary-aware chunking (50% overlap)
-3. MiniLM-L6 embeddings in a Web Worker
-4. Dual index: **Voy** (vector) + **BM25** (keyword)
-5. RRF fusion (Reciprocal Rank Fusion) + MMR reranking for diversity
-6. Versioned vector cache in IndexedDB for faster re-upload
+1. Local text extraction for PDF, DOCX, and text-based formats; PDF.js uses a bundled worker
+2. Small direct documents are deterministically chunked and ranked with BM25 without loading the embedding stack
+3. Larger documents use sentence-boundary-aware chunks and MiniLM-L6 embeddings in a Web Worker
+4. **Voy** vector and **BM25** keyword rankings are combined with Reciprocal Rank Fusion
+5. MMR reranks the fused candidates for relevance and diversity
+6. Vector records are keyed by a local SHA-256 hash of the file bytes in IndexedDB; identical bytes deduplicate even if renamed
+7. Removing or clearing documents waits for the IndexedDB deletion to commit before the UI reports success
 
 **Formats:** PDF · DOCX · TXT · MD · CSV · HTML · JSON · XML · YAML · TOML · INI · CFG · CONF · LOG · RST · TEX
 
-**Limits:** 25MB per file, 32MB expanded DOCX content, 750,000 extracted characters, and the first 100 pages of a PDF. Corrupt or unsupported binary files are rejected rather than attached as text placeholders.
+**Limits:** 25MB per file, 32MB expanded DOCX content, 750,000 extracted characters, and the first 100 pages of a PDF. Corrupt or unsupported binary files are rejected rather than attached as text placeholders. Scanned pages and diagrams are not OCR or vision input.
 
 </details>
 
@@ -200,11 +217,13 @@ Toggle "Deep Search" and get synthesized answers with source cards, not a wall o
 <details>
 <summary><strong>🐍 Python runtime — Pyodide WASM</strong></summary>
 
-Full CPython runs in the browser. The Pyodide runtime and requested packages download from jsDelivr on first use.
+CPython runs in WebAssembly inside a dedicated Web Worker that can be terminated on stop, abort, or timeout. The worker blocks app storage globals and arbitrary network transports. Its only permitted egress is credential-free `GET` access to the pinned Pyodide 0.26.4 runtime/package asset path on jsDelivr.
 
 - Output feeds back into the conversation automatically
-- Execution errors go to the LLM for a self-healing retry
-- `micropip` available for packages not in the default bundle
+- Manual code runs only after you click Run; a failed manual run can be sent back to the model for a repair attempt
+- Every autonomous agent Python call displays the complete code and requires fresh approval
+- Imports can load only packages shipped on the pinned Pyodide asset path; arbitrary PyPI/package URLs are blocked
+- This is a browser isolation boundary, not a hardened sandbox for hostile code; CPU or memory exhaustion can still affect the worker or tab
 
 </details>
 
@@ -238,7 +257,7 @@ Image prompts leave the device and are subject to third-party terms and availabi
 
 N0X uses the browser Web Speech APIs. Speech recognition and some voices may use an online browser or operating-system service; offline operation is not guaranteed.
 
-- Mic button → speak → auto-submit
+- Mic button → speak → transcript fills the composer for review and sending
 - TTS toggle → responses read aloud
 - Interrupt mid-speech
 
@@ -275,15 +294,17 @@ Click any message → Branch → create an alternate timeline from that point. B
                                │  ├─ Web Search (5 engines)│
                                │  ├─ Hybrid RAG (Vec+BM25) │
                                │  ├─ Python (Pyodide WASM) │
-                               │  ├─ Memory (IndexedDB)    │
-                               │  └─ Image Gen             │
+                               │  └─ Memory (IndexedDB)    │
                                └───────────────────────────┘
 
-  RAG pipeline (Web Worker):
-  PDF/DOCX → chunks → MiniLM embeds → Voy + BM25 → RRF → MMR → context
+  Explicit image request → /api/image-gen → Pollinations / optional AI Horde
+
+  RAG pipeline:
+  small/direct → stable chunks → BM25 ───────────────┐
+  large/indexed → MiniLM → Voy + BM25 → RRF → MMR ─┴→ cited context
 ```
 
-Local by default. Search, image and cloud paths are explicit. Other network-dependent paths are first-time model/embedding downloads, Pyodide and package downloads, remote Ollama servers, optional page-view/funnel telemetry, and browser speech implementations that use an online service.
+Local by default. Search, image and cloud paths are explicit. Other network-dependent paths are first-time model/embedding downloads, an explicitly started Chrome AI model install, Pyodide and package downloads, remote Ollama servers, optional page-view/funnel telemetry, and browser speech implementations that use an online service.
 
 ---
 
@@ -291,7 +312,7 @@ Local by default. Search, image and cloud paths are explicit. Other network-depe
 
 Inference speed and usable model size depend on the model, GPU, drivers, browser, available memory, thermals, and prompt length. Mobile devices are treated as low-memory and should start with the smallest model.
 
-Model weights and RAG vectors are cached for reuse. Browsers can evict either cache under storage pressure, and clearing site data or the corresponding Storage Manager entry removes it. N0X service-worker upgrades remove only old app-shell caches and preserve separately named WebLLM model caches.
+Model weights and larger-document RAG vectors are cached for reuse. RAG vector records use the SHA-256 content ID, not file metadata; reattaching the same bytes can reuse them. Attachments themselves are not restored after reload. Browsers can evict either cache under storage pressure, and clearing site data or the corresponding Storage Manager entry removes it. N0X service-worker upgrades remove only old app-shell caches and preserve separately named WebLLM model caches.
 
 ---
 
@@ -299,19 +320,25 @@ Model weights and RAG vectors are cached for reuse. Browsers can evict either ca
 
 **Local by default. Search, image and cloud paths are explicit.**
 
-| What                       | Where it goes                                                              |
-| -------------------------- | -------------------------------------------------------------------------- |
-| Local prompts & responses  | Conversation history in origin-scoped IndexedDB                            |
-| Uploaded documents         | Extracted/indexed locally; relevant excerpts can enter a prompt you send   |
-| Enabled semantic memory    | Origin-scoped IndexedDB; automatic saving and retrieval stop when disabled |
-| Model and embedding assets | Downloaded from their hosts, then reused from browser-managed caches       |
-| Search queries             | N0X API route, then enabled search/extraction providers                    |
-| Image prompts              | N0X API route, then Pollinations and, on the configured path, AI Horde     |
-| Cloud API prompts          | The OpenAI-compatible endpoint you configure                               |
-| Voice input/output         | Browser Web Speech implementation; it may use an online vendor service     |
-| Opt-in telemetry           | Sanitized page views to Vercel; funnel events to the N0X analytics route   |
+| What                       | Where it goes                                                                                |
+| -------------------------- | -------------------------------------------------------------------------------------------- |
+| Local prompts & responses  | Conversation history and cited-evidence snapshots in origin-scoped IndexedDB                 |
+| Uploaded documents         | Original file stays local for indexing; relevant excerpts enter the selected provider prompt |
+| Larger-document RAG cache  | Local SHA-256 content ID; cached chunks/vectors use origin-scoped IndexedDB                  |
+| Enabled semantic memory    | Origin-scoped IndexedDB; automatic saving and retrieval stop when disabled                   |
+| Model and embedding assets | Downloaded from their hosts, then reused from browser-managed caches                         |
+| Search queries             | N0X API route, then search/extraction providers; every agent-authored query needs approval   |
+| Image prompts              | N0X API route, then Pollinations and, on the configured path, AI Horde                       |
+| Ollama prompts             | Configured URL; loopback is local, while a remote host receives enabled prompt context       |
+| Cloud API prompts          | The OpenAI-compatible endpoint you configure                                                 |
+| Voice input/output         | Browser Web Speech implementation; it may use an online vendor service                       |
+| External Markdown images   | Blocked until you choose Load once; approval contacts that image host                        |
+| Pyodide assets/packages    | Pinned jsDelivr path only; arbitrary Python network egress is blocked                        |
+| Opt-in telemetry           | No analytics before Allow; then sanitized Vercel page views and N0X funnel events            |
 
-After dependencies are cached, local chat and document retrieval can work without enabling search, images, cloud, or telemetry. That is not an air-gap guarantee: uncached assets, Pyodide packages, remote Ollama, and some browser speech implementations still use the network.
+After dependencies are cached, local chat and document retrieval can work without enabling search, images, cloud, or telemetry. That is not an air-gap guarantee: uncached assets, pinned Pyodide packages, remote Ollama, approved external images, and some browser speech implementations still use the network.
+
+On first visit, a non-modal banner offers **No thanks** or **Allow analytics**. Neither the Vercel Analytics component nor N0X funnel events run before Allow; the choice is stored locally and can be changed on the Privacy page.
 
 Full details: [Privacy Policy](https://n0xth.vercel.app/privacy) · [Security](https://n0xth.vercel.app/security) · [Known Limitations](https://n0xth.vercel.app/known-limitations)
 
@@ -322,7 +349,7 @@ Full details: [Privacy Policy](https://n0xth.vercel.app/privacy) · [Security](h
 | Layer          | Tech                                                             |
 | -------------- | ---------------------------------------------------------------- |
 | Framework      | Next.js 15 · React 18 · TypeScript                               |
-| Styling        | Tailwind CSS · Framer Motion                                     |
+| Styling        | Tailwind CSS                                                     |
 | LLM runtime    | WebLLM (WebGPU) · Chrome Prompt API · Ollama · OpenAI-compatible |
 | Embeddings     | Transformers.js · MiniLM-L6 (Web Worker)                         |
 | Vector search  | Voy                                                              |
@@ -403,7 +430,7 @@ MIT © [ixchio](https://github.com/ixchio)
 ---
 
 <div align="center">
-  <strong>Free. Local. Private. Powerful.</strong>
+  <strong>Free. Local-first. Explicit about network paths.</strong>
   <br />
   No sign-up. Local chat needs no API key. Telemetry is opt-in.
   <br /><br />
