@@ -49,6 +49,7 @@ describe("chat workbench preference hydration", () => {
 
         expect(renders[0]).toEqual({ provider: "browser", sidebarOpen: false });
         expect(result.current.provider).toBe("cloud");
+        expect(result.current.preferencesHydrated).toBe(true);
         expect(result.current.ollamaUrl).toBe("http://ollama.test:11434");
         expect(result.current.sidebarOpen).toBe(expectedSidebarOpen);
         expect(media.addEventListener).toHaveBeenCalledWith("change", expect.any(Function));

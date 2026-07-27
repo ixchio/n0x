@@ -43,6 +43,14 @@ interface ActiveGeneration {
 
 let activeGeneration: ActiveGeneration | null = null;
 
+// Chrome's Prompt API uses these declarations both to select a compatible
+// model and to attest output safety. Omitting expectedOutputs logs a warning
+// and can reduce response quality on current Chrome builds.
+export const CHROME_AI_LANGUAGE_OPTIONS = Object.freeze({
+    expectedInputs: [{ type: "text", languages: ["en"] }],
+    expectedOutputs: [{ type: "text", languages: ["en"] }],
+});
+
 function createAbortError(): DOMException {
     return new DOMException("The operation was aborted", "AbortError");
 }
@@ -83,7 +91,7 @@ export const useChromeAI = create<ChromeAIState>((set, get) => ({
 
         set({ status: "checking" });
         try {
-            const availability = await lm.availability();
+            const availability = await lm.availability(CHROME_AI_LANGUAGE_OPTIONS);
             if (availability === "available" || availability === "readily") {
                 set(state => ({
                     isSupported: true,
@@ -118,7 +126,7 @@ export const useChromeAI = create<ChromeAIState>((set, get) => ({
         }
 
         try {
-            const availability = await lm.availability();
+            const availability = await lm.availability(CHROME_AI_LANGUAGE_OPTIONS);
             if (availability === "available" || availability === "readily") {
                 set(state => ({
                     isSupported: true,
@@ -138,7 +146,7 @@ export const useChromeAI = create<ChromeAIState>((set, get) => ({
             }
 
             set({ isSupported: true, status: "downloading", error: null });
-            const downloadSession = (await lm.create()) as ChromeAISession;
+            const downloadSession = (await lm.create(CHROME_AI_LANGUAGE_OPTIONS)) as ChromeAISession;
             try {
                 downloadSession.destroy?.();
             } catch (error) {
@@ -183,7 +191,7 @@ export const useChromeAI = create<ChromeAIState>((set, get) => ({
         set({ status: "generating", error: null });
 
         try {
-            generation.session = (await lm.create()) as ChromeAISession;
+            generation.session = (await lm.create(CHROME_AI_LANGUAGE_OPTIONS)) as ChromeAISession;
             if (generation.controller.signal.aborted) {
                 throw createAbortError();
             }

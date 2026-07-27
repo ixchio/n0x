@@ -3,7 +3,10 @@ import {
     CLOUD_GENERATION_TIMEOUT_MS,
     CLOUD_MODEL_LIST_MAX_ITEMS,
     CLOUD_STREAM_LINE_MAX_CHARS,
+    GROQ_SAFE_MAX_OUTPUT_TOKENS,
+    GROQ_SAFE_REQUEST_TOKENS,
     cloudHttpErrorMessage,
+    identifyCloudProvider,
     normalizeCloudBaseUrl,
     useCloudAI,
 } from "@/lib/providers/useCloudAI";
@@ -67,6 +70,39 @@ describe("Cloud API provider generation", () => {
         expect(JSON.parse(String(init.body))).toMatchObject({ model: "test-model", stream: true, max_tokens: 77 });
     });
 
+    it("caps Groq output requests below account-level token limits", async () => {
+        useCloudAI.setState({
+            baseUrl: "https://api.groq.com/openai/v1",
+            apiKey: "groq-key",
+            models: ["llama-3.3-70b-versatile"],
+            loadedModel: "llama-3.3-70b-versatile",
+            contextWindow: 131_072,
+            maxOutputTokens: 32_768,
+            modelLimits: {
+                "llama-3.3-70b-versatile": { contextWindow: 131_072, maxOutputTokens: 32_768 },
+            },
+        });
+        const body = new ReadableStream<Uint8Array>({
+            start(controller) {
+                controller.enqueue(new TextEncoder().encode('data: {"choices":[{"delta":{"content":"ok"}}]}\n\n'));
+                controller.close();
+            },
+        });
+        const fetchMock = vi.fn(async () => new Response(body, { status: 200 }));
+        vi.stubGlobal("fetch", fetchMock);
+
+        await useCloudAI.getState().generate([{ role: "user", content: "hello" }], undefined, {
+            requestId: "groq-cap",
+            model: "llama-3.3-70b-versatile",
+            maxTokens: 32_768,
+            signal: new AbortController().signal,
+        });
+
+        const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+        const request = JSON.parse(String(init.body));
+        expect(request.max_tokens).toBe(GROQ_SAFE_MAX_OUTPUT_TOKENS);
+    });
+
     it("aborts the in-flight fetch and restores ready state", async () => {
         let requestSignal: AbortSignal | undefined;
         let abortObserved = false;
@@ -94,11 +130,123 @@ describe("Cloud API provider generation", () => {
         expect(useCloudAI.getState().status).toBe("ready");
     });
 
-    it("normalizes endpoint paths and rejects plaintext remote APIs", () => {
+    it("canonicalizes known provider endpoints and rejects unsafe or blank values", () => {
         expect(normalizeCloudBaseUrl("https://cloud.example/v1/chat/completions/")).toBe("https://cloud.example/v1");
         expect(normalizeCloudBaseUrl("http://localhost:8080/v1/models")).toBe("http://localhost:8080/v1");
+        expect(normalizeCloudBaseUrl("https://api.groq.com/v1/chat/completions")).toBe(
+            "https://api.groq.com/openai/v1"
+        );
+        expect(normalizeCloudBaseUrl("https://openrouter.ai/models")).toBe("https://openrouter.ai/api/v1");
+        expect(normalizeCloudBaseUrl("https://api.openai.com")).toBe("https://api.openai.com/v1");
+        expect(() => normalizeCloudBaseUrl("   ")).toThrow(/required/i);
         expect(() => normalizeCloudBaseUrl("http://cloud.example/v1")).toThrow(/must use HTTPS/i);
         expect(() => normalizeCloudBaseUrl("https://key:secret@cloud.example/v1")).toThrow(/credentials/i);
+        expect(identifyCloudProvider("https://api.groq.com/openai/v1")).toBe("groq");
+        expect(identifyCloudProvider("https://api.groq.com.evil.example/v1")).toBe("generic");
+    });
+
+    it("clears endpoint-scoped models and limits when switching providers", () => {
+        useCloudAI.setState({
+            models: ["old-provider-model"],
+            loadedModel: "old-provider-model",
+            modelLimits: { "old-provider-model": { contextWindow: 99_999, maxOutputTokens: 9_999 } },
+            contextWindow: 99_999,
+            maxOutputTokens: 9_999,
+        });
+
+        useCloudAI.getState().setCredentials("https://openrouter.ai/api/v1", "");
+
+        expect(useCloudAI.getState()).toMatchObject({
+            baseUrl: "https://openrouter.ai/api/v1",
+            models: [],
+            loadedModel: null,
+            modelLimits: {},
+            contextWindow: 32_768,
+            maxOutputTokens: 2_048,
+        });
+
+        useCloudAI.getState().setCredentials("https://api.groq.com", "");
+        expect(useCloudAI.getState()).toMatchObject({
+            baseUrl: "https://api.groq.com/openai/v1",
+            loadedModel: "llama-3.3-70b-versatile",
+            contextWindow: GROQ_SAFE_REQUEST_TOKENS,
+            maxOutputTokens: GROQ_SAFE_MAX_OUTPUT_TOKENS,
+        });
+    });
+
+    it("filters non-text OpenRouter models and reads nested provider limits", async () => {
+        useCloudAI.setState({
+            baseUrl: "https://openrouter.ai/api/v1",
+            apiKey: "openrouter-key",
+            models: [],
+            loadedModel: null,
+            modelLimits: {},
+            configurationRevision: 30,
+        });
+        vi.stubGlobal(
+            "fetch",
+            vi.fn(
+                async () =>
+                    new Response(
+                        JSON.stringify({
+                            data: [
+                                {
+                                    id: "meta-llama/text-chat",
+                                    architecture: {
+                                        input_modalities: ["text", "image"],
+                                        output_modalities: ["text"],
+                                    },
+                                    context_length: 16_384,
+                                    top_provider: { max_completion_tokens: 768 },
+                                    supported_parameters: ["max_tokens"],
+                                },
+                                {
+                                    id: "canopylabs/orpheus-arabic-saudi",
+                                    architecture: { input_modalities: ["text"], output_modalities: ["audio"] },
+                                },
+                                {
+                                    id: "openai/text-embedding-3-small",
+                                    architecture: { input_modalities: ["text"], output_modalities: ["embedding"] },
+                                },
+                                {
+                                    id: "image/provider-model",
+                                    architecture: { modality: "text->image" },
+                                },
+                            ],
+                        }),
+                        { status: 200 }
+                    )
+            )
+        );
+
+        await useCloudAI.getState().fetchModels();
+
+        expect(useCloudAI.getState()).toMatchObject({
+            models: ["meta-llama/text-chat"],
+            loadedModel: "meta-llama/text-chat",
+            contextWindow: 16_384,
+            maxOutputTokens: 768,
+        });
+        expect(useCloudAI.getState().modelLimits["meta-llama/text-chat"]).toMatchObject({
+            contextWindow: 16_384,
+            maxOutputTokens: 768,
+            supportedParameters: ["max_tokens"],
+        });
+
+        const stream = new ReadableStream<Uint8Array>({
+            start(controller) {
+                controller.enqueue(new TextEncoder().encode('data: {"choices":[{"delta":{"content":"ok"}}]}\n\n'));
+                controller.close();
+            },
+        });
+        const generationFetch = vi.fn(async () => new Response(stream, { status: 200 }));
+        vi.stubGlobal("fetch", generationFetch);
+        await useCloudAI.getState().generate([{ role: "user", content: "hello" }]);
+        const [, generationInit] = generationFetch.mock.calls[0] as unknown as [string, RequestInit];
+        const requestBody = JSON.parse(String(generationInit.body));
+        expect(requestBody).toMatchObject({ max_tokens: 768 });
+        expect(requestBody).not.toHaveProperty("temperature");
+        expect(requestBody).not.toHaveProperty("top_p");
     });
 
     it("ignores a stale model response after endpoint credentials change", async () => {
@@ -182,6 +330,36 @@ describe("Cloud API provider generation", () => {
 
         expect(useCloudAI.getState().error).toMatch(/model limit/i);
         expect(useCloudAI.getState().fetchingModels).toBe(false);
+    });
+
+    it("reports safe provider-specific 400 and 413 guidance", async () => {
+        const reflected = "session-key :: private prompt contents";
+        useCloudAI.setState({
+            baseUrl: "https://api.groq.com/openai/v1",
+            apiKey: "session-key",
+            models: ["llama-3.3-70b-versatile"],
+            loadedModel: "llama-3.3-70b-versatile",
+            maxOutputTokens: GROQ_SAFE_MAX_OUTPUT_TOKENS,
+        });
+        vi.stubGlobal(
+            "fetch",
+            vi.fn(
+                async () =>
+                    new Response(JSON.stringify({ error: { message: reflected } }), {
+                        status: 413,
+                        headers: { "content-type": "application/json" },
+                    })
+            )
+        );
+
+        await expect(
+            useCloudAI.getState().generate([{ role: "user", content: "private prompt contents" }])
+        ).rejects.toThrow(/Groq rejected the request as too large \(413\)/i);
+        expect(useCloudAI.getState().error).not.toContain("session-key");
+        expect(useCloudAI.getState().error).not.toContain("private prompt");
+
+        expect(cloudHttpErrorMessage(400, "https://openrouter.ai/api/v1")).toMatch(/Choose a text-chat model/i);
+        expect(cloudHttpErrorMessage(400, "https://openrouter.ai/api/v1")).not.toMatch(/API key/i);
     });
 
     it("never persists an upstream-controlled error that reflects secrets or prompts", async () => {

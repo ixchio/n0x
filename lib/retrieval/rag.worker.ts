@@ -50,7 +50,10 @@ interface ChunkEntry {
 
 const chunkStore = new Map<string, ChunkEntry>();
 
-const MAX_DIRECT_INJECT_SIZE = 8000;
+// Short/medium documents are faster and more reliable with the existing local
+// BM25 chunking path. A three-page resume should not download an embedding
+// model just because it is a few characters over an arbitrary 8 KB boundary.
+export const MAX_DIRECT_INJECT_SIZE = 32_000;
 
 async function loadPdfDependency(): Promise<void> {
     if (!pdfjsLib) {
@@ -74,8 +77,9 @@ async function loadEmbeddingDependency(): Promise<void> {
         const transformers = await import("@huggingface/transformers");
         transformers.env.allowLocalModels = false;
         transformers.env.useBrowserCache = true;
-        if ((navigator as any).gpu && transformers.env.backends.onnx.wasm) {
+        if (transformers.env.backends.onnx.wasm) {
             transformers.env.backends.onnx.wasm.numThreads = 1;
+            transformers.env.backends.onnx.wasm.proxy = false;
         }
         pipelineFn = transformers.pipeline;
     }
@@ -190,14 +194,15 @@ async function extractDocx(file: File): Promise<string> {
 // ── Text extraction with comprehensive error handling ──
 
 function sanitizeText(text: any): string {
-    if (typeof text !== "string") {
+    let normalized = text;
+    if (typeof normalized !== "string") {
         try {
-            return String(text);
+            normalized = String(normalized ?? "");
         } catch {
             return "";
         }
     }
-    return text.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "");
+    return normalized.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "");
 }
 
 async function extractText(file: File): Promise<string> {
@@ -208,7 +213,10 @@ async function extractText(file: File): Promise<string> {
         if (file.type === "application/pdf" || name.endsWith(".pdf")) {
             await loadPdfDependency();
             const arrayBuffer = await file.arrayBuffer();
-            const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+            // PDF.js already runs inside our dedicated RAG worker, so it uses its
+            // in-process handler. Error-only verbosity avoids noisy recoverable
+            // worker/font warnings in the page console.
+            const pdf = await pdfjsLib.getDocument({ data: arrayBuffer, verbosity: 0 }).promise;
             let text = "";
 
             for (let i = 1; i <= Math.min(pdf.numPages, 100); i++) {
@@ -547,9 +555,11 @@ async function handleWorkerMessage(e: MessageEvent) {
             await Promise.all([loadVoyDependency(), loadEmbeddingDependency()]);
 
             if (!embedder) {
-                const isWebGPU = !!(navigator as any).gpu;
                 embedder = await pipelineFn("feature-extraction", RESOURCE_NAME, {
-                    device: isWebGPU ? "webgpu" : "wasm",
+                    // WASM is deterministic across machines and avoids producing a
+                    // browser-level warning merely because navigator.gpu exists
+                    // without a usable adapter.
+                    device: "wasm",
                     dtype: "fp32",
                 });
             }
@@ -661,9 +671,8 @@ async function handleWorkerMessage(e: MessageEvent) {
 
             if (!embedder) {
                 await loadEmbeddingDependency();
-                const isWebGPU = !!(navigator as any).gpu;
                 embedder = await pipelineFn("feature-extraction", RESOURCE_NAME, {
-                    device: isWebGPU ? "webgpu" : "wasm",
+                    device: "wasm",
                     dtype: "fp32",
                 });
             }

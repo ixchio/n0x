@@ -15,6 +15,7 @@ export function useWorkbenchPreferences({ onProviderSelected }: WorkbenchPrefere
     const [provider, setProviderState] = useState<AIProvider>("browser");
     const [ollamaUrl, setOllamaUrl] = useState(DEFAULT_OLLAMA_URL);
     const [sidebarOpen, setSidebarOpen] = useState(false);
+    const [preferencesHydrated, setPreferencesHydrated] = useState(false);
 
     const setProvider = useCallback(
         (nextProvider: AIProvider) => {
@@ -38,6 +39,8 @@ export function useWorkbenchPreferences({ onProviderSelected }: WorkbenchPrefere
             setOllamaUrl(localStorage.getItem("n0x-ollama-url") || DEFAULT_OLLAMA_URL);
         } catch {
             // Keep deterministic defaults when storage is unavailable.
+        } finally {
+            setPreferencesHydrated(true);
         }
     }, []);
 
@@ -59,5 +62,6 @@ export function useWorkbenchPreferences({ onProviderSelected }: WorkbenchPrefere
         setOllamaUrl,
         sidebarOpen,
         setSidebarOpen,
+        preferencesHydrated,
     };
 }

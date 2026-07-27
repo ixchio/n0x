@@ -1,22 +1,9 @@
 import type { Metadata, Viewport } from "next";
-import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { PWARegister } from "@/components/system/pwa-register";
 import { ErrorBoundary } from "@/components/system/error-boundary";
 import { VercelAnalytics } from "@/components/system/vercel-analytics";
 import { AnalyticsConsentBanner } from "@/components/system/analytics-consent-banner";
-
-const inter = Inter({
-    subsets: ["latin"],
-    variable: "--font-inter",
-    display: "swap",
-});
-
-const jetbrainsMono = JetBrains_Mono({
-    subsets: ["latin"],
-    variable: "--font-mono",
-    display: "swap",
-});
 
 export const metadata: Metadata = {
     metadataBase: new URL("https://n0xth.vercel.app"),
@@ -100,7 +87,7 @@ export default function RootLayout({
     };
 
     return (
-        <html lang="en" className={`dark ${inter.variable} ${jetbrainsMono.variable}`}>
+        <html lang="en" className="dark">
             <head>
                 <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
             </head>

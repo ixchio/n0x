@@ -138,6 +138,22 @@ describe("RAG worker loading and indexing policy", () => {
         expect(mocks.getCachedVectors).not.toHaveBeenCalled();
     });
 
+    it("keeps a resume-sized text document on the direct BM25 path", async () => {
+        const file = textFile("resume.txt", "Experienced local-first AI engineer. ".repeat(320));
+        expect(file.size).toBeGreaterThan(8_000);
+
+        await messageHandler!({ data: { id: 14, action: "ADD_FILE", payload: { file } } });
+
+        expect(posted.at(-1)).toMatchObject({
+            id: 14,
+            done: true,
+            result: { name: "resume.txt", chunks: 1, rawText: expect.stringContaining("local-first") },
+        });
+        expect(mocks.pipeline).not.toHaveBeenCalled();
+        expect(mocks.voyConstructed).not.toHaveBeenCalled();
+        expect(mocks.getCachedVectors).not.toHaveBeenCalled();
+    });
+
     it("restores a replacement worker from content-addressed cached chunks before search", async () => {
         mocks.getCachedVectors.mockResolvedValue({
             version: 3,
@@ -185,11 +201,16 @@ describe("RAG worker loading and indexing policy", () => {
     it("fails indexing instead of caching or returning a zero-chunk ghost document", async () => {
         vi.spyOn(console, "error").mockImplementation(() => {});
         mocks.embed.mockRejectedValue(new Error("embedding backend unavailable"));
-        const file = textFile("large.txt", "A complete sentence with searchable policy detail. ".repeat(220));
+        const file = textFile("large.txt", "A complete sentence with searchable policy detail. ".repeat(800));
 
         await messageHandler!({ data: { id: 2, action: "ADD_FILE", payload: { file } } });
 
         expect(mocks.pipeline).toHaveBeenCalledOnce();
+        expect(mocks.pipeline).toHaveBeenCalledWith(
+            "feature-extraction",
+            "Xenova/all-MiniLM-L6-v2",
+            expect.objectContaining({ device: "wasm" })
+        );
         expect(mocks.saveVectors).not.toHaveBeenCalled();
         expect(posted.at(-1)).toMatchObject({ id: 2, done: true, error: expect.stringMatching(/not indexed/i) });
         expect(posted.some(message => (message.result as { chunks?: number } | undefined)?.chunks === 0)).toBe(false);
@@ -204,7 +225,7 @@ describe("RAG worker loading and indexing policy", () => {
             data: {
                 id: 12,
                 action: "ADD_FILE",
-                payload: { file: textFile("large.txt", "Durable policy text. ".repeat(600)) },
+                payload: { file: textFile("large.txt", "Durable policy text. ".repeat(1_800)) },
             },
         });
 
@@ -229,7 +250,7 @@ describe("RAG worker loading and indexing policy", () => {
         mocks.embed.mockResolvedValue({ data: [1, 0, 0] });
         const content =
             "BEGIN-MARKER opening scope. " +
-            "A stable middle section explains ordinary policy details. ".repeat(260) +
+            "A stable middle section explains ordinary policy details. ".repeat(700) +
             "END-MARKER final conclusion.";
 
         await messageHandler!({
@@ -257,7 +278,16 @@ describe("RAG worker loading and indexing policy", () => {
 
     it("pins PDF.js to the bundled worker rather than a runtime CDN", () => {
         const source = readFileSync(resolve(process.cwd(), "lib/retrieval/rag.worker.ts"), "utf8");
-        expect(source).toMatch(/new URL\(\s*"pdfjs-dist\/build\/pdf\.worker\.min\.mjs",\s*import\.meta\.url\s*\)/);
+        expect(source).toContain('"pdfjs-dist/build/pdf.worker.min.mjs"');
+        expect(source).toContain("import.meta.url");
+        expect(source).toContain("verbosity: 0");
         expect(source).not.toMatch(/cdn\.jsdelivr\.net|\/\/cdn\./i);
+    });
+
+    it("selects ONNX Runtime's bundler-safe external WASM file", () => {
+        const configSource = readFileSync(resolve(process.cwd(), "next.config.mjs"), "utf8");
+
+        expect(configSource).toContain('"onnxruntime-web/webgpu$"');
+        expect(configSource).toContain('"node_modules/onnxruntime-web/dist/ort.webgpu.min.mjs"');
     });
 });

@@ -555,7 +555,14 @@ export function useChat(providerCtx?: {
                     }
                     return;
                 } catch (error: any) {
-                    if (isAbortError(error) || !isCurrentExecution(plan)) return;
+                    if (isAbortError(error)) {
+                        // A provider configuration edit can abort below the
+                        // orchestrator. Release the captured execution just as
+                        // handleStop does so the input never remains stuck.
+                        if (isCurrentExecution(plan)) finishExecution(plan);
+                        return;
+                    }
+                    if (!isCurrentExecution(plan)) return;
                     retryCount += 1;
                     logger.error(`Generation error (attempt ${retryCount}/${maxRetries + 1}):`, error);
                     const errorMessage = String(error?.message || "");
@@ -567,15 +574,13 @@ export function useChat(providerCtx?: {
                         continue;
                     }
 
-                    const friendlyError = /API|401|403/i.test(errorMessage)
-                        ? `API error: ${errorMessage}. Check your API key and endpoint.`
-                        : /API key/i.test(errorMessage)
-                          ? "API key required. Please configure your Cloud AI settings."
-                          : isNetworkError
-                            ? `Network error: ${errorMessage}. Check your connection and try again.`
-                            : /memory|OOM/i.test(errorMessage)
-                              ? "Out of memory. Try a smaller model or use Cloud API."
-                              : errorMessage || "Generation failed. Please try again.";
+                    const friendlyError = /API key (?:missing|required)/i.test(errorMessage)
+                        ? "API key required. Please configure your Cloud AI settings."
+                        : isNetworkError
+                          ? `Network error: ${errorMessage}. Check your connection and try again.`
+                          : /memory|OOM/i.test(errorMessage)
+                            ? "Out of memory. Try a smaller model or use Cloud API."
+                            : errorMessage || "Generation failed. Please try again.";
 
                     chatStore.addMessageToConversation(plan.conversationId, {
                         role: "assistant",

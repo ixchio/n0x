@@ -49,6 +49,7 @@ import {
 import { ModelRuntimeStatus } from "@/components/chat/workbench/model-runtime-status";
 import { KeyboardShortcutsDialog } from "@/components/chat/workbench/keyboard-shortcuts-dialog";
 import { StorageDurabilityAlert } from "@/components/chat/workbench/storage-durability-alert";
+import { CloudConnectionForm } from "@/components/chat/workbench/cloud-connection-form";
 import { useWorkbenchPreferences } from "@/components/chat/workbench/use-workbench-preferences";
 import { waitForWebLLMGenerationToSettle } from "@/components/chat/workbench/model-switch";
 import { isNetworkedEndpoint } from "@/lib/chat/executionPlan";
@@ -107,10 +108,8 @@ function ChatPageInner() {
         setOllamaUrl,
         sidebarOpen,
         setSidebarOpen,
+        preferencesHydrated,
     } = useWorkbenchPreferences({ onProviderSelected });
-    const [cloudApiKey, setCloudApiKey] = useState("");
-    const [cloudBaseUrl, setCloudBaseUrl] = useState("https://api.groq.com/openai/v1");
-
     const ollama = useOllama();
     const cloudAI = useCloudAI();
     const chromeAI = useChromeAI();
@@ -169,11 +168,6 @@ function ChatPageInner() {
 
     const [headerModelOpen, setHeaderModelOpen] = useState(false);
 
-    useEffect(() => {
-        setCloudApiKey(cloudAI.apiKey || "");
-        setCloudBaseUrl(cloudAI.baseUrl || "https://api.groq.com/openai/v1");
-    }, [cloudAI.apiKey, cloudAI.baseUrl]);
-
     const [showMemoryPanel, setShowMemoryPanel] = useState(false);
     const [showMetrics, setShowMetrics] = useState(false);
     const [providerMenuOpen, setProviderMenuOpen] = useState(false);
@@ -189,15 +183,23 @@ function ChatPageInner() {
 
     const DEFAULT_MODEL = "Qwen2.5-1.5B-Instruct-q4f16_1-MLC";
 
-    // Probe local capabilities without downloading either model on first visit.
+    // Record the visit and initialize lightweight browser utilities once.
     useEffect(() => {
         trackFunnelEvent("visit", { page: "chat" });
-        webllm.init();
-        chromeAI.init();
+        void chromeAI.init();
         tts.init();
         // Provider stores are Zustand objects; this boot effect is intentionally once per mount.
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
+
+    // Probe only the selected local runtime after persisted preferences have
+    // hydrated. Cloud/Ollama users should not receive a WebGPU adapter warning.
+    useEffect(() => {
+        if (!preferencesHydrated) return;
+        if (provider === "browser") void webllm.init();
+        // Provider/runtime Zustand objects are stable; switches are the trigger.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [preferencesHydrated, provider]);
 
     // Poll Ollama when selected — auto-detect when user starts the server
     useEffect(() => {
@@ -476,7 +478,7 @@ function ChatPageInner() {
                     detail: cloudBlockingError,
                     tone: "red",
                     actions: [
-                        { label: "Update key", onClick: openCloudSetup, primary: true },
+                        { label: "Fix connection", onClick: openCloudSetup, primary: true },
                         { label: "Switch to WebGPU", onClick: switchToWebGPU },
                         { label: "Use Ollama", onClick: openOllamaSetup },
                     ],
@@ -854,7 +856,7 @@ function ChatPageInner() {
                                     role="region"
                                     data-chat-popover="true"
                                     aria-label="AI providers"
-                                    className="absolute right-0 top-full z-50 mt-2 w-[min(16rem,calc(100vw-1rem))] space-y-1 rounded-xl border border-border bg-card p-2 shadow-xl lg:left-0 lg:right-auto"
+                                    className="absolute right-0 top-full z-50 mt-2 max-h-[calc(100dvh-4rem)] w-[min(16rem,calc(100vw-1rem))] space-y-1 overflow-y-auto rounded-xl border border-border bg-card p-2 shadow-xl no-scrollbar lg:left-0 lg:right-auto"
                                 >
                                     <button
                                         onClick={() => {
@@ -988,87 +990,17 @@ function ChatPageInner() {
 
                                     {/* Cloud API config */}
                                     {provider === "cloud" && (
-                                        <div className="pt-2 border-t border-zinc-800 mt-2 space-y-2">
-                                            <div>
-                                                <div className="flex items-center justify-between">
-                                                    <label
-                                                        htmlFor="cloud-api-key"
-                                                        className="px-1 font-mono text-xs text-zinc-400"
-                                                    >
-                                                        API Key
-                                                    </label>
-                                                    <a
-                                                        href="https://console.groq.com/keys"
-                                                        target="_blank"
-                                                        rel="noopener noreferrer"
-                                                        className="inline-flex min-h-11 items-center px-1 text-xs font-mono text-blue-400 underline underline-offset-2 hover:text-blue-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
-                                                    >
-                                                        Get free key (Groq) →
-                                                    </a>
-                                                </div>
-                                                <input
-                                                    id="cloud-api-key"
-                                                    type="password"
-                                                    value={cloudApiKey}
-                                                    onChange={e => {
-                                                        setCloudApiKey(e.target.value);
-                                                        cloudAI.setCredentials(cloudBaseUrl, e.target.value);
-                                                    }}
-                                                    className="mt-1 min-h-11 w-full rounded-md border border-zinc-800 bg-zinc-900 px-2 py-2 text-xs font-mono text-zinc-300 outline-none focus:border-blue-500/30 focus-visible:ring-2 focus-visible:ring-white"
-                                                    placeholder="sk-..."
-                                                />
-                                            </div>
-                                            <div>
-                                                <label
-                                                    htmlFor="cloud-base-url"
-                                                    className="px-1 font-mono text-xs text-zinc-400"
-                                                >
-                                                    Base URL
-                                                </label>
-                                                <input
-                                                    id="cloud-base-url"
-                                                    type="text"
-                                                    value={cloudBaseUrl}
-                                                    onChange={e => {
-                                                        setCloudBaseUrl(e.target.value);
-                                                        cloudAI.setCredentials(e.target.value, cloudApiKey);
-                                                    }}
-                                                    className="mt-1 min-h-11 w-full rounded-md border border-zinc-800 bg-zinc-900 px-2 py-2 text-xs font-mono text-zinc-300 outline-none focus:border-blue-500/30 focus-visible:ring-2 focus-visible:ring-white"
-                                                    placeholder="https://api.groq.com/openai/v1"
-                                                />
-                                            </div>
-                                            <div>
-                                                <label
-                                                    htmlFor="cloud-model"
-                                                    className="flex items-center gap-1 px-1 font-mono text-xs text-zinc-400"
-                                                >
-                                                    Model
-                                                    {cloudAI.fetchingModels && (
-                                                        <Loader2 className="w-2.5 h-2.5 animate-spin text-blue-400" />
-                                                    )}
-                                                </label>
-                                                <select
-                                                    id="cloud-model"
-                                                    value={cloudAI.loadedModel || ""}
-                                                    onChange={e => handleCloudModelChange(e.target.value)}
-                                                    className="mt-1 min-h-11 w-full cursor-pointer appearance-none rounded-md border border-zinc-800 bg-zinc-900 px-2 py-2 text-xs font-mono text-zinc-300 outline-none focus:border-blue-500/30 focus-visible:ring-2 focus-visible:ring-white"
-                                                >
-                                                    {cloudAI.models.map(m => (
-                                                        <option key={m} value={m}>
-                                                            {m}
-                                                        </option>
-                                                    ))}
-                                                </select>
-                                            </div>
-                                            {cloudAI.apiKey && (
-                                                <button
-                                                    onClick={() => cloudAI.fetchModels()}
-                                                    disabled={cloudAI.fetchingModels}
-                                                    className="mt-1 min-h-11 w-full rounded-md border border-blue-500/20 bg-blue-500/10 px-2 py-2 text-xs font-mono text-blue-300 transition-all hover:bg-blue-500/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white disabled:opacity-50"
-                                                >
-                                                    {cloudAI.fetchingModels ? "Fetching…" : "Refresh Models"}
-                                                </button>
-                                            )}
+                                        <div className="mt-2 border-t border-zinc-800 pt-2">
+                                            <CloudConnectionForm
+                                                apiKey={cloudAI.apiKey}
+                                                baseUrl={cloudAI.baseUrl}
+                                                models={cloudAI.models}
+                                                loadedModel={cloudAI.loadedModel}
+                                                fetchingModels={cloudAI.fetchingModels}
+                                                onSave={(baseUrl, apiKey) => cloudAI.setCredentials(baseUrl, apiKey)}
+                                                onRefresh={() => void cloudAI.fetchModels()}
+                                                onModelChange={handleCloudModelChange}
+                                            />
                                         </div>
                                     )}
                                 </div>

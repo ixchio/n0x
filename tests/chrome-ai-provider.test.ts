@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { useChromeAI } from "@/lib/providers/useChromeAI";
+import { CHROME_AI_LANGUAGE_OPTIONS, useChromeAI } from "@/lib/providers/useChromeAI";
 
 const promptStreaming = vi.fn();
 const destroy = vi.fn();
@@ -37,6 +37,7 @@ describe("Chrome AI provider generation", () => {
         const response = await useChromeAI.getState().generate([{ role: "user", content: "Say hello" }], onToken);
 
         expect(response).toBe("Hello world");
+        expect(languageModel.create).toHaveBeenCalledWith(CHROME_AI_LANGUAGE_OPTIONS);
         expect(onToken.mock.calls.map(([token]) => token)).toEqual(["Hel", "lo", " world"]);
         expect(promptStreaming).toHaveBeenCalledWith(
             "User: Say hello\nAssistant:",
@@ -174,6 +175,7 @@ describe("Chrome AI provider generation", () => {
 
         await useChromeAI.getState().init();
 
+        expect(languageModel.availability).toHaveBeenCalledWith(CHROME_AI_LANGUAGE_OPTIONS);
         expect(languageModel.create).not.toHaveBeenCalled();
         expect(destroy).not.toHaveBeenCalled();
         expect(useChromeAI.getState()).toMatchObject({ status: "downloadable", isSupported: true, error: null });
@@ -185,7 +187,8 @@ describe("Chrome AI provider generation", () => {
 
         await useChromeAI.getState().load();
 
-        expect(languageModel.create).toHaveBeenCalledOnce();
+        expect(languageModel.availability).toHaveBeenCalledWith(CHROME_AI_LANGUAGE_OPTIONS);
+        expect(languageModel.create).toHaveBeenCalledExactlyOnceWith(CHROME_AI_LANGUAGE_OPTIONS);
         expect(destroy).toHaveBeenCalledOnce();
         expect(useChromeAI.getState()).toMatchObject({ status: "ready", isSupported: true, error: null });
     });

@@ -57,9 +57,17 @@ const nextConfig = {
         // On the client: alias to false (not needed — uses onnxruntime-web in browser).
         // On the server: mark as external so webpack doesn't try to parse .node binaries.
         if (!isServer) {
+            // Select ONNX Runtime's external-WASM file explicitly. Its package
+            // export condition is not honored consistently by Next's layered
+            // webpack configs; an exact alias also prevents webpack from rewriting
+            // the bundled runtime's worker URL into a module namespace object.
             config.resolve.alias = {
                 ...config.resolve.alias,
                 "onnxruntime-node": false,
+                "onnxruntime-web/webgpu$": path.resolve(
+                    __dirname,
+                    "node_modules/onnxruntime-web/dist/ort.webgpu.min.mjs"
+                ),
             };
             config.resolve.fallback = {
                 ...config.resolve.fallback,
