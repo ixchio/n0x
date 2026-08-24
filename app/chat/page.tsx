@@ -479,87 +479,97 @@ function ChatPageInner() {
                 ? "Gemini Nano"
                 : WEBLLM_MODELS.find(m => m.id === webllm.loadedModel)?.label || webllm.loadedModel || "No model";
 
-    const providerSetup: ProviderSetup | null =
-        provider === "cloud" && !cloudAI.apiKey
-            ? {
-                  title: "Cloud API not configured",
-                  detail: "Add a session key or stay local.",
-                  tone: "blue",
-                  actions: [
-                      { label: "Add key", onClick: openCloudSetup, primary: true },
-                      { label: "Switch to WebGPU", onClick: switchToWebGPU },
-                      { label: "Use Ollama", onClick: openOllamaSetup },
-                  ],
-              }
-            : provider === "cloud" && cloudBlockingError
-              ? {
-                    title: "Cloud API needs attention",
-                    detail: cloudBlockingError,
-                    tone: "red",
-                    actions: [
-                        { label: "Fix connection", onClick: openCloudSetup, primary: true },
-                        { label: "Switch to WebGPU", onClick: switchToWebGPU },
-                        { label: "Use Ollama", onClick: openOllamaSetup },
-                    ],
-                }
-              : provider === "browser" && !webllm.isSupported
-                ? {
-                      title: "WebGPU unavailable",
-                      detail: webllm.error || "This browser cannot run local WebGPU models.",
-                      tone: "amber",
-                      actions: [
-                          { label: "Configure cloud", onClick: openCloudSetup, primary: true },
-                          { label: "Use Ollama", onClick: openOllamaSetup },
-                          { label: "Privacy inspector", onClick: openPrivacyInspector },
-                      ],
-                  }
-                : provider === "ollama" && !ollama.isSupported
-                  ? {
-                        title: "Ollama unreachable",
-                        detail: ollama.error || "Check your configured Ollama endpoint or pick another provider.",
-                        tone: "amber",
-                        actions: [
-                            { label: "Configure Ollama", onClick: openOllamaSetup, primary: true },
-                            { label: "Switch to WebGPU", onClick: switchToWebGPU },
-                            { label: "Configure cloud", onClick: openCloudSetup },
-                        ],
-                    }
-                  : provider === "chrome-ai" && chromeAI.status !== "ready"
-                    ? {
-                          title:
-                              chromeAI.status === "downloadable"
-                                  ? "Chrome AI needs a local model"
-                                  : chromeAI.status === "downloading"
-                                    ? "Chrome AI downloading"
-                                    : "Chrome AI unavailable",
-                          detail:
-                              chromeAI.error ||
-                              (chromeAI.status === "downloadable"
-                                  ? "Nothing downloads until you choose Install Gemini Nano."
-                                  : chromeAI.status === "downloading"
-                                    ? "Gemini Nano is installing in Chrome after your request."
-                                    : "Use another provider for this session."),
-                          tone: chromeAI.status === "downloading" ? "zinc" : "amber",
-                          actions: [
-                              ...(chromeAI.status === "downloadable"
-                                  ? [
-                                        {
-                                            label: "Install Gemini Nano",
-                                            onClick: () => void chromeAI.load(),
-                                            primary: true,
-                                        },
-                                    ]
-                                  : []),
+    function getProviderSetup(): ProviderSetup | null {
+        if (provider === "cloud" && !cloudAI.apiKey) {
+            return {
+                title: "Cloud API not configured",
+                detail: "Add a session key or stay local.",
+                tone: "blue",
+                actions: [
+                    { label: "Add key", onClick: openCloudSetup, primary: true },
+                    { label: "Switch to WebGPU", onClick: switchToWebGPU },
+                    { label: "Use Ollama", onClick: openOllamaSetup },
+                ],
+            };
+        }
+        if (provider === "cloud" && cloudBlockingError) {
+            return {
+                title: "Cloud API needs attention",
+                detail: cloudBlockingError,
+                tone: "red",
+                actions: [
+                    { label: "Fix connection", onClick: openCloudSetup, primary: true },
+                    { label: "Switch to WebGPU", onClick: switchToWebGPU },
+                    { label: "Use Ollama", onClick: openOllamaSetup },
+                ],
+            };
+        }
+        if (provider === "browser" && !webllm.isSupported) {
+            return {
+                title: "WebGPU unavailable",
+                detail: webllm.error || "This browser cannot run local WebGPU models.",
+                tone: "amber",
+                actions: [
+                    { label: "Configure cloud", onClick: openCloudSetup, primary: true },
+                    { label: "Use Ollama", onClick: openOllamaSetup },
+                    { label: "Privacy inspector", onClick: openPrivacyInspector },
+                ],
+            };
+        }
+        if (provider === "ollama" && !ollama.isSupported) {
+            return {
+                title: "Ollama unreachable",
+                detail: ollama.error || "Check your configured Ollama endpoint or pick another provider.",
+                tone: "amber",
+                actions: [
+                    { label: "Configure Ollama", onClick: openOllamaSetup, primary: true },
+                    { label: "Switch to WebGPU", onClick: switchToWebGPU },
+                    { label: "Configure cloud", onClick: openCloudSetup },
+                ],
+            };
+        }
+        if (provider === "chrome-ai" && chromeAI.status !== "ready") {
+            const title =
+                chromeAI.status === "downloadable"
+                    ? "Chrome AI needs a local model"
+                    : chromeAI.status === "downloading"
+                      ? "Chrome AI downloading"
+                      : "Chrome AI unavailable";
+            const detail =
+                chromeAI.error ||
+                (chromeAI.status === "downloadable"
+                    ? "Nothing downloads until you choose Install Gemini Nano."
+                    : chromeAI.status === "downloading"
+                      ? "Gemini Nano is installing in Chrome after your request."
+                      : "Use another provider for this session.");
+            return {
+                title,
+                detail,
+                tone: chromeAI.status === "downloading" ? "zinc" : "amber",
+                actions: [
+                    ...(chromeAI.status === "downloadable"
+                        ? [
                               {
-                                  label: "Switch to WebGPU",
-                                  onClick: switchToWebGPU,
-                                  primary: chromeAI.status !== "downloadable",
+                                  label: "Install Gemini Nano",
+                                  onClick: () => void chromeAI.load(),
+                                  primary: true,
                               },
-                              { label: "Use Ollama", onClick: openOllamaSetup },
-                              { label: "Configure cloud", onClick: openCloudSetup },
-                          ],
-                      }
-                    : null;
+                          ]
+                        : []),
+                    {
+                        label: "Switch to WebGPU",
+                        onClick: switchToWebGPU,
+                        primary: chromeAI.status !== "downloadable",
+                    },
+                    { label: "Use Ollama", onClick: openOllamaSetup },
+                    { label: "Configure cloud", onClick: openCloudSetup },
+                ],
+            };
+        }
+        return null;
+    }
+
+    const providerSetup = getProviderSetup();
 
     const emptyWorkbenchVisible =
         chatStore.messages.length === 0 &&

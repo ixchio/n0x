@@ -290,42 +290,58 @@ export function WorkbenchEmptyState({
 
 function DependencyFallbackPanel({ provider, webllm, chromeAI, ollama, cloudAI, searchError }: DependencyProps) {
     const ollamaRemote = isNetworkedEndpoint(ollama.baseUrl);
+
+    const webllmStatus = !webllm.isSupported ? "issue" : webllm.gpuTier === "unknown" ? "checking" : "ready";
+    const webllmDetail = !webllm.isSupported
+        ? webllm.error || "Unavailable in this browser"
+        : `Detected ${webllm.gpuTier} tier`;
+
+    const chromeStatus = chromeAI.status === "ready" ? "ready" : provider === "chrome-ai" ? "issue" : "optional";
+    const chromeDetail =
+        chromeAI.status === "ready"
+            ? "Gemini Nano ready"
+            : chromeAI.error || "Requires Chrome Prompt API and local model availability";
+
+    const ollamaStatus = ollama.isSupported ? "ready" : provider === "ollama" ? "issue" : "optional";
+    const ollamaDetail = ollama.isSupported
+        ? `${ollama.models.length} model(s) · ${ollamaRemote ? "remote HTTPS endpoint" : "localhost"}`
+        : ollama.error || "Configured endpoint not reachable";
+
+    const cloudStatus = cloudAI.apiKey ? (cloudAI.error ? "issue" : "ready") : "optional";
+    const cloudDetail = cloudAI.apiKey ? cloudAI.error || "Configured for this browser session" : "No key stored";
+
+    const searchStatus = searchError ? "issue" : "ready";
+    const searchDetail = searchError || "DDG, SearXNG, Wikipedia; Brave/Tavily if server keys exist";
+
     const rows = [
         {
             name: "WebGPU",
-            status: !webllm.isSupported ? "issue" : webllm.gpuTier === "unknown" ? "checking" : "ready",
-            detail: !webllm.isSupported
-                ? webllm.error || "Unavailable in this browser"
-                : `Detected ${webllm.gpuTier} tier`,
+            status: webllmStatus,
+            detail: webllmDetail,
             fallback: "Use Chrome AI, Ollama, or Cloud API.",
         },
         {
             name: "Chrome AI",
-            status: chromeAI.status === "ready" ? "ready" : provider === "chrome-ai" ? "issue" : "optional",
-            detail:
-                chromeAI.status === "ready"
-                    ? "Gemini Nano ready"
-                    : chromeAI.error || "Requires Chrome Prompt API and local model availability",
+            status: chromeStatus,
+            detail: chromeDetail,
             fallback: "Use WebGPU, Ollama, or Cloud API.",
         },
         {
             name: "Ollama",
-            status: ollama.isSupported ? "ready" : provider === "ollama" ? "issue" : "optional",
-            detail: ollama.isSupported
-                ? `${ollama.models.length} model(s) · ${ollamaRemote ? "remote HTTPS endpoint" : "localhost"}`
-                : ollama.error || "Configured endpoint not reachable",
+            status: ollamaStatus,
+            detail: ollamaDetail,
             fallback: "Start or check the configured Ollama endpoint, or use WebGPU/Cloud.",
         },
         {
             name: "Cloud key",
-            status: cloudAI.apiKey ? (cloudAI.error ? "issue" : "ready") : "optional",
-            detail: cloudAI.apiKey ? cloudAI.error || "Configured for this browser session" : "No key stored",
+            status: cloudStatus,
+            detail: cloudDetail,
             fallback: "Stay local, or paste a valid OpenAI-compatible key.",
         },
         {
             name: "Search",
-            status: searchError ? "issue" : "ready",
-            detail: searchError || "DDG, SearXNG, Wikipedia; Brave/Tavily if server keys exist",
+            status: searchStatus,
+            detail: searchDetail,
             fallback: "Answer from local model and uploaded docs.",
         },
     ] as const;
@@ -424,21 +440,27 @@ export function PrivacyInspector({
     if (!open) return null;
 
     const remoteOllama = provider === "ollama" && isNetworkedEndpoint(ollama.baseUrl);
-    const currentPath =
-        provider === "cloud"
-            ? "cloud provider receives the selected prompt and enabled context"
-            : remoteOllama
-              ? "remote Ollama host receives the selected prompt and enabled context"
-              : deepSearchEnabled
-                ? "local provider plus a network search query and returned search context"
-                : autoRouteEnabled && Boolean(cloudAI.apiKey)
-                  ? "local by default; automatic routing may select the configured cloud provider"
-                  : provider === "ollama"
-                    ? "loopback Ollama path on this device"
-                    : "on-device provider path";
+    let currentPath = "on-device provider path";
+    if (provider === "cloud") {
+        currentPath = "cloud provider receives the selected prompt and enabled context";
+    } else if (remoteOllama) {
+        currentPath = "remote Ollama host receives the selected prompt and enabled context";
+    } else if (deepSearchEnabled) {
+        currentPath = "local provider plus a network search query and returned search context";
+    } else if (autoRouteEnabled && Boolean(cloudAI.apiKey)) {
+        currentPath = "local by default; automatic routing may select the configured cloud provider";
+    } else if (provider === "ollama") {
+        currentPath = "loopback Ollama path on this device";
+    }
+
     const currentPathWithTools = deepSearchEnabled
         ? `${currentPath}; search also sends the query to N0X search providers`
         : currentPath;
+
+    const docsControl = ragEnabled ? `on (${ragCount} attached)` : `off (${ragCount} attached)`;
+    const searchControl = deepSearchEnabled ? "on (network)" : "off";
+    const memoryControl = memoryEnabled ? "on (local)" : "off";
+    const autoRouteControl = autoRouteEnabled ? "on" : "off";
 
     const rows = [
         {
@@ -459,11 +481,7 @@ export function PrivacyInspector({
         {
             icon: Wifi,
             label: "Request controls",
-            value: `docs ${
-                ragEnabled ? `on (${ragCount} attached)` : `off (${ragCount} attached)`
-            } · search ${deepSearchEnabled ? "on (network)" : "off"} · memory ${
-                memoryEnabled ? "on (local)" : "off"
-            } · auto-route ${autoRouteEnabled ? "on" : "off"}`,
+            value: `docs ${docsControl} · search ${searchControl} · memory ${memoryControl} · auto-route ${autoRouteControl}`,
         },
     ];
 
