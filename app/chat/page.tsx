@@ -1208,10 +1208,7 @@ function ChatPageInner() {
                         />
                     ) : (
                         <div className="max-w-3xl mx-auto space-y-5 transition-all">
-                            <PersistedMessageList
-                                messages={chatStore.messages}
-                                onBranch={handleBranchMessage}
-                            />
+                            <PersistedMessageList messages={chatStore.messages} onBranch={handleBranchMessage} />
 
                             {deepSearch.isActive && (
                                 <AgentThinking

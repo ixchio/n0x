@@ -170,8 +170,7 @@ export function WorkbenchEmptyState({
                 : "Answers run on your GPU. Documents never leave this device.";
 
     const hasDocuments = documentCount > 0;
-    const chromeInstant =
-        !providerReady && chromeStatus === "downloadable" && typeof onUseChromeAI === "function";
+    const chromeInstant = !providerReady && chromeStatus === "downloadable" && typeof onUseChromeAI === "function";
 
     return (
         <section
@@ -210,8 +209,8 @@ export function WorkbenchEmptyState({
                     {hasDocuments ? "Document indexed" : "One click to start"}
                 </div>
                 <p className="mt-2 text-xs leading-5 text-zinc-400">
-                    PDF, DOCX, Markdown, text, CSV, HTML, and JSON are supported. Extraction and retrieval stay on
-                    this device.
+                    PDF, DOCX, Markdown, text, CSV, HTML, and JSON are supported. Extraction and retrieval stay on this
+                    device.
                 </p>
                 <div className="mt-4 flex flex-col gap-2 min-[420px]:flex-row">
                     <button
@@ -233,15 +232,14 @@ export function WorkbenchEmptyState({
                     <div className="mt-3 space-y-2 border-t border-zinc-800 pt-3 text-xs leading-5 text-zinc-400">
                         {localModelDisabled ? (
                             <p>
-                                WebGPU is unavailable here. Use Chrome AI, Ollama, or Cloud API from the provider
-                                menu above.
+                                WebGPU is unavailable here. Use Chrome AI, Ollama, or Cloud API from the provider menu
+                                above.
                             </p>
                         ) : (
                             <p>
                                 First answer needs a local model:{" "}
-                                <span className="text-zinc-200">{recommendedLabel}</span> downloads{" "}
-                                {recommendedSize} once, then stays cached. Picking a file starts the download
-                                immediately.
+                                <span className="text-zinc-200">{recommendedLabel}</span> downloads {recommendedSize}{" "}
+                                once, then stays cached. Picking a file starts the download immediately.
                                 <span className="sr-only"> {recommendedReason}</span>
                             </p>
                         )}
@@ -272,8 +270,8 @@ export function WorkbenchEmptyState({
             <div className="flex flex-col gap-3 rounded-xl border border-zinc-900 bg-black/20 p-3 text-xs text-zinc-400 sm:flex-row sm:items-center sm:justify-between">
                 <p className="leading-5">
                     <strong className="text-zinc-300">Ask and verify.</strong> Supported claims cite{" "}
-                    <span className="font-mono text-emerald-300">[filename#chunk-N]</span>. Advanced tools remain in
-                    the composer.
+                    <span className="font-mono text-emerald-300">[filename#chunk-N]</span>. Advanced tools remain in the
+                    composer.
                 </p>
                 <div className="flex shrink-0 flex-wrap gap-2">
                     <button
