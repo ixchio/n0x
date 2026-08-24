@@ -459,7 +459,11 @@ export function PrivacyInspector({
         {
             icon: Wifi,
             label: "Request controls",
-            value: `docs ${ragEnabled ? `on (${ragCount} attached)` : `off (${ragCount} attached)`} · search ${deepSearchEnabled ? "on (network)" : "off"} · memory ${memoryEnabled ? "on (local)" : "off"} · auto-route ${autoRouteEnabled ? "on" : "off"}`,
+            value: `docs ${
+                ragEnabled ? `on (${ragCount} attached)` : `off (${ragCount} attached)`
+            } · search ${deepSearchEnabled ? "on (network)" : "off"} · memory ${
+                memoryEnabled ? "on (local)" : "off"
+            } · auto-route ${autoRouteEnabled ? "on" : "off"}`,
         },
     ];
 

@@ -1249,7 +1249,12 @@ function ChatPageInner() {
                         ragEnabled={rag.ragEnabled}
                         toggleRag={rag.toggle}
                         onFileDrop={rag.addFile}
-                        attachedFiles={rag.documents.map(d => ({ id: d.id, name: d.name, size: d.size, type: d.type }))}
+                        attachedFiles={rag.documents.map(d => ({
+                            id: d.id,
+                            name: d.name,
+                            size: d.size,
+                            type: d.type,
+                        }))}
                         fileStatus={rag.status}
                         fileBusy={rag.isIndexing}
                         onRemoveFile={id => {
