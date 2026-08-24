@@ -178,8 +178,6 @@ describe("responsive workbench UI", () => {
                 onLoadModel={vi.fn()}
                 browserModelsAvailable
                 onNewChat={vi.fn()}
-                ttsEnabled={false}
-                onToggleTTS={vi.fn()}
                 ragEnabled={false}
                 onToggleRAG={vi.fn()}
             />
@@ -210,8 +208,6 @@ describe("responsive workbench UI", () => {
                 onLoadModel={vi.fn()}
                 browserModelsAvailable={false}
                 onNewChat={vi.fn()}
-                ttsEnabled={false}
-                onToggleTTS={vi.fn()}
                 ragEnabled={false}
                 onToggleRAG={vi.fn()}
             />
@@ -238,8 +234,6 @@ describe("responsive workbench UI", () => {
                     onLoadModel={vi.fn()}
                     browserModelsAvailable
                     onNewChat={vi.fn()}
-                    ttsEnabled={false}
-                    onToggleTTS={vi.fn()}
                     ragEnabled={false}
                     onToggleRAG={vi.fn()}
                 />
@@ -268,8 +262,6 @@ describe("responsive workbench UI", () => {
                 onLoadModel={vi.fn()}
                 browserModelsAvailable
                 onNewChat={vi.fn()}
-                ttsEnabled={false}
-                onToggleTTS={vi.fn()}
                 ragEnabled={false}
                 onToggleRAG={vi.fn()}
             />

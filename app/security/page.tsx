@@ -3,7 +3,7 @@ import Link from "next/link";
 export const metadata = {
     title: "Security | N0X",
     description:
-        "Security model for N0X private document Q&A, browser storage, generated content, Python, and network providers.",
+        "Security model for N0X private document Q&A, browser storage, generated content, and network providers.",
 };
 
 export default function SecurityPage() {
@@ -48,18 +48,10 @@ export default function SecurityPage() {
                 "Artifacts get no same-origin access to N0X, and the CSP blocks ordinary subresource and connection paths. This is not a zero-network guarantee; review code before previewing or copying it.",
         },
         {
-            surface: "Pyodide",
-            boundary:
-                "Python runs in a terminable Web Worker with app storage globals shadowed, JS bridge modules unregistered, and run_js disabled. Egress is limited to credential-free GET requests under the pinned Pyodide 0.26.4 asset path.",
-            risk: "Pyodide is not a hardened hostile-code sandbox. Runtime escapes or CPU/memory exhaustion can still overwhelm the worker or tab before termination completes.",
-            mitigation:
-                "Stop, abort, and timeout terminate the worker. Packages are limited to the pinned asset host. Every agent call shows complete code for fresh approval; manual code requires Run.",
-        },
-        {
             surface: "Providers and API routes",
             boundary:
-                "Cloud and remote Ollama use configured endpoints. Deep Search and images use N0X server routes before third parties. Auto-routing can select Cloud.",
-            risk: "Prompts, enabled context, search queries, or image prompts leave the device on their selected path. Providers have their own retention and security terms.",
+                "Cloud and remote Ollama use configured endpoints. Deep Search uses N0X server routes before third parties. Auto-routing can select Cloud.",
+            risk: "Prompts, enabled context, or search queries leave the device on their selected path. Providers have their own retention and security terms.",
             mitigation:
                 "Provider and privacy badges expose the path. Server routes reject reported cross-site browser calls and enforce bounded inputs, outbound allowlists, deadlines, and best-effort rate limits; this is not user authentication.",
         },
@@ -148,19 +140,17 @@ export default function SecurityPage() {
                     <p>
                         HTML and JavaScript previews run in opaque-origin sandboxed iframes whose CSP blocks ordinary
                         network subresources and connections, but same-frame navigation remains a residual network path.
-                        Python runs in a terminable Pyodide worker with runtime-only asset downloads, but CPU and
-                        memory-heavy code can still overwhelm the worker or browser tab before termination.
                     </p>
                     <p>
-                        Deep Search, image generation, and analytics use in-memory server-side rate limits. These limits
-                        are best-effort on serverless deployments, reset independently per instance, and should be
-                        replaced or backed by shared edge/hosted limiting before serious scale.
+                        Deep Search and analytics use in-memory server-side rate limits. These limits are best-effort on
+                        serverless deployments, reset independently per instance, and should be replaced or backed by
+                        shared edge/hosted limiting before serious scale.
                     </p>
                     <p>
                         Cloud API requests go directly from the browser to your configured OpenAI-compatible endpoint.
-                        Deep Search and image requests use N0X server routes before reaching third-party providers. Only
-                        use providers you trust with the prompt and enabled context you send. A loopback Ollama server
-                        stays on-device; a remote Ollama URL is a network provider.
+                        Deep Search requests use N0X server routes before reaching third-party providers. Only use
+                        providers you trust with the prompt and enabled context you send. A loopback Ollama server stays
+                        on-device; a remote Ollama URL is a network provider.
                     </p>
                 </div>
             </div>

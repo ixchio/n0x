@@ -71,17 +71,15 @@ export default function RootLayout({
             priceCurrency: "USD",
         },
         description:
-            "Local-first browser document Q&A with filename/chunk citations. Browser inference is available through WebGPU; cloud, search, image, speech, and remote-provider features can use network paths.",
+            "Local-first browser document Q&A with filename/chunk citations. Browser inference is available through WebGPU; cloud, search, and remote-provider features can use network paths.",
         featureList: [
             "Document Q&A with filename/chunk citations",
             "Local PDF, DOCX, and text extraction",
             "BM25 retrieval for short documents and hybrid vector/keyword retrieval for larger documents",
             "Local LLM inference via WebGPU",
             "Optional Chrome AI, Ollama, and OpenAI-compatible providers",
-            "Agent mode with per-call approval for agent-initiated Python",
-            "Optional multi-source web search and image-generation network routes",
+            "Optional multi-source web search",
             "Origin-scoped conversation and optional semantic-memory storage",
-            "Browser speech input/output; offline operation is not guaranteed",
         ],
         screenshot: "https://n0xth.vercel.app/og-image.png",
     };

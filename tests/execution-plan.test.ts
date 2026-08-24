@@ -50,7 +50,21 @@ describe("execution plan readiness and message metadata", () => {
                 pythonEnabled: true,
             })
         ).toEqual({
-            mode: "image",
+            mode: "agent",
+            sourceFlags: { search: true, documents: true, memory: true, agent: true, python: true },
+        });
+
+        expect(
+            getExecutionRequestOptions({
+                message: "Generate an image of a private workstation",
+                agentEnabled: false,
+                deepSearchEnabled: false,
+                hasDocuments: false,
+                memoryEnabled: false,
+                pythonEnabled: false,
+            })
+        ).toEqual({
+            mode: "direct",
             sourceFlags: { search: false, documents: false, memory: false, agent: false, python: false },
         });
     });

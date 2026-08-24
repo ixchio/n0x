@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { Command } from "cmdk";
-import { Terminal, Volume2, VolumeX, Database, Cpu, Keyboard } from "lucide-react";
+import { Terminal, Database, Cpu, Keyboard } from "lucide-react";
 import { WEBLLM_MODELS } from "@/lib/providers/useWebLLM";
 import { getKeySoundEnabled, setKeySoundEnabled } from "@/lib/media/useKeySound";
 
@@ -25,8 +25,6 @@ interface CommandMenuProps {
     onLoadModel: (modelId: string) => void;
     browserModelsAvailable: boolean;
     onNewChat: () => void;
-    ttsEnabled: boolean;
-    onToggleTTS: () => void;
     ragEnabled: boolean;
     onToggleRAG: () => void;
 }
@@ -35,8 +33,6 @@ export function CommandMenu({
     onLoadModel,
     browserModelsAvailable,
     onNewChat,
-    ttsEnabled,
-    onToggleTTS,
     ragEnabled,
     onToggleRAG,
 }: CommandMenuProps) {
@@ -145,16 +141,6 @@ export function CommandMenu({
                         >
                             <Terminal className="w-3 h-3" />
                             new session
-                        </Command.Item>
-                        <Command.Item
-                            onSelect={() => {
-                                onToggleTTS();
-                                setOpen(false);
-                            }}
-                            className="flex min-h-11 cursor-pointer items-center gap-2 rounded px-2 py-2 text-xs text-zinc-300 hover:bg-crt-hover hover:text-phosphor data-[selected=true]:bg-crt-hover data-[selected=true]:text-phosphor"
-                        >
-                            {ttsEnabled ? <VolumeX className="w-3 h-3" /> : <Volume2 className="w-3 h-3" />}
-                            {ttsEnabled ? "disable tts" : "enable tts"}
                         </Command.Item>
                         <Command.Item
                             onSelect={() => {

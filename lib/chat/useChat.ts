@@ -8,7 +8,7 @@ import { useMemory } from "@/lib/memory/useMemory";
 import { usePyodide } from "@/lib/runtime/usePyodide";
 import { useTTS } from "@/lib/media/useTTS";
 import { useRAG } from "@/lib/retrieval/useRAG";
-import { createChatMessageId, type ChatMessageMeta, useChatStore } from "@/lib/chat/useChatStore";
+import { type ChatMessageMeta, useChatStore } from "@/lib/chat/useChatStore";
 import { useSystemPrompt } from "@/lib/chat/useSystemPrompt";
 import { tick as keySoundTick } from "@/lib/media/useKeySound";
 import { useAgent, type AgentToolkit } from "@/lib/runtime/useAgent";
@@ -32,11 +32,9 @@ import {
     providerUnavailableHint,
     type ActiveExecutionRuntime,
     type GatheredContext,
-    type ImageGenProgress,
     type ObservedExecutionSources,
 } from "@/lib/chat/executionRuntime";
 import { buildExecutionMessages, CHARS_PER_TOKEN } from "@/lib/chat/executionPrompt";
-import { imageCaption, imageProviderModel, requestImageGeneration } from "@/lib/chat/imageGeneration";
 import { getExecutionRequestOptions, shouldUseDocumentContext } from "@/lib/chat/executionRequest";
 import { formatAgentSearchContext, formatDirectSearchContext } from "@/lib/chat/searchContext";
 import { type RouteDecision } from "@/lib/chat/useAutoRouter";
@@ -83,8 +81,6 @@ export function useChat(providerCtx?: {
     const [streamingContent, setStreamingContent] = useState("");
     const [deepSearchEnabled, setDeepSearchEnabled] = useState(false);
     const [memoryEnabled, setMemoryEnabled] = useState(false);
-    const [generatingImage, setGeneratingImage] = useState(false);
-    const [imageProgress, setImageProgress] = useState<ImageGenProgress>({ active: false });
     const [autoRouteEnabled, setAutoRouteEnabled] = useState(false);
     const [lastRouteDecision, setLastRouteDecision] = useState<RouteDecision | null>(null);
     const [activeExecutionPlan, setActiveExecutionPlan] = useState<ExecutionPlan | null>(null);
@@ -286,60 +282,6 @@ export function useChat(providerCtx?: {
         [deepSearch, isCurrentExecution, markExecutionSources, memory, rag, recordDocumentEvidence, setLiveContent]
     );
 
-    const handleImageGen = useCallback(
-        async (plan: ExecutionPlan, prompt: string, signal: AbortSignal) => {
-            setGeneratingImage(true);
-            setImageProgress({ active: true, phase: "sending to Pollinations..." });
-            const meta = getExecutionMeta(plan);
-            const messageId = createChatMessageId();
-            const execution = activeExecutionRef.current;
-            if (execution?.plan.requestId === plan.requestId) execution.assistantMessageId = messageId;
-            chatStore.addMessageToConversation(plan.conversationId, {
-                id: messageId,
-                role: "assistant",
-                content: "🎨 Generating image…",
-                meta,
-            });
-
-            try {
-                setImageProgress({ active: true, phase: "generating with Flux…" });
-                const data = await requestImageGeneration(prompt, {
-                    signal,
-                    normalizePrompt: true,
-                });
-                if (!isCurrentExecution(plan)) return;
-
-                if (data.success && data.image) {
-                    const model = imageProviderModel(data.provider);
-                    setImageProgress({ active: true, phase: `done · ${model}`, provider: data.provider });
-                    chatStore.updateMessageInConversation(plan.conversationId, messageId, {
-                        content: `🎨 "${imageCaption(prompt)}"`,
-                        image: data.image,
-                    });
-                } else {
-                    chatStore.updateMessageInConversation(plan.conversationId, messageId, {
-                        content: `⚠️ Image generation failed: ${data.error || "provider unavailable"}`,
-                    });
-                }
-            } catch (error: any) {
-                if (isCurrentExecution(plan)) {
-                    chatStore.updateMessageInConversation(plan.conversationId, messageId, {
-                        content: isAbortError(error)
-                            ? "*[image generation stopped]*"
-                            : `⚠️ Image generation failed: ${error.message}`,
-                    });
-                }
-            } finally {
-                if (isCurrentExecution(plan)) {
-                    setGeneratingImage(false);
-                    setImageProgress({ active: false });
-                    finishExecution(plan);
-                }
-            }
-        },
-        [chatStore, finishExecution, getExecutionMeta, isCurrentExecution]
-    );
-
     const isStreaming =
         activeExecutionPlan !== null ||
         webllm.status === "generating" ||
@@ -347,7 +289,6 @@ export function useChat(providerCtx?: {
         providerCtx?.cloudAI?.status === "generating" ||
         providerCtx?.chromeAI?.status === "generating" ||
         deepSearch.isActive ||
-        generatingImage ||
         agent.status === "thinking" ||
         agent.status === "acting";
 
@@ -404,11 +345,6 @@ export function useChat(providerCtx?: {
                 content: message,
                 meta: requestMeta,
             });
-
-            if (plan.mode === "image") {
-                await handleImageGen(plan, message, execution.imageSignal!);
-                return;
-            }
 
             const readiness = getExecutionReadiness(plan, providers);
             if (!readiness.ready || !execution.generate) {
@@ -604,7 +540,6 @@ export function useChat(providerCtx?: {
             flushLiveContent,
             gatherContext,
             getExecutionMeta,
-            handleImageGen,
             input,
             isCurrentExecution,
             markExecutionSources,
@@ -632,26 +567,17 @@ export function useChat(providerCtx?: {
         if (execution.observedSources.search || deepSearch.isActive) deepSearch.stop();
         if (plan.mode === "agent") agent.abort();
 
-        if (plan.mode === "image" && execution.assistantMessageId) {
-            chatStore.updateMessageInConversation(plan.conversationId, execution.assistantMessageId, {
-                content: "*[image generation stopped]*",
-                meta,
-            });
-        } else {
-            const stoppedContent = execution.partialContent.trim()
-                ? `${execution.partialContent}\n\n*[generation stopped]*`
-                : plan.mode === "agent"
-                  ? "*[agent stopped]*"
-                  : "*[generation stopped]*";
-            chatStore.addMessageToConversation(plan.conversationId, {
-                role: "assistant",
-                content: stoppedContent,
-                meta,
-            });
-        }
+        const stoppedContent = execution.partialContent.trim()
+            ? `${execution.partialContent}\n\n*[generation stopped]*`
+            : plan.mode === "agent"
+              ? "*[agent stopped]*"
+              : "*[generation stopped]*";
+        chatStore.addMessageToConversation(plan.conversationId, {
+            role: "assistant",
+            content: stoppedContent,
+            meta,
+        });
 
-        setGeneratingImage(false);
-        setImageProgress({ active: false });
         finishExecution(plan);
     }, [agent, chatStore, deepSearch, finishExecution, flushLiveContent, getExecutionMeta]);
 
@@ -683,8 +609,6 @@ export function useChat(providerCtx?: {
         setInput,
         streamingContent: visibleStreamingContent,
         isStreaming,
-        generatingImage,
-        imageProgress,
         deepSearchEnabled,
         setDeepSearchEnabled,
         memoryEnabled,

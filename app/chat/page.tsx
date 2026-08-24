@@ -8,11 +8,8 @@ import {
     Brain,
     Code,
     Shield,
-    Volume2,
-    VolumeX,
     Cpu,
     Menu,
-    AlertTriangle,
     Cloud,
     Server,
     Monitor,
@@ -26,6 +23,7 @@ import { PersistedMessageList } from "@/components/chat/persisted-message-list";
 import { ChatInput } from "@/components/chat/chat-input";
 import { AgentThinking } from "@/components/chat/agent-thinking";
 import { MemoryPanel } from "@/components/chat/memory-panel";
+
 import { WEBLLM_MODELS, MODEL_CATEGORIES, useWebLLM } from "@/lib/providers/useWebLLM";
 import { useOllama } from "@/lib/providers/useOllama";
 import { useCloudAI } from "@/lib/providers/useCloudAI";
@@ -33,11 +31,8 @@ import { useChromeAI } from "@/lib/providers/useChromeAI";
 import { cn } from "@/lib/utils";
 import { CommandMenu, modelSizeInGB, shouldToggleShortcuts } from "@/components/chat/command-menu";
 import { ErrorBoundary } from "@/components/system/error-boundary";
-import { PersonaSelector } from "@/components/chat/persona-selector";
-import { ShareMenu } from "@/components/chat/share-menu";
 import { useChat } from "@/lib/chat/useChat";
-import { useSTT } from "@/lib/media/useSTT";
-import { AgentTrace } from "@/components/chat/agent-trace";
+import { ShareMenu } from "@/components/chat/share-menu";
 import { trackFunnelEvent } from "@/lib/core/analytics";
 import {
     PrivacyInspector,
@@ -58,15 +53,14 @@ const ATTACH_INPUT_ID = "n0x-attach-input";
 
 const SAMPLE_DOC = `# N0X Sample Brief
 
-N0X is a local-first AI workstation that runs chat, document search, Python execution, image generation, and memory in one browser tab.
+N0X is a local-first workspace for private document Q&A. Ask questions over your own files and get answers with filename and chunk citations, all inside one browser tab.
 
-The privacy-first path uses WebGPU for model inference and IndexedDB for conversations, memory, and vector cache. Users can also switch to Ollama or an OpenAI-compatible cloud endpoint when they need stronger models or larger context windows.
+The privacy-first path uses WebGPU for model inference and IndexedDB for conversations and the document index. Users can also switch to Ollama or an OpenAI-compatible cloud endpoint when they need stronger models or larger context windows.
 
 Best-fit workflows:
 - Ask questions over PDFs or notes without creating an account.
-- Search and summarize public web information with citations.
-- Run small Python snippets in a WASM runtime.
 - Keep sensitive documents local by using the Browser provider and leaving Cloud API disabled.
+- Verify every answer against the cited filename and chunk.
 
 Known tradeoffs:
 - First model download can take time.
@@ -113,16 +107,13 @@ function ChatPageInner() {
     const ollama = useOllama();
     const cloudAI = useCloudAI();
     const chromeAI = useChromeAI();
-    const [pyEnabled, setPyEnabled] = useState(false);
 
-    const chat = useChat({ provider, ollama, cloudAI, chromeAI, pythonEnabled: pyEnabled });
+    const chat = useChat({ provider, ollama, cloudAI, chromeAI });
     const {
         input,
         setInput,
         streamingContent,
         isStreaming,
-        generatingImage,
-        imageProgress,
         deepSearchEnabled,
         setDeepSearchEnabled,
         memoryEnabled,
@@ -134,18 +125,24 @@ function ChatPageInner() {
         webllm,
         deepSearch,
         memory,
-        pyodide,
-        tts,
         rag,
         chatStore,
-        agent,
         handleSend,
         handleNewChat,
         handleStop,
-        handlePythonRun,
     } = chat;
-    const stt = useSTT();
-    const { init: initSTT } = stt;
+
+    const cloudBlockingError =
+        cloudAI.apiKey && cloudAI.error && cloudAI.error !== "API Key required for Cloud AI" ? cloudAI.error : null;
+
+    const activeProviderReady =
+        provider === "browser"
+            ? webllm.isSupported && webllm.status === "ready"
+            : provider === "ollama"
+              ? ollama.isSupported && Boolean(ollama.loadedModel)
+              : provider === "cloud"
+                ? Boolean(cloudAI.apiKey) && !cloudBlockingError
+                : chromeAI.status === "ready";
 
     const switchProvider = useCallback(
         (nextProvider: AIProvider) => {
@@ -160,12 +157,6 @@ function ChatPageInner() {
         [chromeAI, handleStop, isStreaming, provider, setProviderPreference, webllm]
     );
 
-    // Detect STT support after hydration so the microphone is reachable
-    // without requiring an impossible first call to start().
-    useEffect(() => {
-        initSTT();
-    }, [initSTT]);
-
     const [headerModelOpen, setHeaderModelOpen] = useState(false);
 
     const [showMemoryPanel, setShowMemoryPanel] = useState(false);
@@ -179,6 +170,7 @@ function ChatPageInner() {
     const userScrolledUpRef = useRef(false);
     const messageCountRef = useRef(chatStore.messages.length);
     const sampleIntentHandledRef = useRef(false);
+    const pendingSampleSendRef = useRef(false);
     messageCountRef.current = chatStore.messages.length;
 
     const DEFAULT_MODEL = "Qwen2.5-1.5B-Instruct-q4f16_1-MLC";
@@ -187,7 +179,6 @@ function ChatPageInner() {
     useEffect(() => {
         trackFunnelEvent("visit", { page: "chat" });
         void chromeAI.init();
-        tts.init();
         // Provider stores are Zustand objects; this boot effect is intentionally once per mount.
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
@@ -320,6 +311,36 @@ function ChatPageInner() {
         [handleStop, isStreaming, ollama]
     );
 
+    const SAMPLE_QUESTION = "Which workflows keep sensitive documents local? Answer with filename and chunk citations.";
+
+    const localModelRecommendation = recommendedModelForDevice(webllm.gpuTier, webllm.isMobile);
+    const localModelRecommendationSize =
+        WEBLLM_MODELS.find(model => model.id === localModelRecommendation.id)?.size || "model weights";
+
+    const openAttachPicker = useCallback(() => {
+        document.getElementById(ATTACH_INPUT_ID)?.click();
+    }, []);
+
+    // One-click activation: picking a document or the sample also starts the
+    // runtime download in parallel, and the sample auto-sends once ready.
+    const prepareActiveRuntime = useCallback(() => {
+        if (provider === "browser") {
+            if (webllm.isSupported && webllm.status !== "loading" && !webllm.loadedModel) {
+                void handleModelChange(localModelRecommendation.id, true);
+            }
+            return;
+        }
+        if (provider === "chrome-ai" && chromeAI.status === "downloadable") {
+            void chromeAI.load();
+        }
+        // Cloud/Ollama users already configured their provider; nothing to prep.
+    }, [chromeAI, handleModelChange, localModelRecommendation.id, provider, webllm]);
+
+    const openAttachAndPrepare = useCallback(() => {
+        if (!activeProviderReady) prepareActiveRuntime();
+        openAttachPicker();
+    }, [activeProviderReady, openAttachPicker, prepareActiveRuntime]);
+
     const handleSampleDocDemo = useCallback(async () => {
         const sampleName = "n0x-sample-private-ai.md";
         let attached = rag.documents.some(document => document.name === sampleName);
@@ -328,8 +349,20 @@ function ChatPageInner() {
             attached = await rag.addFile(sample);
         }
         if (!attached) return;
-        setInput("Which workflows keep sensitive documents local? Answer with filename and chunk citations.");
-    }, [rag, setInput]);
+        if (!rag.ragEnabled) rag.toggle();
+        pendingSampleSendRef.current = true;
+        setInput(SAMPLE_QUESTION);
+        if (!activeProviderReady) prepareActiveRuntime();
+    }, [activeProviderReady, prepareActiveRuntime, rag, setInput]);
+
+    // Fires the prepared sample question as soon as the runtime and index are
+    // both ready, so "Try the sample" ends in a cited answer without more clicks.
+    useEffect(() => {
+        if (!pendingSampleSendRef.current) return;
+        if (!activeProviderReady || isStreaming || rag.isIndexing || rag.documents.length === 0) return;
+        pendingSampleSendRef.current = false;
+        void handleSend();
+    }, [activeProviderReady, handleSend, isStreaming, rag]);
 
     useEffect(() => {
         if (sampleIntentHandledRef.current) return;
@@ -340,14 +373,6 @@ function ChatPageInner() {
         window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
         void handleSampleDocDemo();
     }, [handleSampleDocDemo]);
-
-    const localModelRecommendation = recommendedModelForDevice(webllm.gpuTier, webllm.isMobile);
-    const localModelRecommendationSize =
-        WEBLLM_MODELS.find(model => model.id === localModelRecommendation.id)?.size || "model weights";
-
-    const openAttachPicker = useCallback(() => {
-        document.getElementById(ATTACH_INPUT_ID)?.click();
-    }, []);
 
     const openCloudSetup = useCallback(() => {
         switchProvider("cloud");
@@ -377,11 +402,6 @@ function ChatPageInner() {
         switchProvider("browser");
         void handleModelChange(localModelRecommendation.id);
     }, [handleModelChange, localModelRecommendation.id, switchProvider, webllm.isSupported]);
-
-    const startWebSearch = useCallback(() => {
-        setDeepSearchEnabled(true);
-        setInput("search the web for ");
-    }, [setDeepSearchEnabled, setInput]);
 
     const openPrivacyInspector = useCallback(() => {
         setHeaderModelOpen(false);
@@ -414,6 +434,7 @@ function ChatPageInner() {
     }, []);
 
     const onNewChat = useCallback(() => {
+        pendingSampleSendRef.current = false;
         handleNewChat();
     }, [handleNewChat]);
 
@@ -457,8 +478,6 @@ function ChatPageInner() {
               : provider === "chrome-ai"
                 ? "Gemini Nano"
                 : WEBLLM_MODELS.find(m => m.id === webllm.loadedModel)?.label || webllm.loadedModel || "No model";
-    const cloudBlockingError =
-        cloudAI.apiKey && cloudAI.error && cloudAI.error !== "API Key required for Cloud AI" ? cloudAI.error : null;
 
     const providerSetup: ProviderSetup | null =
         provider === "cloud" && !cloudAI.apiKey
@@ -542,15 +561,6 @@ function ChatPageInner() {
                       }
                     : null;
 
-    const activeProviderReady =
-        provider === "browser"
-            ? webllm.isSupported && webllm.status === "ready"
-            : provider === "ollama"
-              ? ollama.isSupported && Boolean(ollama.loadedModel)
-              : provider === "cloud"
-                ? Boolean(cloudAI.apiKey) && !cloudBlockingError
-                : chromeAI.status === "ready";
-
     const emptyWorkbenchVisible =
         chatStore.messages.length === 0 &&
         !deepSearch.isActive &&
@@ -561,8 +571,6 @@ function ChatPageInner() {
                 onLoadModel={handleCommandModelChange}
                 browserModelsAvailable={webllm.isSupported && webllm.status !== "loading"}
                 onNewChat={onNewChat}
-                ttsEnabled={tts.isEnabled}
-                onToggleTTS={() => tts.setEnabled(!tts.isEnabled)}
                 ragEnabled={rag.ragEnabled}
                 onToggleRAG={rag.toggle}
             />
@@ -1039,22 +1047,6 @@ function ChatPageInner() {
                                         aria-label="Workspace controls"
                                         className="absolute right-0 top-full z-50 mt-2 w-[min(17rem,calc(100vw-1rem))] space-y-1 rounded-xl border border-zinc-700 bg-card p-2 shadow-xl"
                                     >
-                                        <div className="flex min-h-11 items-center justify-between gap-3 rounded-md px-3 py-1 text-xs text-zinc-300">
-                                            <span>Persona</span>
-                                            <PersonaSelector compact menuPlacement="bottom" menuAlign="right" />
-                                        </div>
-                                        <button
-                                            onClick={() => tts.setEnabled(!tts.isEnabled)}
-                                            aria-pressed={tts.isEnabled}
-                                            className="flex min-h-11 w-full items-center gap-3 rounded-md px-3 py-2 text-left text-xs text-zinc-300 transition-colors hover:bg-zinc-900 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
-                                        >
-                                            {tts.isEnabled ? (
-                                                <Volume2 className="h-4 w-4 text-emerald-300" />
-                                            ) : (
-                                                <VolumeX className="h-4 w-4" />
-                                            )}
-                                            Text to speech {tts.isEnabled ? "on" : "off"}
-                                        </button>
                                         <button
                                             onClick={openPrivacyInspector}
                                             className="flex min-h-11 w-full items-center gap-3 rounded-md px-3 py-2 text-left text-xs text-zinc-300 transition-colors hover:bg-zinc-900 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
@@ -1076,28 +1068,6 @@ function ChatPageInner() {
                     {/* Only hide toolbar during WebGPU model download */}
                     {!(provider === "browser" && webllm.status === "loading") && (
                         <div className="hidden shrink-0 items-center lg:flex">
-                            {/* Persona */}
-                            <div className="ml-3">
-                                <PersonaSelector compact />
-                            </div>
-
-                            {/* TTS */}
-                            <button
-                                onClick={() => tts.setEnabled(!tts.isEnabled)}
-                                aria-label={tts.isEnabled ? "Disable text to speech" : "Enable text to speech"}
-                                aria-pressed={tts.isEnabled}
-                                className={cn(
-                                    "ml-2 flex h-11 w-11 items-center justify-center rounded-md transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white",
-                                    tts.isEnabled ? "text-phosphor" : "text-txt-tertiary hover:text-txt-secondary"
-                                )}
-                            >
-                                {tts.isEnabled ? (
-                                    <Volume2 className="w-3.5 h-3.5" />
-                                ) : (
-                                    <VolumeX className="w-3.5 h-3.5" />
-                                )}
-                            </button>
-
                             <button
                                 onClick={showPrivacyInspector ? closePrivacyInspector : openPrivacyInspector}
                                 title="Privacy inspector"
@@ -1179,7 +1149,6 @@ function ChatPageInner() {
                     deepSearchEnabled={deepSearchEnabled}
                     memoryEnabled={memoryEnabled}
                     autoRouteEnabled={autoRouteEnabled}
-                    pythonEnabled={pyEnabled && pyodide.isReady}
                     provider={provider}
                     webllm={webllm}
                     chromeAI={chromeAI}
@@ -1215,17 +1184,22 @@ function ChatPageInner() {
                             ollamaEndpoint={ollama.baseUrl}
                             documentCount={rag.documents.length}
                             documentBusy={rag.isIndexing}
-                            onAttachDocs={openAttachPicker}
+                            onAttachDocs={openAttachAndPrepare}
                             onBestLocalModel={loadBestLocalModel}
                             onSampleDocDemo={handleSampleDocDemo}
-                            onSearchWeb={startWebSearch}
                             onPrivacyInspector={openPrivacyInspector}
+                            chromeStatus={chromeAI.status}
+                            onUseChromeAI={() => {
+                                switchProvider("chrome-ai");
+                                setMobileControlsOpen(false);
+                                setHeaderModelOpen(false);
+                                setProviderMenuOpen(false);
+                            }}
                         />
                     ) : (
                         <div className="max-w-3xl mx-auto space-y-5 transition-all">
                             <PersistedMessageList
                                 messages={chatStore.messages}
-                                onRunCode={pyodide.isReady && pyEnabled ? handlePythonRun : undefined}
                                 onBranch={handleBranchMessage}
                             />
 
@@ -1241,35 +1215,11 @@ function ChatPageInner() {
                                 />
                             )}
 
-                            {generatingImage && (
-                                <div className="flex items-center gap-3 p-3 bg-crt-surface border border-crt-border rounded text-xs font-mono">
-                                    <Loader2 className="w-4 h-4 text-phosphor animate-spin" />
-                                    <div>
-                                        <span className="text-txt-secondary">generating image</span>
-                                        {imageProgress.phase && (
-                                            <span className="text-txt-tertiary ml-2">· {imageProgress.phase}</span>
-                                        )}
-                                    </div>
-                                </div>
-                            )}
-
                             {streamingContent && (
                                 <LazyMessageBubble
                                     role="assistant"
                                     content={streamingContent}
                                     meta={activeExecutionMeta}
-                                />
-                            )}
-
-                            {/* Agent Trace */}
-                            {agent.enabled && (agent.steps.length > 0 || agent.status !== "idle") && (
-                                <AgentTrace
-                                    steps={agent.steps}
-                                    status={agent.status}
-                                    iteration={agent.currentIteration}
-                                    isActive={agent.status !== "idle"}
-                                    elapsedMs={agent.elapsedMs}
-                                    onAbort={handleStop}
                                 />
                             )}
                         </div>
@@ -1283,7 +1233,7 @@ function ChatPageInner() {
                         input={input}
                         setInput={setInput}
                         onSend={() => {
-                            if (stt.isListening) stt.stop();
+                            pendingSampleSendRef.current = false;
                             handleSend();
                         }}
                         onStop={handleStop}
@@ -1298,40 +1248,12 @@ function ChatPageInner() {
                         }}
                         ragEnabled={rag.ragEnabled}
                         toggleRag={rag.toggle}
-                        pyodideReady={pyodide.isReady}
-                        pyodideLoading={pyodide.isLoading}
-                        pyodideEnabled={pyEnabled}
-                        onPyodideLoad={pyodide.load}
-                        onPyodideToggle={enabled => {
-                            if (!enabled) pyodide.terminate();
-                            setPyEnabled(enabled);
-                        }}
                         onFileDrop={rag.addFile}
                         attachedFiles={rag.documents.map(d => ({ id: d.id, name: d.name, size: d.size, type: d.type }))}
                         fileStatus={rag.status}
                         fileBusy={rag.isIndexing}
                         onRemoveFile={id => {
                             void rag.removeFile(id);
-                        }}
-                        agentEnabled={agent.enabled}
-                        toggleAgent={agent.toggle}
-                        sttSupported={stt.isSupported}
-                        sttListening={stt.isListening}
-                        onSttToggle={() => {
-                            if (stt.isListening) {
-                                stt.stop();
-                                // Append final transcript to input
-                                if (stt.transcript) {
-                                    setInput((input ? input + " " : "") + stt.transcript);
-                                    stt.clear();
-                                }
-                            } else {
-                                stt.clear();
-                                stt.start();
-                            }
-                        }}
-                        onImagePrefill={() => {
-                            setInput("generate an image of ");
                         }}
                         autoRouteEnabled={autoRouteEnabled}
                         toggleAutoRoute={() => setAutoRouteEnabled(!autoRouteEnabled)}

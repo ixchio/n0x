@@ -17,10 +17,9 @@ export default function PrivacyPage() {
                 <section className="space-y-3">
                     <h1 className="text-4xl font-bold tracking-tight text-white">Privacy</h1>
                     <p className="text-zinc-400">
-                        N0X starts with local-first document Q&amp;A and filename/chunk citations. Search, image, remote
-                        Ollama, cloud, approved external images, browser speech, and telemetry are separate network
-                        paths. The Browser provider runs inference, document retrieval, enabled memory, and Python in
-                        your browser after required assets are available.
+                        N0X starts with local-first document Q&amp;A and filename/chunk citations. Search, remote
+                        Ollama, cloud, and telemetry are separate network paths. The Browser provider runs inference,
+                        document retrieval, and enabled memory in your browser after required assets are available.
                     </p>
                 </section>
 
@@ -52,12 +51,7 @@ export default function PrivacyPage() {
                     <ul className="list-disc space-y-2 pl-5 text-zinc-400">
                         <li>
                             Direct Deep Search sends your query through the N0X API route to available search and
-                            page-extraction providers. Before every autonomous agent search, N0X shows the exact
-                            model-authored query and requires fresh approval; denial keeps it in the browser.
-                        </li>
-                        <li>
-                            Image generation sends the prompt through the N0X API route and then to Pollinations or, on
-                            the configured fallback path, AI Horde.
+                            page-extraction providers.
                         </li>
                         <li>
                             Cloud API requests go to the OpenAI-compatible endpoint you configure. Relevant document
@@ -73,12 +67,10 @@ export default function PrivacyPage() {
                             context to that host. A loopback Ollama URL stays on your device.
                         </li>
                         <li>
-                            Browser model assets, embedding assets, and Pyodide runtime/packages can download from
-                            external hosts on first use or after cache eviction. Opening the workbench also checks
-                            Chrome&apos;s Prompt API without starting an install. N0X asks Chrome to install Gemini Nano
-                            only after you explicitly select/install Chrome AI. The isolated Python worker permits only
-                            credential-free GET requests under the pinned Pyodide asset path; arbitrary Python network
-                            access and arbitrary package URLs are blocked.
+                            Browser model assets and embedding assets can download from external hosts on first use or
+                            after cache eviction. Opening the workbench also checks Chrome&apos;s Prompt API without
+                            starting an install. N0X asks Chrome to install Gemini Nano only after you explicitly
+                            select/install Chrome AI.
                         </li>
                         <li>
                             Remote images in generated Markdown are blocked by default. Choosing Load once contacts that
@@ -89,10 +81,6 @@ export default function PrivacyPage() {
                             Generated HTML previews use an opaque-origin sandbox and block ordinary subresource and
                             connection paths. Preview code can still attempt to navigate its own frame to an external
                             destination, so review generated code before opening Preview.
-                        </li>
-                        <li>
-                            Web Speech recognition and some speech-synthesis voices may use an online browser or
-                            operating-system service. Offline speech is not guaranteed.
                         </li>
                     </ul>
                 </section>

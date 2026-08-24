@@ -7,7 +7,6 @@ import {
     Database,
     ExternalLink,
     FileText,
-    HardDrive,
     KeyRound,
     Lock,
     Shield,
@@ -137,8 +136,10 @@ interface WorkbenchEmptyStateProps {
     onAttachDocs: () => void;
     onBestLocalModel: () => void;
     onSampleDocDemo: () => void;
-    onSearchWeb: () => void;
+    onSearchWeb?: () => void;
     onPrivacyInspector: () => void;
+    chromeStatus?: string;
+    onUseChromeAI?: () => void;
 }
 
 export function WorkbenchEmptyState({
@@ -152,23 +153,25 @@ export function WorkbenchEmptyState({
     documentCount,
     documentBusy = false,
     onAttachDocs,
-    onBestLocalModel,
     onSampleDocDemo,
-    onSearchWeb,
     onPrivacyInspector,
+    chromeStatus,
+    onUseChromeAI,
 }: WorkbenchEmptyStateProps) {
     const providerNote =
         provider === "cloud"
-            ? "Cloud only runs after you add a key. Local paths stay available."
+            ? "Cloud answers come from your configured OpenAI-compatible endpoint."
             : provider === "ollama"
               ? isNetworkedEndpoint(ollamaEndpoint)
                   ? "Ollama is using a remote HTTPS endpoint, so prompts and enabled context leave this device."
                   : "Ollama is using localhost, so prompts stay on this machine."
               : provider === "chrome-ai"
-                ? "Chrome AI is local when Gemini Nano is ready in this browser."
-                : "Browser inference stays on-device; enabled search and automatic cloud routing are separate paths.";
+                ? "Gemini Nano runs inside Chrome. No download from N0X."
+                : "Answers run on your GPU. Documents never leave this device.";
 
     const hasDocuments = documentCount > 0;
+    const chromeInstant =
+        !providerReady && chromeStatus === "downloadable" && typeof onUseChromeAI === "function";
 
     return (
         <section
@@ -192,89 +195,87 @@ export function WorkbenchEmptyState({
                               " document" +
                               (documentCount === 1 ? " is" : "s are") +
                               " indexed in this browser. Write a question below and verify the answer against its citation."
-                            : "Choose a file or load the sample. N0X retrieves evidence locally and labels it with filename and chunk citations."}
+                            : "Pick a file, ask, and verify the answer against its filename/chunk citation. Nothing is uploaded."}
                     </p>
                 </div>
             </div>
 
-            <div className="grid gap-3 md:grid-cols-[1.15fr_0.85fr]">
-                <div className="rounded-xl border border-zinc-800 bg-zinc-950/70 p-4">
-                    <div className="flex items-center gap-2 text-sm font-semibold text-white">
-                        {hasDocuments ? (
-                            <CheckCircle2 className="h-4 w-4 text-emerald-300" aria-hidden="true" />
-                        ) : (
-                            <FileText className="h-4 w-4 text-zinc-300" aria-hidden="true" />
-                        )}
-                        1. {hasDocuments ? "Document indexed" : "Choose a document"}
-                    </div>
-                    <p className="mt-2 text-xs leading-5 text-zinc-400">
-                        PDF, DOCX, Markdown, text, CSV, HTML, and JSON are supported. Browser mode keeps extraction and
-                        retrieval on this device.
-                    </p>
-                    <div className="mt-4 flex flex-col gap-2 min-[420px]:flex-row">
-                        <button
-                            onClick={onAttachDocs}
-                            disabled={documentBusy}
-                            className="inline-flex min-h-11 flex-1 items-center justify-center rounded-lg bg-white px-4 py-2 text-sm font-semibold text-black hover:bg-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                            {hasDocuments ? "Add another document" : "Choose a document"}
-                        </button>
-                        {!hasDocuments && (
-                            <button
-                                onClick={onSampleDocDemo}
-                                disabled={documentBusy}
-                                className="inline-flex min-h-11 flex-1 items-center justify-center rounded-lg border border-zinc-700 px-4 py-2 text-sm font-semibold text-zinc-200 hover:border-zinc-500 hover:bg-zinc-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white disabled:cursor-not-allowed disabled:opacity-50"
-                            >
-                                Try the sample
-                            </button>
-                        )}
-                    </div>
-                </div>
-
-                <div className="rounded-xl border border-zinc-800 bg-zinc-950/70 p-4">
-                    <div className="flex items-center gap-2 text-sm font-semibold text-white">
-                        {providerReady ? (
-                            <CheckCircle2 className="h-4 w-4 text-emerald-300" aria-hidden="true" />
-                        ) : (
-                            <HardDrive className="h-4 w-4 text-zinc-300" aria-hidden="true" />
-                        )}
-                        2. {providerReady ? "Provider ready" : "Load a local model"}
-                    </div>
-                    <p className="mt-2 text-xs leading-5 text-zinc-400">
-                        {providerReady
-                            ? providerNote
-                            : localModelDisabled
-                              ? "WebGPU is unavailable here. Choose Chrome AI, Ollama, or Cloud from the provider menu."
-                              : recommendedLabel +
-                                " downloads " +
-                                recommendedSize +
-                                " on first use. Cached weights avoid most re-downloads, but the model still initializes each visit."}
-                    </p>
-                    {!providerReady && !localModelDisabled && (
-                        <button
-                            onClick={onBestLocalModel}
-                            className="mt-4 inline-flex min-h-11 w-full items-center justify-center rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2 text-sm font-semibold text-zinc-100 hover:border-zinc-500 hover:bg-zinc-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
-                            title={recommendedReason}
-                        >
-                            Load {recommendedLabel}
-                        </button>
+            <div className="rounded-xl border border-zinc-800 bg-zinc-950/70 p-4">
+                <div className="flex items-center gap-2 text-sm font-semibold text-white">
+                    {hasDocuments ? (
+                        <CheckCircle2 className="h-4 w-4 text-emerald-300" aria-hidden="true" />
+                    ) : (
+                        <FileText className="h-4 w-4 text-zinc-300" aria-hidden="true" />
                     )}
+                    {hasDocuments ? "Document indexed" : "One click to start"}
                 </div>
+                <p className="mt-2 text-xs leading-5 text-zinc-400">
+                    PDF, DOCX, Markdown, text, CSV, HTML, and JSON are supported. Extraction and retrieval stay on
+                    this device.
+                </p>
+                <div className="mt-4 flex flex-col gap-2 min-[420px]:flex-row">
+                    <button
+                        onClick={onAttachDocs}
+                        disabled={documentBusy}
+                        className="inline-flex min-h-11 flex-1 items-center justify-center rounded-lg bg-white px-4 py-2 text-sm font-semibold text-black hover:bg-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                        {hasDocuments ? "Add another document" : "Choose a document"}
+                    </button>
+                    <button
+                        onClick={onSampleDocDemo}
+                        disabled={documentBusy}
+                        className="inline-flex min-h-11 flex-1 items-center justify-center rounded-lg border border-zinc-700 px-4 py-2 text-sm font-semibold text-zinc-200 hover:border-zinc-500 hover:bg-zinc-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                        Try the sample
+                    </button>
+                </div>
+                {!providerReady && (
+                    <div className="mt-3 space-y-2 border-t border-zinc-800 pt-3 text-xs leading-5 text-zinc-400">
+                        {localModelDisabled ? (
+                            <p>
+                                WebGPU is unavailable here. Use Chrome AI, Ollama, or Cloud API from the provider
+                                menu above.
+                            </p>
+                        ) : (
+                            <p>
+                                First answer needs a local model:{" "}
+                                <span className="text-zinc-200">{recommendedLabel}</span> downloads{" "}
+                                {recommendedSize} once, then stays cached. Picking a file starts the download
+                                immediately.
+                                <span className="sr-only"> {recommendedReason}</span>
+                            </p>
+                        )}
+                        {chromeInstant && (
+                            <div className="flex flex-wrap items-center gap-2">
+                                <span>No download option:</span>
+                                <button
+                                    onClick={onUseChromeAI}
+                                    className="inline-flex min-h-9 items-center rounded-md border border-purple-500/30 bg-purple-500/10 px-2.5 py-1.5 font-medium text-purple-200 transition-colors hover:bg-purple-500/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                                >
+                                    Use Chrome&apos;s built-in Gemini Nano
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                )}
             </div>
+
+            {providerReady && (
+                <div className="flex items-start gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3 text-xs leading-5 text-emerald-100">
+                    <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-300" aria-hidden="true" />
+                    <p>
+                        <span className="font-semibold">Provider ready.</span> {providerNote}
+                    </p>
+                </div>
+            )}
 
             <div className="flex flex-col gap-3 rounded-xl border border-zinc-900 bg-black/20 p-3 text-xs text-zinc-400 sm:flex-row sm:items-center sm:justify-between">
                 <p className="leading-5">
-                    <strong className="text-zinc-300">3. Ask and verify.</strong> Supported claims cite{" "}
-                    <span className="font-mono text-emerald-300">[filename#chunk-N]</span>. Advanced tools remain in the
-                    composer.
+                    <strong className="text-zinc-300">Ask and verify.</strong> Supported claims cite{" "}
+                    <span className="font-mono text-emerald-300">[filename#chunk-N]</span>. Advanced tools remain in
+                    the composer.
                 </p>
                 <div className="flex shrink-0 flex-wrap gap-2">
-                    <button
-                        onClick={onSearchWeb}
-                        className="min-h-11 rounded-md px-3 py-2 text-zinc-300 hover:bg-zinc-900 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
-                    >
-                        Search web
-                    </button>
                     <button
                         onClick={onPrivacyInspector}
                         className="min-h-11 rounded-md px-3 py-2 text-zinc-300 hover:bg-zinc-900 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
@@ -368,7 +369,6 @@ interface PrivacyInspectorProps extends DependencyProps {
     deepSearchEnabled: boolean;
     memoryEnabled: boolean;
     autoRouteEnabled: boolean;
-    pythonEnabled: boolean;
 }
 
 export function PrivacyInspector({
@@ -380,7 +380,6 @@ export function PrivacyInspector({
     deepSearchEnabled,
     memoryEnabled,
     autoRouteEnabled,
-    pythonEnabled,
     provider,
     webllm,
     chromeAI,
@@ -460,7 +459,7 @@ export function PrivacyInspector({
         {
             icon: Wifi,
             label: "Request controls",
-            value: `docs ${ragEnabled ? `on (${ragCount} attached)` : `off (${ragCount} attached)`} · search ${deepSearchEnabled ? "on (network)" : "off"} · memory ${memoryEnabled ? "on (local)" : "off"} · auto-route ${autoRouteEnabled ? "on" : "off"} · Python ${pythonEnabled ? "available locally with per-run approval" : "off"}`,
+            value: `docs ${ragEnabled ? `on (${ragCount} attached)` : `off (${ragCount} attached)`} · search ${deepSearchEnabled ? "on (network)" : "off"} · memory ${memoryEnabled ? "on (local)" : "off"} · auto-route ${autoRouteEnabled ? "on" : "off"}`,
         },
     ];
 

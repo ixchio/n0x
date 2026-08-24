@@ -34,7 +34,7 @@ npm run start    # Start production server
 - `useChatStore` is a **React hook** (NOT Zustand) — state is shared via prop drilling from `useChat`
 - `useChat` is the main orchestrator — routes between image gen, agent mode, and direct LLM mode
 - COEP header must be `credentialless` (NOT `require-corp`) to allow cross-origin resources
-- The chat page bundle is ~2.47MB due to WebLLM + Transformers.js — heavy but unavoidable for browser AI
+- The chat page first-load JS is ~195 kB (verified via `next build`). WebLLM runtime lives in the worker chunk; Transformers.js, voy, and pdfjs are dynamic imports inside `rag.worker.ts` — do not convert them back to static imports.
 - Cloud API keys are stored in sessionStorage (not localStorage) for security
 - `contextCharsLimit` is exported from `useWebLLM` as a module variable for cross-hook access
 - Token counter persisted in localStorage (`n0x_total_tokens`) — used by sidebar cost savings display
@@ -195,7 +195,6 @@ Three breakthrough features from research:
 
 ### Not Fixed (needs design/manual work)
 
-- **OG image**: No `og:image` exists. Critical for Product Hunt social shares. Needs a designed 1200×630 image.
 - **Year in footer**: Auto-generates from `new Date().getFullYear()` — currently shows 2026 (correct).
 
 ## Known Limitations
@@ -205,4 +204,7 @@ Three breakthrough features from research:
 - PWA service worker only registered in production
 - SearXNG instances in deep-search are hardcoded and may go down
 - No conversation search across all conversations yet
-- No OG image for social sharing (needs design)
+
+## Feature Trim (2026-08-25 — doc-Q&A focus)
+
+Agent mode, Pyodide/Python, image generation, TTS/STT, and persona selector are **hidden from the UI** (code + API routes kept, tests intact). Entry points removed: ChatInput toolbar props (`toggleAgent`, pyodide props, STT props, `onImagePrefill`), CommandMenu TTS command, header/mobile PersonaSelector + TTS buttons, `getExecutionRequestOptions` no longer returns `"image"` mode. Re-enabling = re-wire props in `app/chat/page.tsx`.

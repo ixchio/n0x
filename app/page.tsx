@@ -97,7 +97,6 @@ const boundaryRows = [
     ["Model weights", "Browser Cache API", "Cached when storage persists; initialized each visit"],
     ["Cloud keys", "sessionStorage", "Clears with the browser session"],
     ["Deep Search", "API route", "Search query leaves the device when enabled"],
-    ["Image generation", "API route", "Prompt leaves the device when enabled"],
 ];
 
 const runtimeBadges: { label: string; icon: LucideIcon }[] = [
@@ -300,8 +299,7 @@ export default function HomePage() {
                             </h2>
                             <p className="mt-4 text-base leading-7 text-zinc-600">
                                 The first-run path leads with document upload and a sample. Provider controls, web
-                                search, Python, agents, images, and memory remain available in the workbench when you
-                                need them.
+                                search, and memory remain available in the workbench when you need them.
                             </p>
                         </div>
                         <div className="overflow-hidden rounded-lg border border-zinc-200 bg-[#fafafa]">

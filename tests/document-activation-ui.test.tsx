@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
 import React from "react";
-import { cleanup, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import HomePage from "@/app/page";
 import PrivatePdfAiPage from "@/app/private-pdf-ai/page";
 import { WorkbenchEmptyState } from "@/components/chat/workbench/workbench-panels";
@@ -50,7 +50,6 @@ describe("private document activation UI", () => {
                 onAttachDocs={() => {}}
                 onBestLocalModel={() => {}}
                 onSampleDocDemo={() => {}}
-                onSearchWeb={() => {}}
                 onPrivacyInspector={() => {}}
             />
         );
@@ -58,10 +57,37 @@ describe("private document activation UI", () => {
         expect(screen.getByRole("heading", { name: "Document ready. Ask a cited question." })).toBeTruthy();
         expect(screen.getByText(/Write a question below and verify the answer/i)).toBeTruthy();
         expect(screen.queryByText(/prepared question below/i)).toBeNull();
-        expect(screen.getByText("1. Document indexed")).toBeTruthy();
-        expect(screen.getByText("2. Provider ready")).toBeTruthy();
-        expect(screen.getByRole("button", { name: "Search web" })).toBeTruthy();
+        expect(screen.getByText("Document indexed")).toBeTruthy();
+        expect(screen.getByText("Add another document")).toBeTruthy();
+        expect(screen.getByText(/Provider ready\./)).toBeTruthy();
+        expect(screen.queryByRole("button", { name: "Search web" })).toBeNull();
         expect(screen.getByRole("button", { name: "Privacy details" })).toBeTruthy();
         expect(screen.queryByRole("button", { name: /Load Qwen/i })).toBeNull();
+    });
+
+    it("offers Chrome's built-in model as a no-download path before the provider is ready", () => {
+        const onUseChromeAI = vi.fn();
+        render(
+            <WorkbenchEmptyState
+                provider="browser"
+                recommendedLabel="Qwen 2.5 1.5B"
+                recommendedReason="balanced local model"
+                recommendedSize="~1GB"
+                localModelDisabled={false}
+                providerReady={false}
+                documentCount={0}
+                chromeStatus="downloadable"
+                onUseChromeAI={onUseChromeAI}
+                onAttachDocs={() => {}}
+                onBestLocalModel={() => {}}
+                onSampleDocDemo={() => {}}
+                onPrivacyInspector={() => {}}
+            />
+        );
+
+        const instantButton = screen.getByRole("button", { name: /Gemini Nano/ });
+        fireEvent.click(instantButton);
+        expect(onUseChromeAI).toHaveBeenCalledOnce();
+        expect(screen.getByText(/downloads ~1GB once, then stays cached/)).toBeTruthy();
     });
 });
